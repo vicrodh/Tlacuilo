@@ -1,10 +1,10 @@
 # I H PDF
 
-Desktop PDF toolkit for Linux built with Tauri (Rust) + Svelte/TypeScript and a Python 3.12 backend (PyMuPDF, pikepdf). This repo currently contains the Sprint 0 scaffold: frontend shell, Tauri skeleton, and Python environment setup.
+Desktop PDF toolkit for Linux built with Tauri (Rust) + Svelte/TypeScript and a Python 3.12 backend (PyMuPDF, pikepdf). This repo currently contains the Sprint 0 scaffold: frontend shell, Tauri 2.x skeleton, and Python environment setup.
 
 ## Stack
 - Frontend: Svelte + Vite + Tailwind CSS + DaisyUI
-- Desktop shell: Tauri 1.x
+- Desktop shell: Tauri 2.x
 - Backend: Python 3.12 (PyMuPDF, pikepdf, pypdf, reportlab, Pillow)
 
 ## Prerequisites
