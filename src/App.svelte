@@ -24,7 +24,7 @@
     { label: 'Compress', icon: 'O', tip: 'Optimize size via Ghostscript' }
   ];
 
-  let status = '';
+  let status = 'Ready';
 
   async function handleTool(tool: Tool) {
     if (tool.action === 'merge') {
@@ -157,13 +157,18 @@
               </ul>
             </div>
           </div>
-          {#if status}
-            <div class="mt-4 rounded-lg border border-base-200 bg-base-200/60 p-3 text-sm text-base-content/80">
-              {status}
-            </div>
-          {/if}
         </div>
-        </div>
+      </div>
     </section>
   </div>
+
+  <footer class="fixed inset-x-0 bottom-0 border-t border-base-300 bg-base-100/95 backdrop-blur">
+    <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-2 text-sm text-base-content/80">
+      <div class="flex items-center gap-2">
+        <span class="font-semibold">Status:</span>
+        <span>{status}</span>
+      </div>
+      <div class="text-xs text-base-content/60">IH PDF · Offline toolkit</div>
+    </div>
+  </footer>
 </main>

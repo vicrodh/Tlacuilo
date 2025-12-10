@@ -3,7 +3,6 @@ use std::process::Command;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Manager};
-use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
 fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Result<String, String> {
