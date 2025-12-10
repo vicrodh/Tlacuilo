@@ -6,6 +6,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { dndzone } from 'svelte-dnd-action';
+  import { listen } from '@tauri-apps/api/event';
+  import { onDestroy, onMount } from 'svelte';
 
   type Tool = {
     label: string;
@@ -35,6 +37,7 @@
 
   let status = 'Ready';
   let mergeItems: MergeItem[] = [];
+  let unlistenDrop: (() => void) | null = null;
 
   function setStatus(message: string) {
     status = message;
@@ -82,6 +85,35 @@
     mergeItems = mergeItems.filter((item) => item.id !== id);
     setStatus(`Merge queue: ${mergeItems.length} file(s).`);
   }
+
+  function addPathsToMerge(paths: string[]) {
+    const newItems = paths.map((pathStr) => ({
+      id: crypto.randomUUID(),
+      path: pathStr,
+      name: pathStr.split('/').pop() || pathStr
+    }));
+    mergeItems = [...mergeItems, ...newItems];
+    setStatus(`Merge queue: ${mergeItems.length} file(s).`);
+  }
+
+  onMount(async () => {
+    // Listen to native file drops (Tauri emits tauri://file-drop with absolute paths)
+    unlistenDrop = await listen<string[]>('tauri://file-drop', (event) => {
+      const paths = event.payload;
+      if (!paths || paths.length === 0) return;
+      // Simple filter for PDFs; could be extended later
+      const pdfs = paths.filter((p) => p.toLowerCase().endsWith('.pdf'));
+      if (pdfs.length === 0) {
+        setStatus('Dropped files are not PDF; ignored.');
+        return;
+      }
+      addPathsToMerge(pdfs);
+    });
+  });
+
+  onDestroy(() => {
+    if (unlistenDrop) unlistenDrop();
+  });
 
   async function handleTool(tool: Tool) {
     if (tool.action === 'merge') {
