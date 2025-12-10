@@ -20,50 +20,59 @@ fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Re
   });
 
   let python_bin = std::env::var("PYTHON_BIN").unwrap_or_else(|_| "python3.12".to_string());
-  let script_path = resolve_backend_script();
-  if !script_path.exists() {
-    return Err(format!("Backend script not found at {}", script_path.display()));
-  }
+  let script_path = resolve_backend_script().ok_or("Backend script not found (backend/pdf_pages.py)")?;
 
-  let status = Command::new(python_bin)
-    .arg(script_path)
+  let output = Command::new(&python_bin)
+    .arg(&script_path)
     .arg("merge")
     .arg("--output")
     .arg(&output_path)
-    .args(["--inputs"])
+    .arg("--inputs")
     .args(inputs.clone())
-    .status()
-    .map_err(|e| format!("Failed to spawn python: {e}"))?;
+    .output()
+    .map_err(|e| format!("Failed to spawn python ({python_bin}): {e}"))?;
 
-  if !status.success() {
-    return Err(format!("Python merge exited with code {:?}", status.code()));
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    return Err(format!(
+      "Python merge failed (code {:?}). stdout: {} stderr: {}",
+      output.status.code(),
+      stdout,
+      stderr
+    ));
   }
 
   Ok(output_path)
 }
 
 /// Locate backend/pdf_pages.py in dev and bundled modes.
-fn resolve_backend_script() -> PathBuf {
+fn resolve_backend_script() -> Option<PathBuf> {
   if let Ok(p) = std::env::var("APP_BACKEND_SCRIPT") {
     let candidate = PathBuf::from(&p);
     if candidate.exists() {
-      return candidate;
+      return Some(candidate);
     }
   }
 
-  // Try relative to the running binary: target/debug/ihpdf -> ../../backend/pdf_pages.py
+  // Try relative to the running binary.
   if let Ok(mut exe_path) = std::env::current_exe() {
     for _ in 0..3 {
       exe_path.pop();
     }
     let candidate = exe_path.join("backend/pdf_pages.py");
     if candidate.exists() {
-      return candidate;
+      return Some(candidate);
     }
   }
 
-  // Fallback: project root relative path
-  PathBuf::from("backend/pdf_pages.py")
+  // Try workspace root relative path (dev).
+  let cwd_candidate = PathBuf::from("backend/pdf_pages.py");
+  if cwd_candidate.exists() {
+    return Some(cwd_candidate);
+  }
+
+  None
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

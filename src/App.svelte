@@ -51,6 +51,7 @@
         status = `Merged into ${result}`;
       } catch (err) {
         status = `Merge failed: ${err}`;
+        console.error('merge_pdfs error', err);
       }
       return;
     }
