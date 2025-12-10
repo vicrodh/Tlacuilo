@@ -28,6 +28,8 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.3",
-    "@tauri-apps/plugin-dialog": "^2.4.2"
+    "@tauri-apps/plugin-dialog": "^2.4.2",
+    "svelte-dnd-action": "^0.9.50",
+    "svelte-dnd-action": "^0.9.68"
   }
 }

@@ -5,12 +5,19 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { open, save } from '@tauri-apps/plugin-dialog';
+  import { dndzone } from 'svelte-dnd-action';
 
   type Tool = {
     label: string;
     icon: string;
     tip: string;
     action?: 'merge' | 'split' | 'rotate';
+  };
+
+  type MergeItem = {
+    id: string;
+    path: string;
+    name: string;
   };
 
   const quickTools: Tool[] = [
@@ -27,34 +34,58 @@
   ];
 
   let status = 'Ready';
+  let mergeItems: MergeItem[] = [];
+
+  function setStatus(message: string) {
+    status = message;
+  }
+
+  async function addMergeFiles() {
+    const files = await open({
+      multiple: true,
+      filters: [{ name: 'PDF files', extensions: ['pdf'] }]
+    });
+    if (!files) return;
+    const list = Array.isArray(files) ? files : [files];
+    const newItems: MergeItem[] = list.map((p) => {
+      const pathStr = String(p);
+      return { id: crypto.randomUUID(), path: pathStr, name: pathStr.split('/').pop() || pathStr };
+    });
+    mergeItems = [...mergeItems, ...newItems];
+    setStatus(`Merge queue: ${mergeItems.length} file(s).`);
+  }
+
+  async function runMerge() {
+    if (mergeItems.length < 2) {
+      setStatus('Add at least two PDFs to merge.');
+      return;
+    }
+    const output = await save({
+      defaultPath: 'merged.pdf',
+      filters: [{ name: 'PDF files', extensions: ['pdf'] }]
+    });
+    if (!output) {
+      setStatus('Merge cancelled (no output selected).');
+      return;
+    }
+    try {
+      const inputs = mergeItems.map((m) => m.path);
+      const result = await invoke<string>('merge_pdfs', { inputs, output });
+      setStatus(`Merged into ${result}`);
+    } catch (err) {
+      setStatus(`Merge failed: ${err}`);
+      console.error('merge_pdfs error', err);
+    }
+  }
+
+  function removeMergeItem(id: string) {
+    mergeItems = mergeItems.filter((item) => item.id !== id);
+    setStatus(`Merge queue: ${mergeItems.length} file(s).`);
+  }
 
   async function handleTool(tool: Tool) {
     if (tool.action === 'merge') {
-      status = '';
-      const files = await open({
-        multiple: true,
-        filters: [{ name: 'PDF files', extensions: ['pdf'] }]
-      });
-      if (!files || (Array.isArray(files) && files.length < 2)) {
-        status = 'Select at least two PDFs to merge.';
-        return;
-      }
-      const inputs = Array.isArray(files) ? files.map(String) : [String(files)];
-      const output = await save({
-        defaultPath: 'merged.pdf',
-        filters: [{ name: 'PDF files', extensions: ['pdf'] }]
-      });
-      if (!output) {
-        status = 'Merge cancelled (no output selected).';
-        return;
-      }
-      try {
-        const result = await invoke<string>('merge_pdfs', { inputs, output });
-        status = `Merged into ${result}`;
-      } catch (err) {
-        status = `Merge failed: ${err}`;
-        console.error('merge_pdfs error', err);
-      }
+      setStatus('Ready to merge. Add at least two PDFs.');
       return;
     }
 
@@ -170,13 +201,13 @@
     </aside>
 
     <section class="space-y-6">
-      <div class="grid gap-6 lg:grid-cols-[1.4fr,1fr]">
-        <div class="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-sm">
+      <div class="grid gap-6 lg:grid-cols-[1.1fr,0.9fr]">
+        <div class="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-sm space-y-4">
           <div class="flex items-center justify-between">
             <p class="text-base font-semibold">Quick tools</p>
             <p class="text-xs text-base-content/60">Square buttons, hover for details</p>
           </div>
-          <div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
             {#each quickTools as tool}
               <div class="tooltip" data-tip={tool.tip}>
                 <button
@@ -190,6 +221,45 @@
                 </button>
               </div>
             {/each}
+          </div>
+
+          <div class="mt-6 rounded-xl border border-dashed border-base-300 bg-base-200/50 p-4">
+            <div class="flex items-center justify-between">
+              <p class="text-sm font-semibold">Merge queue</p>
+              <div class="flex gap-2">
+                <button class="btn btn-sm btn-outline" on:click={addMergeFiles}>Add PDFs</button>
+                <button class="btn btn-sm btn-primary" on:click={runMerge}>Merge</button>
+              </div>
+            </div>
+            <p class="text-xs text-base-content/60 mt-1">Drag to reorder. Min 2 files.</p>
+            <div
+              class="mt-3 space-y-2"
+              use:dndzone={{
+                items: mergeItems,
+                flipDurationMs: 150
+              }}
+              on:consider={(e) => (mergeItems = e.detail.items)}
+              on:finalize={(e) => (mergeItems = e.detail.items)}
+            >
+              {#if mergeItems.length === 0}
+                <div class="rounded-lg border border-base-200 bg-base-100 px-3 py-2 text-sm text-base-content/60">
+                  No PDFs yet. Click "Add PDFs" to start.
+                </div>
+              {:else}
+                {#each mergeItems as item (item.id)}
+                  <div class="flex items-center justify-between rounded-lg border border-base-200 bg-base-100 px-3 py-2 text-sm">
+                    <div class="flex items-center gap-2">
+                      <span class="badge badge-outline">PDF</span>
+                      <span class="font-semibold text-base-content">{item.name}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs text-base-content/60">{item.path}</span>
+                      <button class="btn btn-xs btn-ghost" on:click={() => removeMergeItem(item.id)}>Remove</button>
+                    </div>
+                  </div>
+                {/each}
+              {/if}
+            </div>
           </div>
         </div>
 
