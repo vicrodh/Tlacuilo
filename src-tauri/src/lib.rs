@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
@@ -20,8 +20,9 @@ fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Re
   });
 
   let python_bin = std::env::var("PYTHON_BIN").unwrap_or_else(|_| "python3.12".to_string());
-  let (script_path, tried) =
-    resolve_backend_script(&app).ok_or_else(|| format!("Backend script not found. Tried: {tried:?}"))?;
+  let resolved = resolve_backend_script(&app)
+    .ok_or_else(|| "Backend script not found (backend/pdf_pages.py)".to_string())?;
+  let (script_path, tried) = resolved;
 
   let output = Command::new(&python_bin)
     .arg(&script_path)
