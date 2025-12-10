@@ -4,11 +4,13 @@
   import { dndzone } from 'svelte-dnd-action';
   import { onMount, onDestroy } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
+  import { renderFirstPageThumbnail } from '$lib/utils/pdfjs';
 
   type MergeItem = {
     id: string;
     path: string;
     name: string;
+    thumb?: string;
   };
 
   export let onBack: (() => void) | undefined;
@@ -71,13 +73,27 @@
         setStatus('Dropped files are not PDF; ignored.');
         return;
       }
-      addPaths(pdfs);
-    });
+    addPaths(pdfs);
   });
+});
 
-  onDestroy(() => {
-    if (unlistenDrop) unlistenDrop();
-  });
+onDestroy(() => {
+  if (unlistenDrop) unlistenDrop();
+});
+
+$: renderThumbs();
+
+async function renderThumbs() {
+  for (const item of mergeItems) {
+    if (item.thumb) continue;
+    try {
+      item.thumb = await renderFirstPageThumbnail(item.path, 200);
+    } catch (err) {
+      item.thumb = undefined;
+      console.error('Thumb render failed', err);
+    }
+  }
+}
 </script>
 
 <div class="grid h-[calc(100vh-64px)] grid-cols-[360px,1fr] gap-4">
@@ -123,13 +139,30 @@
     <div class="mt-2 rounded-lg bg-base-200/60 px-3 py-2 text-xs text-base-content/70">{status}</div>
   </aside>
 
-  <section class="h-full rounded-2xl border border-base-300 bg-base-100 p-4 shadow-sm">
+  <section class="h-full rounded-2xl border border-base-300 bg-base-100 p-4 shadow-sm overflow-hidden">
     <div class="mb-3 flex items-center justify-between">
-      <p class="text-base font-semibold">Pages map (coming soon)</p>
-      <span class="text-xs text-base-content/60">Visualization placeholder</span>
+      <p class="text-base font-semibold">Pages map (beta)</p>
+      <span class="text-xs text-base-content/60">Rendering first page per file</span>
     </div>
-    <div class="h-[calc(100%-48px)] rounded-xl border border-dashed border-base-200 bg-base-200/40 grid place-items-center text-sm text-base-content/60">
-      Page-level drag/drop and thumbnails will be implemented here.
+    <div class="h-[calc(100%-48px)] overflow-auto rounded-xl border border-dashed border-base-200 bg-base-200/40 p-4">
+      {#if mergeItems.length === 0}
+        <div class="grid h-full place-items-center text-sm text-base-content/60">Add PDFs to preview.</div>
+      {:else}
+        <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+          {#each mergeItems as item (item.id)}
+            <div class="rounded-lg border border-base-200 bg-base-100 p-2 shadow-sm space-y-2">
+              <p class="truncate text-xs font-semibold" title={item.name}>{item.name}</p>
+              <div class="flex items-center justify-center rounded-md border border-base-200 bg-base-200/60 min-h-[140px]">
+                {#if item.thumb}
+                  <img src={item.thumb} alt={`thumb-${item.name}`} class="max-h-40 object-contain" />
+                {:else}
+                  <span class="text-xs text-base-content/60">Rendering…</span>
+                {/if}
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
   </section>
 </div>
