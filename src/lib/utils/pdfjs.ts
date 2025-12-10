@@ -1,11 +1,17 @@
 import * as pdfjsLib from 'pdfjs-dist';
-import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs';
 
-// Configure worker
-(pdfjsLib as any).GlobalWorkerOptions.workerSrc = workerSrc as unknown as string;
+// Configure worker for Vite/Tauri: use URL relative to this module.
+(pdfjsLib as any).GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url
+).toString();
 
 export async function renderFirstPageThumbnail(filePath: string, maxWidth = 220): Promise<string> {
-  const loadingTask = (pdfjsLib as any).getDocument({ url: filePath, disableRange: true, disableAutoFetch: true });
+  const loadingTask = (pdfjsLib as any).getDocument({
+    url: filePath,
+    disableRange: true,
+    disableAutoFetch: true
+  });
   const pdf = await loadingTask.promise;
   const page = await pdf.getPage(1);
   const viewport = page.getViewport({ scale: 1 });
@@ -19,7 +25,13 @@ export async function renderFirstPageThumbnail(filePath: string, maxWidth = 220)
   canvas.height = scaledViewport.height;
   canvas.width = scaledViewport.width;
 
-  await page.render({ canvasContext: context, viewport: scaledViewport, canvas }).promise;
+  await page
+    .render({
+      canvasContext: context,
+      viewport: scaledViewport,
+      canvas
+    })
+    .promise;
   const dataUrl = canvas.toDataURL('image/png');
 
   await pdf.destroy();
