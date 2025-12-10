@@ -7,8 +7,10 @@ import * as pdfjsLib from 'pdfjs-dist';
 ).toString();
 
 export async function renderFirstPageThumbnail(filePath: string, maxWidth = 220): Promise<string> {
+  const isAbsolute = filePath.startsWith('/');
+  const url = isAbsolute ? `file://${filePath}` : filePath;
   const loadingTask = (pdfjsLib as any).getDocument({
-    url: filePath,
+    url,
     disableRange: true,
     disableAutoFetch: true
   });

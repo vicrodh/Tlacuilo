@@ -6,12 +6,13 @@
   import { listen } from '@tauri-apps/api/event';
   import { renderFirstPageThumbnail } from '$lib/utils/pdfjs';
 
-  type MergeItem = {
-    id: string;
-    path: string;
-    name: string;
-    thumb?: string;
-  };
+type MergeItem = {
+  id: string;
+  path: string;
+  name: string;
+  thumb?: string;
+  thumbStatus?: 'pending' | 'ok' | 'error';
+};
 
   export let onBack: (() => void) | undefined;
   export let onMerged: ((path: string) => void) | undefined;
@@ -24,14 +25,14 @@
     status = msg;
   }
 
-  function addPaths(paths: string[]) {
-    const newItems = paths.map((p) => {
-      const name = p.split('/').pop() || p;
-      return { id: crypto.randomUUID(), path: p, name };
-    });
-    mergeItems = [...mergeItems, ...newItems];
-    setStatus(`Queue: ${mergeItems.length} file(s).`);
-  }
+function addPaths(paths: string[]) {
+  const newItems = paths.map((p) => {
+    const name = p.split('/').pop() || p;
+    return { id: crypto.randomUUID(), path: p, name, thumbStatus: 'pending' as const };
+  });
+  mergeItems = [...mergeItems, ...newItems];
+  setStatus(`Queue: ${mergeItems.length} file(s).`);
+}
 
   async function pickFiles() {
     const files = await open({ multiple: true, filters: [{ name: 'PDF files', extensions: ['pdf'] }] });
@@ -85,11 +86,14 @@ $: renderThumbs();
 
 async function renderThumbs() {
   for (const item of mergeItems) {
-    if (item.thumb) continue;
+    if (item.thumbStatus === 'ok') continue;
     try {
+      item.thumbStatus = 'pending';
       item.thumb = await renderFirstPageThumbnail(item.path, 200);
+      item.thumbStatus = 'ok';
     } catch (err) {
       item.thumb = undefined;
+      item.thumbStatus = 'error';
       console.error('Thumb render failed', err);
     }
   }
@@ -106,12 +110,7 @@ async function renderThumbs() {
     </div>
     <p class="text-xs text-base-content/60 mt-1">Drop PDFs or use the picker. Drag to reorder.</p>
 
-    <div
-      class="mt-3 flex-1 space-y-2 overflow-auto rounded-xl border border-dashed border-base-300 bg-base-200/50 p-3"
-      use:dndzone={{ items: mergeItems, flipDurationMs: 150 }}
-      on:consider={(e) => (mergeItems = e.detail.items)}
-      on:finalize={(e) => (mergeItems = e.detail.items)}
-    >
+    <div class="mt-3 flex-1 space-y-2 overflow-auto rounded-xl border border-dashed border-base-300 bg-base-200/50 p-3">
       {#if mergeItems.length === 0}
         <div class="flex h-full items-center justify-center text-sm text-base-content/60">
           Drop PDFs here or click picker.
@@ -148,13 +147,23 @@ async function renderThumbs() {
       {#if mergeItems.length === 0}
         <div class="grid h-full place-items-center text-sm text-base-content/60">Add PDFs to preview.</div>
       {:else}
-        <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+        <div
+          class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4"
+          use:dndzone={{ items: mergeItems, flipDurationMs: 150 }}
+          on:consider={(e) => (mergeItems = e.detail.items)}
+          on:finalize={(e) => (mergeItems = e.detail.items)}
+        >
           {#each mergeItems as item (item.id)}
             <div class="rounded-lg border border-base-200 bg-base-100 p-2 shadow-sm space-y-2">
-              <p class="truncate text-xs font-semibold" title={item.name}>{item.name}</p>
+              <div class="flex items-center justify-between gap-2">
+                <p class="truncate text-xs font-semibold" title={item.name}>{item.name}</p>
+                <button class="btn btn-ghost btn-xs" on:click={() => removeItem(item.id)}>✕</button>
+              </div>
               <div class="flex items-center justify-center rounded-md border border-base-200 bg-base-200/60 min-h-[140px]">
-                {#if item.thumb}
+                {#if item.thumbStatus === 'ok' && item.thumb}
                   <img src={item.thumb} alt={`thumb-${item.name}`} class="max-h-40 object-contain" />
+                {:else if item.thumbStatus === 'error'}
+                  <span class="text-xs text-red-500">Render error</span>
                 {:else}
                   <span class="text-xs text-base-content/60">Rendering…</span>
                 {/if}
