@@ -1,0 +1,14 @@
+[package]
+name = "ihpdf"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "1.6", features = ["shell-open"] }
+
+[build-dependencies]
+tauri-build = { version = "1.6", features = [] }
