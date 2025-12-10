@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Upload, FolderOpen, Trash2, X, ChevronUp, ChevronDown } from 'lucide-svelte';
+  import { Upload, FolderOpen, Trash2, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Plus } from 'lucide-svelte';
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
   import { listen } from '@tauri-apps/api/event';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
-  import { renderFirstPageThumbnail, renderAllPageThumbnails } from '$lib/utils/pdfjs';
+  import { renderFirstPageThumbnail, renderAllPageThumbnails, renderPageForViewer, getPageCount } from '$lib/utils/pdfjs';
 
   interface PDFFile {
     id: string;
@@ -19,12 +19,14 @@
   interface PDFPage {
     id: string;
     fileId: string;
+    filePath: string;
     fileName: string;
     pageNumber: number;
     thumbnail: string;
   }
 
   let files = $state<PDFFile[]>([]);
+  let activeFileIds = $state<Set<string>>(new Set()); // Files currently in the workspace
   let viewMode = $state<'file' | 'page'>('file');
   let activeTab = $state<string>('');
   let destinationPages = $state<PDFPage[]>([]);
@@ -33,7 +35,16 @@
   let status = $state<string>('');
   let unlistenDrop: (() => void) | null = null;
 
+  // PDF Viewer state
+  let viewerImage = $state<string>('');
+  let viewerCurrentPage = $state(1);
+  let viewerTotalPages = $state(0);
+  let isLoadingViewer = $state(false);
+
   const flipDurationMs = 200;
+
+  // Derived: files currently active in the workspace
+  const workingFiles = $derived(files.filter((f) => activeFileIds.has(f.id)));
 
   onMount(async () => {
     // Listen for file drops from Tauri
@@ -65,6 +76,7 @@
         const pages: PDFPage[] = pageThumbnails.map((thumb, idx) => ({
           id: `${fileId}-page-${idx}`,
           fileId,
+          filePath: path,
           fileName: name,
           pageNumber: idx + 1,
           thumbnail: thumb,
@@ -79,6 +91,7 @@
         };
 
         files = [...files, newFile];
+        activeFileIds = new Set([...activeFileIds, fileId]);
 
         if (!activeTab) {
           activeTab = fileId;
@@ -94,6 +107,7 @@
           pages: [],
         };
         files = [...files, newFile];
+        activeFileIds = new Set([...activeFileIds, fileId]);
         if (!activeTab) {
           activeTab = fileId;
         }
@@ -113,16 +127,42 @@
   }
 
   function removeFile(fileId: string) {
+    // Completely remove file from list and workspace
     files = files.filter((f) => f.id !== fileId);
+    activeFileIds = new Set([...activeFileIds].filter((id) => id !== fileId));
     // Also remove pages from destination that belong to this file
     destinationPages = destinationPages.filter((p) => p.fileId !== fileId);
-    if (activeTab === fileId && files.length > 0) {
-      activeTab = files[0].id;
+    if (activeTab === fileId && workingFiles.length > 0) {
+      activeTab = workingFiles[0].id;
+    }
+  }
+
+  function closeTab(fileId: string) {
+    // Remove from workspace but keep in files list
+    activeFileIds = new Set([...activeFileIds].filter((id) => id !== fileId));
+    // Also remove pages from destination that belong to this file
+    destinationPages = destinationPages.filter((p) => p.fileId !== fileId);
+    // Switch to another tab if this was active
+    if (activeTab === fileId) {
+      const remaining = [...activeFileIds].filter((id) => id !== fileId);
+      activeTab = remaining.length > 0 ? remaining[0] : '';
+    }
+  }
+
+  function addFileToWorkspace(fileId: string) {
+    activeFileIds = new Set([...activeFileIds, fileId]);
+    if (!activeTab) {
+      activeTab = fileId;
     }
   }
 
   function handleFilesDnd(e: CustomEvent<{ items: PDFFile[] }>) {
-    files = e.detail.items;
+    // Reorder files based on the drag result
+    const reorderedIds = e.detail.items.map((f) => f.id);
+    // Rebuild files array with the new order for working files, keeping non-working at end
+    const working = e.detail.items;
+    const nonWorking = files.filter((f) => !activeFileIds.has(f.id));
+    files = [...working, ...nonWorking];
   }
 
   function handleSourcePagesDnd(e: CustomEvent<{ items: PDFPage[] }>) {
@@ -151,8 +191,42 @@
     destinationPages = destinationPages.filter((p) => p.id !== pageId);
   }
 
+  async function loadMergedPDFPreview(pdfPath: string) {
+    isLoadingViewer = true;
+    try {
+      viewerTotalPages = await getPageCount(pdfPath);
+      viewerCurrentPage = 1;
+      viewerImage = await renderPageForViewer(pdfPath, 1);
+    } catch (err) {
+      console.error('Error loading merged PDF preview:', err);
+      viewerImage = '';
+    }
+    isLoadingViewer = false;
+  }
+
+  async function goToPage(page: number) {
+    if (!mergedPDFPath || page < 1 || page > viewerTotalPages) return;
+    isLoadingViewer = true;
+    try {
+      viewerCurrentPage = page;
+      viewerImage = await renderPageForViewer(mergedPDFPath, page);
+    } catch (err) {
+      console.error('Error loading page:', err);
+    }
+    isLoadingViewer = false;
+  }
+
   async function handleMerge() {
     if (files.length === 0) return;
+
+    // In page view with destination pages, use merge_pages
+    // Otherwise use merge_pdfs for full files
+    const usePageMerge = viewMode === 'page' && destinationPages.length > 0;
+
+    if (usePageMerge && destinationPages.length === 0) {
+      status = 'Add pages to the Merged Document first';
+      return;
+    }
 
     status = 'Merging PDFs...';
     try {
@@ -167,17 +241,31 @@
         return;
       }
 
-      // In file view, merge all files in order
-      // In page view, we would need to create a custom merge based on destinationPages
-      const inputs = files.map((f) => f.path);
+      let result: string;
 
-      const result = await invoke<string>('merge_pdfs', {
-        inputs,
-        output: outputPath,
-      });
+      if (usePageMerge) {
+        // Page-by-page merge: convert destinationPages to [(filePath, pageNumber), ...]
+        const pages: [string, number][] = destinationPages.map((p) => [p.filePath, p.pageNumber]);
+
+        result = await invoke<string>('merge_pages', {
+          pages,
+          output: outputPath,
+        });
+      } else {
+        // Full file merge - use workingFiles in their current order
+        const inputs = workingFiles.map((f) => f.path);
+
+        result = await invoke<string>('merge_pdfs', {
+          inputs,
+          output: outputPath,
+        });
+      }
 
       mergedPDFPath = result;
-      status = `Merged successfully: ${result}`;
+      status = 'Merge complete!';
+
+      // Load preview of the merged PDF
+      await loadMergedPDFPreview(result);
     } catch (err) {
       console.error('Merge error:', err);
       status = `Error: ${err}`;
@@ -194,9 +282,9 @@
   }
 
   $effect(() => {
-    // Set first file as active tab when files are added
-    if (files.length > 0 && !activeTab) {
-      activeTab = files[0].id;
+    // Set first working file as active tab when files are added
+    if (workingFiles.length > 0 && !activeTab) {
+      activeTab = workingFiles[0].id;
     }
   });
 
@@ -204,7 +292,10 @@
   const totalPages = $derived(
     viewMode === 'page'
       ? destinationPages.length
-      : files.reduce((acc, f) => acc + f.pages.length, 0)
+      : workingFiles.reduce((acc, f) => acc + f.pages.length, 0)
+  );
+  const canMerge = $derived(
+    viewMode === 'file' ? workingFiles.length >= 2 : destinationPages.length >= 1
   );
 </script>
 
@@ -227,20 +318,31 @@
         </button>
 
         <!-- Tabs - Only in Page View -->
-        {#if viewMode === 'page' && files.length > 0}
+        {#if viewMode === 'page' && workingFiles.length > 0}
           <div
-            class="flex gap-2 px-4 pt-3 border-b overflow-x-auto"
+            class="flex gap-1 px-4 pt-2 border-b overflow-x-auto"
             style="border-color: var(--nord3);"
           >
-            {#each files as file}
-              <button
-                onclick={() => (activeTab = file.id)}
-                class="px-4 py-2 rounded-t text-sm transition-colors flex-shrink-0 max-w-[150px] truncate"
+            {#each workingFiles as file}
+              <div
+                class="flex items-center gap-1 px-2 py-1.5 rounded-t text-xs transition-colors flex-shrink-0 max-w-[140px] group"
                 style="background-color: {activeTab === file.id ? 'var(--nord2)' : 'transparent'};"
-                title={file.name}
               >
-                {file.name}
-              </button>
+                <button
+                  onclick={() => (activeTab = file.id)}
+                  class="truncate flex-1 text-left"
+                  title={file.name}
+                >
+                  {file.name}
+                </button>
+                <button
+                  onclick={() => closeTab(file.id)}
+                  class="p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--nord3)]"
+                  title="Remove from workspace"
+                >
+                  <X size={12} />
+                </button>
+              </div>
             {/each}
           </div>
         {/if}
@@ -251,16 +353,16 @@
             <!-- File View - Horizontal list of files -->
             <div
               class="h-full overflow-x-auto overflow-y-hidden flex gap-4"
-              use:dndzone={{ items: files, flipDurationMs, type: 'files' }}
+              use:dndzone={{ items: workingFiles, flipDurationMs, type: 'files' }}
               onconsider={handleFilesDnd}
               onfinalize={handleFilesDnd}
             >
-              {#if files.length === 0}
+              {#if workingFiles.length === 0}
                 <div class="h-full flex items-center justify-center opacity-60 w-full">
                   <p class="text-sm">No files added yet</p>
                 </div>
               {:else}
-                {#each files as file (file.id)}
+                {#each workingFiles as file (file.id)}
                   <div
                     class="flex-shrink-0 cursor-move"
                     animate:flip={{ duration: flipDurationMs }}
@@ -338,7 +440,7 @@
 
               <!-- Destination Pages -->
               <div class="flex-1 overflow-hidden">
-                <h4 class="text-xs opacity-60 mb-2 uppercase">Merged Document</h4>
+                <h4 class="text-xs opacity-60 mb-2 uppercase">Merged Document ({destinationPages.length} pages)</h4>
                 <div
                   class="h-[calc(100%-24px)] overflow-x-auto overflow-y-hidden flex gap-2 p-2 rounded"
                   style="background-color: var(--nord0);"
@@ -348,7 +450,7 @@
                 >
                   {#if destinationPages.length === 0}
                     <div class="h-full flex items-center justify-center opacity-60 w-full">
-                      <p class="text-xs">Drag pages here to create merged document</p>
+                      <p class="text-xs">Click + on pages above to add them here</p>
                     </div>
                   {:else}
                     {#each destinationPages as page (page.id)}
@@ -381,7 +483,6 @@
                           <p class="text-xs opacity-40 truncate" title={page.fileName}>
                             {page.fileName}
                           </p>
-                          <p class="text-xs opacity-40">Pg {page.pageNumber}</p>
                         </div>
                       </div>
                     {/each}
@@ -399,7 +500,7 @@
         style="background-color: var(--nord1); border-color: var(--nord3);"
       >
         <span class="text-sm opacity-60">
-          {viewMode === 'file' ? 'File View' : 'Page View'} - {files.length} file(s)
+          {viewMode === 'file' ? 'File View' : 'Page View'} - {workingFiles.length} file(s){viewMode === 'page' ? `, ${destinationPages.length} pages selected` : ''}
         </span>
         <button
           onclick={() => (isTopSectionCollapsed = false)}
@@ -414,19 +515,47 @@
     <!-- Bottom Section - PDF Viewer -->
     <div class="flex-1 overflow-auto p-6">
       <div
-        class="h-full rounded-lg flex items-center justify-center"
+        class="h-full rounded-lg flex flex-col items-center justify-center relative"
         style="background-color: var(--nord2);"
       >
-        {#if mergedPDFPath}
-          <div class="text-center">
-            <p class="text-lg mb-2">Merged PDF Created</p>
-            <p class="text-sm opacity-60">{mergedPDFPath}</p>
-            <p class="text-sm opacity-60 mt-2">{totalPages} pages total</p>
+        {#if isLoadingViewer}
+          <p class="opacity-60">Loading preview...</p>
+        {:else if viewerImage && mergedPDFPath}
+          <!-- PDF Preview with navigation -->
+          <div class="flex-1 flex items-center justify-center p-4 overflow-auto w-full">
+            <img
+              src={viewerImage}
+              alt="Page {viewerCurrentPage}"
+              class="max-h-full object-contain shadow-lg rounded"
+            />
+          </div>
+          <!-- Page Navigation -->
+          <div
+            class="flex items-center gap-4 py-3 px-4 rounded-t-lg"
+            style="background-color: var(--nord1);"
+          >
+            <button
+              onclick={() => goToPage(viewerCurrentPage - 1)}
+              disabled={viewerCurrentPage <= 1}
+              class="p-2 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <span class="text-sm">
+              Page {viewerCurrentPage} of {viewerTotalPages}
+            </span>
+            <button
+              onclick={() => goToPage(viewerCurrentPage + 1)}
+              disabled={viewerCurrentPage >= viewerTotalPages}
+              class="p-2 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
+            >
+              <ChevronRight size={20} />
+            </button>
           </div>
         {:else if status}
           <p class="opacity-60">{status}</p>
         {:else}
-          <p class="opacity-60">PDF preview will appear here</p>
+          <p class="opacity-60">PDF preview will appear here after merge</p>
         {/if}
       </div>
     </div>
@@ -458,19 +587,33 @@
       <div class="flex-1 overflow-y-auto">
         <h4 class="text-xs opacity-60 mb-3 uppercase">Files ({files.length})</h4>
         {#each files as file}
+          {@const isActive = activeFileIds.has(file.id)}
           <div
             class="mb-2 p-2 rounded group hover:bg-[var(--nord2)] transition-colors"
+            class:opacity-50={!isActive}
             title={file.path}
           >
             <div class="flex items-start justify-between gap-2">
               <p class="text-xs flex-1 truncate">{file.name}</p>
-              <button
-                onclick={() => removeFile(file.id)}
-                class="opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                style="color: var(--nord11);"
-              >
-                <Trash2 size={14} />
-              </button>
+              {#if isActive}
+                <button
+                  onclick={() => removeFile(file.id)}
+                  class="opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                  style="color: var(--nord11);"
+                  title="Remove file"
+                >
+                  <Trash2 size={14} />
+                </button>
+              {:else}
+                <button
+                  onclick={() => addFileToWorkspace(file.id)}
+                  class="opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                  style="color: var(--nord14);"
+                  title="Add to workspace"
+                >
+                  <Plus size={14} />
+                </button>
+              {/if}
             </div>
           </div>
         {/each}
@@ -513,7 +656,7 @@
     <!-- Merge Button -->
     <button
       onclick={handleMerge}
-      disabled={files.length === 0}
+      disabled={!canMerge}
       class="px-4 py-3 rounded transition-colors disabled:opacity-50 hover:opacity-90"
       style="background-color: var(--nord8); color: var(--nord0);"
     >

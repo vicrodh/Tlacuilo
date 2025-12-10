@@ -27,6 +27,33 @@ def merge_pdfs(inputs: Sequence[Path], output: Path) -> None:
         writer.write(fh)
 
 
+def merge_pages(page_specs: Sequence[tuple[Path, int]], output: Path) -> None:
+    """
+    Merge specific pages from multiple PDFs.
+    page_specs: list of (file_path, page_number) tuples. page_number is 1-indexed.
+    """
+    if not page_specs:
+        raise ValueError("At least one page specification is required.")
+
+    writer = PdfWriter()
+    readers_cache: dict[Path, PdfReader] = {}
+
+    for file_path, page_num in page_specs:
+        if file_path not in readers_cache:
+            readers_cache[file_path] = PdfReader(str(file_path))
+        reader = readers_cache[file_path]
+
+        # Convert 1-indexed to 0-indexed
+        page_idx = page_num - 1
+        if page_idx < 0 or page_idx >= len(reader.pages):
+            raise ValueError(f"Page {page_num} out of bounds for {file_path} ({len(reader.pages)} pages)")
+
+        writer.add_page(reader.pages[page_idx])
+
+    with output.open("wb") as fh:
+        writer.write(fh)
+
+
 def reorder_pages(input_path: Path, order: Sequence[int], output: Path) -> None:
     reader = PdfReader(str(input_path))
     writer = PdfWriter()
@@ -120,6 +147,15 @@ def _build_parser() -> argparse.ArgumentParser:
     rotate_p.add_argument("--degrees", type=int, default=90, help="Degrees when rotation list is empty (default 90)")
     rotate_p.add_argument("--output", required=True, help="Output PDF path")
 
+    merge_pages_p = sub.add_parser("merge-pages", help="Merge specific pages from multiple PDFs")
+    merge_pages_p.add_argument(
+        "--pages",
+        nargs="+",
+        required=True,
+        help="Page specs as file:page, e.g., doc.pdf:1 other.pdf:3 doc.pdf:2",
+    )
+    merge_pages_p.add_argument("--output", required=True, help="Output PDF path")
+
     return parser
 
 
@@ -147,6 +183,15 @@ def _main(argv: list[str]) -> int:
                 for idx in range(len(reader.pages)):
                     rotations[idx] = args.degrees
             rotate_pages(Path(args.input), rotations, Path(args.output))
+        elif args.command == "merge-pages":
+            page_specs: list[tuple[Path, int]] = []
+            for spec in args.pages:
+                # Format: file_path:page_number
+                if ":" not in spec:
+                    raise ValueError(f"Invalid page spec '{spec}'. Expected format: file:page")
+                file_part, page_part = spec.rsplit(":", 1)
+                page_specs.append((Path(file_part), int(page_part)))
+            merge_pages(page_specs, Path(args.output))
         else:
             parser.error("Unknown command")
     except Exception as exc:  # noqa: BLE001

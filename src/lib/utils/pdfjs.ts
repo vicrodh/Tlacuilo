@@ -73,3 +73,63 @@ export async function renderAllPageThumbnails(filePath: string, maxWidth = 160):
   await pdf.destroy();
   return thumbs;
 }
+
+export async function getPageCount(filePath: string): Promise<number> {
+  const url = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
+  const res = await fetch(url);
+  const buf = await res.arrayBuffer();
+  const data = new Uint8Array(buf);
+  const loadingTask = (pdfjsLib as any).getDocument({
+    data,
+    disableRange: true,
+    disableAutoFetch: true
+  });
+  const pdf = await loadingTask.promise;
+  const numPages = pdf.numPages;
+  await pdf.destroy();
+  return numPages;
+}
+
+export async function renderPageForViewer(
+  filePath: string,
+  pageNumber: number,
+  maxWidth = 800
+): Promise<string> {
+  const url = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
+  const res = await fetch(url);
+  const buf = await res.arrayBuffer();
+  const data = new Uint8Array(buf);
+  const loadingTask = (pdfjsLib as any).getDocument({
+    data,
+    disableRange: true,
+    disableAutoFetch: true
+  });
+  const pdf = await loadingTask.promise;
+
+  if (pageNumber < 1 || pageNumber > pdf.numPages) {
+    await pdf.destroy();
+    throw new Error(`Invalid page number: ${pageNumber}. PDF has ${pdf.numPages} pages.`);
+  }
+
+  const page = await pdf.getPage(pageNumber);
+  const viewport = page.getViewport({ scale: 1 });
+  const scale = maxWidth / viewport.width;
+  const scaledViewport = page.getViewport({ scale });
+
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Canvas context not available');
+
+  canvas.height = scaledViewport.height;
+  canvas.width = scaledViewport.width;
+
+  await page.render({
+    canvasContext: context,
+    viewport: scaledViewport,
+    canvas
+  }).promise;
+
+  const dataUrl = canvas.toDataURL('image/png');
+  await pdf.destroy();
+  return dataUrl;
+}

@@ -48,6 +48,61 @@ fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Re
 }
 
 #[tauri::command]
+fn merge_pages(
+    app: AppHandle,
+    pages: Vec<(String, i32)>,
+    output: Option<String>,
+) -> Result<String, String> {
+    if pages.is_empty() {
+        return Err("Provide at least one page specification.".into());
+    }
+
+    let output_path = output.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir
+            .join("ihpdf-merged-pages.pdf")
+            .to_string_lossy()
+            .to_string()
+    });
+
+    let python_bin = resolve_python_bin();
+    let (script_path, _) = resolve_backend_script(&app)
+        .ok_or_else(|| "Backend script not found (backend/pdf_pages.py)".to_string())?;
+
+    // Convert pages to format: file:page file:page ...
+    let page_args: Vec<String> = pages
+        .iter()
+        .map(|(file, page)| format!("{}:{}", file, page))
+        .collect();
+
+    let output = Command::new(&python_bin)
+        .arg(&script_path)
+        .arg("merge-pages")
+        .arg("--output")
+        .arg(&output_path)
+        .arg("--pages")
+        .args(&page_args)
+        .output()
+        .map_err(|e| format!("Failed to spawn python ({python_bin}): {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(format!(
+            "Python merge-pages failed (code {:?}). stdout: {} stderr: {}",
+            output.status.code(),
+            stdout,
+            stderr
+        ));
+    }
+
+    Ok(output_path)
+}
+
+#[tauri::command]
 fn split_pdf(app: AppHandle, input: String, output_dir: Option<String>) -> Result<Vec<String>, String> {
   let (script_path, _) = resolve_backend_script(&app)
     .ok_or_else(|| "Backend script not found (backend/pdf_pages.py)".to_string())?;
@@ -236,7 +291,7 @@ pub fn run() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![merge_pdfs, split_pdf, rotate_pdf])
+    .invoke_handler(tauri::generate_handler![merge_pdfs, merge_pages, split_pdf, rotate_pdf])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
