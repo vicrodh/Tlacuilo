@@ -7,10 +7,13 @@ import * as pdfjsLib from 'pdfjs-dist';
 ).toString();
 
 export async function renderFirstPageThumbnail(filePath: string, maxWidth = 220): Promise<string> {
-  const isAbsolute = filePath.startsWith('/');
-  const url = isAbsolute ? `file://${filePath}` : filePath;
+  // Read file via fetch(file://...) in Tauri context
+  const url = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
+  const res = await fetch(url);
+  const buf = await res.arrayBuffer();
+  const data = new Uint8Array(buf);
   const loadingTask = (pdfjsLib as any).getDocument({
-    url,
+    data,
     disableRange: true,
     disableAutoFetch: true
   });
