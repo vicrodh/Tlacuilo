@@ -100,12 +100,17 @@ def _build_parser() -> argparse.ArgumentParser:
 
     split_p = sub.add_parser("split", help="Split PDF by ranges")
     split_p.add_argument("--input", required=True, help="Input PDF path")
-    split_p.add_argument("--ranges", nargs="+", required=True, help="Ranges like 1-3,5")
+    split_p.add_argument("--ranges", nargs="*", help="Ranges like 1-3,5; empty = split every page")
     split_p.add_argument("--output-dir", required=True, help="Directory for split PDFs")
 
     rotate_p = sub.add_parser("rotate", help="Rotate pages")
     rotate_p.add_argument("--input", required=True, help="Input PDF path")
-    rotate_p.add_argument("--rotation", nargs="+", required=True, help="page=degrees, e.g., 0=90 2=180")
+    rotate_p.add_argument(
+        "--rotation",
+        nargs="*",
+        help="page=degrees, e.g., 0=90 2=180; empty = apply --degrees to all pages",
+    )
+    rotate_p.add_argument("--degrees", type=int, default=90, help="Degrees when rotation list is empty (default 90)")
     rotate_p.add_argument("--output", required=True, help="Output PDF path")
 
     return parser
@@ -121,12 +126,19 @@ def _main(argv: list[str]) -> int:
         elif args.command == "reorder":
             reorder_pages(Path(args.input), args.order, Path(args.output))
         elif args.command == "split":
-            split_pdf(Path(args.input), args.ranges, Path(args.output_dir))
+            ranges = args.ranges or []
+            split_pdf(Path(args.input), ranges, Path(args.output_dir))
         elif args.command == "rotate":
             rotations: dict[int, int] = {}
-            for pair in args.rotation:
-                page_str, deg_str = pair.split("=", 1)
-                rotations[int(page_str)] = int(deg_str)
+            if args.rotation:
+                for pair in args.rotation:
+                    page_str, deg_str = pair.split("=", 1)
+                    rotations[int(page_str)] = int(deg_str)
+            else:
+                # Apply degrees to all pages
+                reader = PdfReader(str(args.input))
+                for idx in range(len(reader.pages)):
+                    rotations[idx] = args.degrees
             rotate_pages(Path(args.input), rotations, Path(args.output))
         else:
             parser.error("Unknown command")

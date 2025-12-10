@@ -10,13 +10,15 @@
     label: string;
     icon: string;
     tip: string;
-    action?: 'merge';
+    action?: 'merge' | 'split' | 'rotate';
   };
 
   const quickTools: Tool[] = [
     { label: 'Create PDF', icon: 'C', tip: 'New PDF from images or blank canvas' },
     { label: 'Edit blocks', icon: 'E', tip: 'Limited text edits within detected blocks' },
-    { label: 'Merge / Split', icon: 'M', tip: 'Join or divide PDFs; reorder pages', action: 'merge' },
+    { label: 'Merge PDF', icon: 'M', tip: 'Join PDFs in order selected', action: 'merge' },
+    { label: 'Split PDF', icon: 'S', tip: 'Split one PDF into single pages', action: 'split' },
+    { label: 'Rotate 90°', icon: 'R', tip: 'Rotate all pages 90° clockwise', action: 'rotate' },
     { label: 'Convert', icon: 'V', tip: 'JPG ↔ PDF, PDF → images' },
     { label: 'Annotate', icon: 'A', tip: 'Highlights, shapes, notes, freehand' },
     { label: 'Protect', icon: 'P', tip: 'Encrypt, redact, remove metadata' },
@@ -52,6 +54,62 @@
       } catch (err) {
         status = `Merge failed: ${err}`;
         console.error('merge_pdfs error', err);
+      }
+      return;
+    }
+
+    if (tool.action === 'split') {
+      status = '';
+      const file = await open({
+        multiple: false,
+        filters: [{ name: 'PDF files', extensions: ['pdf'] }]
+      });
+      if (!file) {
+        status = 'Split cancelled (no input selected).';
+        return;
+      }
+      const outputDir = await open({
+        multiple: false,
+        directory: true
+      });
+      if (!outputDir) {
+        status = 'Split cancelled (no output directory).';
+        return;
+      }
+      try {
+        const results = await invoke<string[]>('split_pdf', { input: String(file), outputDir: String(outputDir) });
+        status = `Split completed. Output in ${results[0]}.`;
+      } catch (err) {
+        status = `Split failed: ${err}`;
+        console.error('split_pdf error', err);
+      }
+      return;
+    }
+
+    if (tool.action === 'rotate') {
+      status = '';
+      const file = await open({
+        multiple: false,
+        filters: [{ name: 'PDF files', extensions: ['pdf'] }]
+      });
+      if (!file) {
+        status = 'Rotate cancelled (no input selected).';
+        return;
+      }
+      const output = await save({
+        defaultPath: 'rotated.pdf',
+        filters: [{ name: 'PDF files', extensions: ['pdf'] }]
+      });
+      if (!output) {
+        status = 'Rotate cancelled (no output selected).';
+        return;
+      }
+      try {
+        const result = await invoke<string>('rotate_pdf', { input: String(file), degrees: 90, output });
+        status = `Rotated into ${result}`;
+      } catch (err) {
+        status = `Rotate failed: ${err}`;
+        console.error('rotate_pdf error', err);
       }
       return;
     }

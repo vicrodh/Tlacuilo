@@ -47,6 +47,84 @@ fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Re
   Ok(output_path)
 }
 
+#[tauri::command]
+fn split_pdf(app: AppHandle, input: String, output_dir: Option<String>) -> Result<Vec<String>, String> {
+  let (script_path, _) = resolve_backend_script(&app)
+    .ok_or_else(|| "Backend script not found (backend/pdf_pages.py)".to_string())?;
+  let python_bin = resolve_python_bin();
+
+  let out_dir = output_dir.unwrap_or_else(|| {
+    let cache_dir = app
+      .path()
+      .app_cache_dir()
+      .unwrap_or_else(|_| std::env::temp_dir());
+    cache_dir.join("ihpdf-split").to_string_lossy().to_string()
+  });
+
+  let output = Command::new(&python_bin)
+    .arg(&script_path)
+    .arg("split")
+    .arg("--input")
+    .arg(&input)
+    .arg("--output-dir")
+    .arg(&out_dir)
+    .output()
+    .map_err(|e| format!("Failed to spawn python ({python_bin}): {e}"))?;
+
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    return Err(format!(
+      "Python split failed (code {:?}). stdout: {} stderr: {}",
+      output.status.code(),
+      stdout,
+      stderr
+    ));
+  }
+
+  // The python script reports paths via stdout? Not yet; return directory for now.
+  Ok(vec![out_dir])
+}
+
+#[tauri::command]
+fn rotate_pdf(app: AppHandle, input: String, degrees: i32, output: Option<String>) -> Result<String, String> {
+  let (script_path, _) = resolve_backend_script(&app)
+    .ok_or_else(|| "Backend script not found (backend/pdf_pages.py)".to_string())?;
+  let python_bin = resolve_python_bin();
+  let out_path = output.unwrap_or_else(|| {
+    let cache_dir = app
+      .path()
+      .app_cache_dir()
+      .unwrap_or_else(|_| std::env::temp_dir());
+    cache_dir.join("ihpdf-rotated.pdf").to_string_lossy().to_string()
+  });
+
+  let output = Command::new(&python_bin)
+    .arg(&script_path)
+    .arg("rotate")
+    .arg("--input")
+    .arg(&input)
+    .arg("--degrees")
+    .arg(degrees.to_string())
+    .arg("--output")
+    .arg(&out_path)
+    .output()
+    .map_err(|e| format!("Failed to spawn python ({python_bin}): {e}"))?;
+
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    return Err(format!(
+      "Python rotate failed (code {:?}). stdout: {} stderr: {}",
+      output.status.code(),
+      stdout,
+      stderr
+    ));
+  }
+
+  Ok(out_path)
+}
+
 /// Locate backend/pdf_pages.py in dev and bundled modes.
 fn resolve_backend_script(app: &AppHandle) -> Option<(PathBuf, Vec<PathBuf>)> {
   let mut tried: Vec<PathBuf> = Vec::new();
