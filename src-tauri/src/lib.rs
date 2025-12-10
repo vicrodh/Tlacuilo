@@ -236,7 +236,7 @@ pub fn run() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![merge_pdfs])
+    .invoke_handler(tauri::generate_handler![merge_pdfs, split_pdf, rotate_pdf])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
