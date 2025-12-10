@@ -3,6 +3,7 @@ use std::process::Command;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Manager};
+use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
 fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Result<String, String> {
@@ -19,10 +20,10 @@ fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Re
   });
 
   let python_bin = std::env::var("PYTHON_BIN").unwrap_or_else(|_| "python3.12".to_string());
-  let script_path = app
-    .path()
-    .resolve("backend/pdf_pages.py", tauri::path::BaseDirectory::Resource)
-    .unwrap_or_else(|_| PathBuf::from("backend/pdf_pages.py"));
+  let script_path = resolve_backend_script();
+  if !script_path.exists() {
+    return Err(format!("Backend script not found at {}", script_path.display()));
+  }
 
   let status = Command::new(python_bin)
     .arg(script_path)
@@ -39,6 +40,30 @@ fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Re
   }
 
   Ok(output_path)
+}
+
+/// Locate backend/pdf_pages.py in dev and bundled modes.
+fn resolve_backend_script() -> PathBuf {
+  if let Ok(p) = std::env::var("APP_BACKEND_SCRIPT") {
+    let candidate = PathBuf::from(&p);
+    if candidate.exists() {
+      return candidate;
+    }
+  }
+
+  // Try relative to the running binary: target/debug/ihpdf -> ../../backend/pdf_pages.py
+  if let Ok(mut exe_path) = std::env::current_exe() {
+    for _ in 0..3 {
+      exe_path.pop();
+    }
+    let candidate = exe_path.join("backend/pdf_pages.py");
+    if candidate.exists() {
+      return candidate;
+    }
+  }
+
+  // Fallback: project root relative path
+  PathBuf::from("backend/pdf_pages.py")
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
