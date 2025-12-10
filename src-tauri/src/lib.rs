@@ -3,7 +3,6 @@ use std::process::Command;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Manager};
-use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
 fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Result<String, String> {
@@ -22,7 +21,7 @@ fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Re
   let python_bin = resolve_python_bin();
   let resolved = resolve_backend_script(&app)
     .ok_or_else(|| "Backend script not found (backend/pdf_pages.py)".to_string())?;
-  let (script_path, tried) = resolved;
+  let (script_path, _tried) = resolved;
 
   let output = Command::new(&python_bin)
     .arg(&script_path)
