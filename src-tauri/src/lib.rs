@@ -109,12 +109,6 @@ fn resolve_python_bin() -> String {
   if venv.exists() {
     return venv.to_string_lossy().to_string();
   }
-  if let Ok(p) = which::which("python3.12") {
-    return p.to_string_lossy().to_string();
-  }
-  if let Ok(p) = which::which("python3") {
-    return p.to_string_lossy().to_string();
-  }
   "python3.12".to_string()
 }
 
