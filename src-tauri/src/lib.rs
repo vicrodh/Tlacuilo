@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
@@ -20,7 +20,8 @@ fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Re
   });
 
   let python_bin = std::env::var("PYTHON_BIN").unwrap_or_else(|_| "python3.12".to_string());
-  let script_path = resolve_backend_script().ok_or("Backend script not found (backend/pdf_pages.py)")?;
+  let (script_path, tried) =
+    resolve_backend_script(&app).ok_or_else(|| format!("Backend script not found. Tried: {tried:?}"))?;
 
   let output = Command::new(&python_bin)
     .arg(&script_path)
@@ -47,29 +48,44 @@ fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Re
 }
 
 /// Locate backend/pdf_pages.py in dev and bundled modes.
-fn resolve_backend_script() -> Option<PathBuf> {
+fn resolve_backend_script(app: &AppHandle) -> Option<(PathBuf, Vec<PathBuf>)> {
+  let mut tried: Vec<PathBuf> = Vec::new();
+
   if let Ok(p) = std::env::var("APP_BACKEND_SCRIPT") {
     let candidate = PathBuf::from(&p);
+    tried.push(candidate.clone());
     if candidate.exists() {
-      return Some(candidate);
+      return Some((candidate, tried));
     }
   }
 
-  // Try relative to the running binary.
-  if let Ok(mut exe_path) = std::env::current_exe() {
-    for _ in 0..3 {
-      exe_path.pop();
+  // Try relative to executable: /ihpdf/src-tauri/target/debug/ihpdf -> pop 4 -> /ihpdf/backend/pdf_pages.py
+  if let Ok(mut exe) = std::env::current_exe() {
+    for _ in 0..4 {
+      exe.pop();
     }
-    let candidate = exe_path.join("backend/pdf_pages.py");
+    let candidate = exe.join("backend/pdf_pages.py");
+    tried.push(candidate.clone());
     if candidate.exists() {
-      return Some(candidate);
+      return Some((candidate, tried));
     }
   }
 
-  // Try workspace root relative path (dev).
+  // Try using app path resolve (resource or current dir).
+  if let Ok(candidate) = app
+    .path()
+    .resolve("backend/pdf_pages.py", tauri::path::BaseDirectory::Resource)
+  {
+    tried.push(candidate.clone());
+    if candidate.exists() {
+      return Some((candidate, tried));
+    }
+  }
+
   let cwd_candidate = PathBuf::from("backend/pdf_pages.py");
+  tried.push(cwd_candidate.clone());
   if cwd_candidate.exists() {
-    return Some(cwd_candidate);
+    return Some((cwd_candidate, tried));
   }
 
   None
