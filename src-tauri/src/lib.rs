@@ -19,7 +19,7 @@ fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Re
     cache_dir.join("ihpdf-merge.pdf").to_string_lossy().to_string()
   });
 
-  let python_bin = std::env::var("PYTHON_BIN").unwrap_or_else(|_| "python3.12".to_string());
+  let python_bin = resolve_python_bin();
   let resolved = resolve_backend_script(&app)
     .ok_or_else(|| "Backend script not found (backend/pdf_pages.py)".to_string())?;
   let (script_path, tried) = resolved;
@@ -90,6 +90,33 @@ fn resolve_backend_script(app: &AppHandle) -> Option<(PathBuf, Vec<PathBuf>)> {
   }
 
   None
+}
+
+/// Determine which Python interpreter to use.
+/// Priority:
+/// 1) APP_PYTHON_BIN env var
+/// 2) backend/venv/bin/python3 relative to workspace root (common dev setup)
+/// 3) python3.12
+/// 4) python3
+fn resolve_python_bin() -> String {
+  if let Ok(p) = std::env::var("APP_PYTHON_BIN") {
+    return p;
+  }
+  let mut root = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
+  for _ in 0..4 {
+    root.pop();
+  }
+  let venv = root.join("backend/venv/bin/python3");
+  if venv.exists() {
+    return venv.to_string_lossy().to_string();
+  }
+  if let Ok(p) = which::which("python3.12") {
+    return p.to_string_lossy().to_string();
+  }
+  if let Ok(p) = which::which("python3") {
+    return p.to_string_lossy().to_string();
+  }
+  "python3.12".to_string()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
