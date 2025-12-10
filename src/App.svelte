@@ -3,16 +3,60 @@
 </svelte:head>
 
 <script lang="ts">
-  const quickTools = [
+  import { invoke } from '@tauri-apps/api/core';
+  import { open, save } from '@tauri-apps/plugin-dialog';
+
+  type Tool = {
+    label: string;
+    icon: string;
+    tip: string;
+    action?: 'merge';
+  };
+
+  const quickTools: Tool[] = [
     { label: 'Create PDF', icon: 'C', tip: 'New PDF from images or blank canvas' },
     { label: 'Edit blocks', icon: 'E', tip: 'Limited text edits within detected blocks' },
-    { label: 'Merge / Split', icon: 'M', tip: 'Join or divide PDFs; reorder pages' },
+    { label: 'Merge / Split', icon: 'M', tip: 'Join or divide PDFs; reorder pages', action: 'merge' },
     { label: 'Convert', icon: 'V', tip: 'JPG ↔ PDF, PDF → images' },
     { label: 'Annotate', icon: 'A', tip: 'Highlights, shapes, notes, freehand' },
     { label: 'Protect', icon: 'P', tip: 'Encrypt, redact, remove metadata' },
     { label: 'Forms', icon: 'F', tip: 'Fill and save AcroForms' },
     { label: 'Compress', icon: 'O', tip: 'Optimize size via Ghostscript' }
   ];
+
+  let status = '';
+
+  async function handleTool(tool: Tool) {
+    if (tool.action === 'merge') {
+      status = '';
+      const files = await open({
+        multiple: true,
+        filters: [{ name: 'PDF files', extensions: ['pdf'] }]
+      });
+      if (!files || (Array.isArray(files) && files.length < 2)) {
+        status = 'Select at least two PDFs to merge.';
+        return;
+      }
+      const inputs = Array.isArray(files) ? files.map(String) : [String(files)];
+      const output = await save({
+        defaultPath: 'merged.pdf',
+        filters: [{ name: 'PDF files', extensions: ['pdf'] }]
+      });
+      if (!output) {
+        status = 'Merge cancelled (no output selected).';
+        return;
+      }
+      try {
+        const result = await invoke<string>('merge_pdfs', { inputs, output });
+        status = `Merged into ${result}`;
+      } catch (err) {
+        status = `Merge failed: ${err}`;
+      }
+      return;
+    }
+
+    status = `${tool.label} is not wired yet.`;
+  }
 </script>
 
 <main class="min-h-screen bg-base-200 text-base-content">
@@ -76,7 +120,10 @@
           <div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
             {#each quickTools as tool}
               <div class="tooltip" data-tip={tool.tip}>
-                <button class="btn h-28 w-full flex-col items-center justify-center gap-2 border border-base-300 bg-base-200/70 text-sm font-semibold">
+                <button
+                  class="btn h-28 w-full flex-col items-center justify-center gap-2 border border-base-300 bg-base-200/70 text-sm font-semibold"
+                  on:click={() => handleTool(tool)}
+                >
                   <span class="flex h-10 w-10 items-center justify-center rounded-full bg-base-100 text-base font-bold">
                     {tool.icon}
                   </span>
@@ -110,7 +157,12 @@
               </ul>
             </div>
           </div>
-          </div>
+          {#if status}
+            <div class="mt-4 rounded-lg border border-base-200 bg-base-200/60 p-3 text-sm text-base-content/80">
+              {status}
+            </div>
+          {/if}
+        </div>
         </div>
     </section>
   </div>

@@ -3,6 +3,7 @@ use std::process::Command;
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Manager};
+use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
 fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Result<String, String> {
@@ -44,6 +45,7 @@ fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Re
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_dialog::init())
     .menu(|app| {
       let file = SubmenuBuilder::new(app, "File")
         .item(
