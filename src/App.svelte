@@ -124,10 +124,10 @@ onDestroy(() => {
   }
 </script>
 
-{#if currentView === 'merge'}
+ {#if currentView === 'merge'}
   <MergeView
     onBack={() => (currentView = 'home')}
-    onMerged={(p) => setStatus(`Merged into ${p}`)}
+    onMerged={(p: string) => setStatus(`Merged into ${p}`)}
   />
 {:else}
   <main class="min-h-screen bg-base-200 text-base-content">
