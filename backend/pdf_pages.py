@@ -42,10 +42,17 @@ def reorder_pages(input_path: Path, order: Sequence[int], output: Path) -> None:
 def split_pdf(input_path: Path, ranges: Iterable[str], output_dir: Path) -> list[Path]:
     reader = PdfReader(str(input_path))
     output_dir.mkdir(parents=True, exist_ok=True)
+    total = len(reader.pages)
+
+    # If no ranges provided, split page by page.
+    ranges_list = list(ranges)
+    if not ranges_list:
+        ranges_list = [str(i) for i in range(1, total + 1)]
+
     outputs: list[Path] = []
-    for i, range_expr in enumerate(ranges, start=1):
+    for i, range_expr in enumerate(ranges_list, start=1):
         writer = PdfWriter()
-        for page_index in parse_ranges(range_expr, len(reader.pages)):
+        for page_index in parse_ranges(range_expr, total):
             writer.add_page(reader.pages[page_index])
         out_path = output_dir / f"split_{i}.pdf"
         with out_path.open("wb") as fh:
