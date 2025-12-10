@@ -28,6 +28,7 @@ backend/venv/bin/pip install -r backend/requirements.txt
 ## Run
 - Frontend only: `npm run dev`
 - Tauri desktop (bundles frontend + Rust shell): `npm run tauri:dev`
+- Python CLI (dev, pages): `python backend/pdf_pages.py merge --inputs a.pdf b.pdf --output out.pdf`
 
 ## Build
 - Production bundle: `npm run tauri:build`

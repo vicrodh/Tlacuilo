@@ -110,41 +110,8 @@
               </ul>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div class="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-sm">
-        <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <p class="text-base font-semibold">Minimal edit capabilities target (backlog)</p>
-          <span class="badge badge-outline text-xs">Reference: Foxit baseline</span>
-        </div>
-        <div class="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          <div class="rounded-lg border border-base-200 bg-base-200/60 p-3">
-            <p class="font-medium text-base-content">Edit text (within block)</p>
-            <p class="text-xs text-base-content/70">Replace/adjust text in fixed bounding boxes; warn on font change.</p>
-          </div>
-          <div class="rounded-lg border border-base-200 bg-base-200/60 p-3">
-            <p class="font-medium text-base-content">Add text blocks</p>
-            <p class="text-xs text-base-content/70">Overlay new text with standard fonts; position-aware.</p>
-          </div>
-          <div class="rounded-lg border border-base-200 bg-base-200/60 p-3">
-            <p class="font-medium text-base-content">Insert images/media</p>
-            <p class="text-xs text-base-content/70">Place logos/stamps; plan for multi-page apply.</p>
-          </div>
-          <div class="rounded-lg border border-base-200 bg-base-200/60 p-3">
-            <p class="font-medium text-base-content">Annotations</p>
-            <p class="text-xs text-base-content/70">Highlight, underline, strikeout, shapes, freehand, notes.</p>
-          </div>
-          <div class="rounded-lg border border-base-200 bg-base-200/60 p-3">
-            <p class="font-medium text-base-content">Links</p>
-            <p class="text-xs text-base-content/70">Add hyperlinks and internal jumps.</p>
-          </div>
-          <div class="rounded-lg border border-base-200 bg-base-200/60 p-3">
-            <p class="font-medium text-base-content">Reflow-free edits</p>
-            <p class="text-xs text-base-content/70">No WYSIWYG flow; bounded edits with warnings on overflow.</p>
           </div>
         </div>
-      </div>
     </section>
   </div>
 </main>
