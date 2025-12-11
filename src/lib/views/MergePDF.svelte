@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Upload, FolderOpen, Trash2, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Plus, FileText, ZoomIn, ZoomOut, Download, Maximize, RotateCw } from 'lucide-svelte';
+  import { Upload, FolderOpen, Trash2, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Plus, FileText, ZoomIn, ZoomOut, Download, Maximize, Columns, RectangleVertical, RectangleHorizontal, LayoutGrid } from 'lucide-svelte';
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
   import { listen } from '@tauri-apps/api/event';
@@ -41,6 +41,10 @@
   let isLoadingViewer = $state(false);
   let viewerZoom = $state(100);
   let pageInputValue = $state('1');
+  let fitMode = $state<'none' | 'page' | 'width' | 'height'>('none');
+  let viewerLayout = $state<'single' | 'double' | 'grid'>('single');
+  let allPageImages = $state<string[]>([]);
+  let isLoadingAllPages = $state(false);
 
   const ZOOM_LEVELS = [25, 50, 75, 100, 125, 150, 200, 300];
   const MIN_ZOOM = 25;
@@ -256,6 +260,50 @@
       if (status.startsWith('PDF saved')) status = '';
     }, 3000);
   }
+
+  function setFitMode(mode: 'none' | 'page' | 'width' | 'height') {
+    fitMode = mode;
+    if (mode !== 'none') {
+      viewerZoom = 100; // Reset zoom when using fit modes
+    }
+  }
+
+  function setViewerLayout(layout: 'single' | 'double' | 'grid') {
+    viewerLayout = layout;
+    if (layout !== 'single' && mergedPDFPath && allPageImages.length === 0) {
+      loadAllPagesForMultiview();
+    }
+  }
+
+  async function loadAllPagesForMultiview() {
+    if (!mergedPDFPath || isLoadingAllPages) return;
+    isLoadingAllPages = true;
+    try {
+      const images: string[] = [];
+      for (let i = 1; i <= viewerTotalPages; i++) {
+        const img = await renderPageForViewer(mergedPDFPath, i, 400);
+        images.push(img);
+      }
+      allPageImages = images;
+    } catch (err) {
+      console.error('Error loading all pages:', err);
+    }
+    isLoadingAllPages = false;
+  }
+
+  // Compute fit style based on fitMode
+  const fitStyle = $derived(() => {
+    switch (fitMode) {
+      case 'page':
+        return 'max-width: 100%; max-height: 100%; object-fit: contain;';
+      case 'width':
+        return 'width: 100%; height: auto;';
+      case 'height':
+        return 'height: 100%; width: auto;';
+      default:
+        return `transform: scale(${viewerZoom / 100}); transform-origin: center center;`;
+    }
+  });
 
   async function handleMerge() {
     if (workingFiles.length === 0) return;
@@ -566,96 +614,203 @@
       {#if viewerImage && mergedPDFPath}
         <!-- Toolbar -->
         <div
-          class="flex items-center justify-between px-4 py-2 border-b flex-shrink-0"
+          class="flex items-center justify-between px-3 py-2 border-b flex-shrink-0 gap-4"
           style="background-color: var(--nord1); border-color: var(--nord3);"
         >
           <!-- Left: Page Navigation -->
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1">
             <button
               onclick={() => goToPage(viewerCurrentPage - 1)}
-              disabled={viewerCurrentPage <= 1}
+              disabled={viewerCurrentPage <= 1 || viewerLayout !== 'single'}
               class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
               title="Previous page"
             >
-              <ChevronLeft size={18} />
+              <ChevronLeft size={16} />
             </button>
-            <div class="flex items-center gap-1 text-sm">
+            <div class="flex items-center gap-1 text-xs">
               <input
                 type="text"
                 bind:value={pageInputValue}
                 onblur={handlePageInput}
                 onkeydown={handlePageInputKeydown}
-                class="w-12 px-2 py-1 rounded text-center text-sm"
+                disabled={viewerLayout !== 'single'}
+                class="w-10 px-1 py-1 rounded text-center text-xs disabled:opacity-50"
                 style="background-color: var(--nord0); border: 1px solid var(--nord3);"
               />
               <span class="opacity-60">/ {viewerTotalPages}</span>
             </div>
             <button
               onclick={() => goToPage(viewerCurrentPage + 1)}
-              disabled={viewerCurrentPage >= viewerTotalPages}
+              disabled={viewerCurrentPage >= viewerTotalPages || viewerLayout !== 'single'}
               class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
               title="Next page"
             >
-              <ChevronRight size={18} />
+              <ChevronRight size={16} />
             </button>
           </div>
 
-          <!-- Center: Zoom Controls -->
-          <div class="flex items-center gap-2">
+          <!-- Center: Zoom & Fit Controls -->
+          <div class="flex items-center gap-1">
+            <!-- Zoom -->
             <button
               onclick={zoomOut}
-              disabled={viewerZoom <= MIN_ZOOM}
+              disabled={viewerZoom <= MIN_ZOOM || fitMode !== 'none'}
               class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
               title="Zoom out"
             >
-              <ZoomOut size={18} />
+              <ZoomOut size={16} />
             </button>
             <button
-              onclick={resetZoom}
-              class="px-2 py-1 rounded hover:bg-[var(--nord2)] transition-colors text-sm min-w-[60px]"
-              title="Reset zoom"
+              onclick={() => setFitMode('none')}
+              class="px-2 py-1 rounded hover:bg-[var(--nord2)] transition-colors text-xs min-w-[50px]"
+              style="background-color: {fitMode === 'none' ? 'var(--nord2)' : 'transparent'};"
+              title="Manual zoom"
             >
               {viewerZoom}%
             </button>
             <button
               onclick={zoomIn}
-              disabled={viewerZoom >= MAX_ZOOM}
+              disabled={viewerZoom >= MAX_ZOOM || fitMode !== 'none'}
               class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
               title="Zoom in"
             >
-              <ZoomIn size={18} />
+              <ZoomIn size={16} />
+            </button>
+
+            <!-- Separator -->
+            <div class="w-px h-5 mx-1" style="background-color: var(--nord3);"></div>
+
+            <!-- Fit Options -->
+            <button
+              onclick={() => setFitMode('page')}
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
+              style="background-color: {fitMode === 'page' ? 'var(--nord2)' : 'transparent'};"
+              title="Fit page"
+            >
+              <Maximize size={16} />
+            </button>
+            <button
+              onclick={() => setFitMode('width')}
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
+              style="background-color: {fitMode === 'width' ? 'var(--nord2)' : 'transparent'};"
+              title="Fit width"
+            >
+              <RectangleHorizontal size={16} />
+            </button>
+            <button
+              onclick={() => setFitMode('height')}
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
+              style="background-color: {fitMode === 'height' ? 'var(--nord2)' : 'transparent'};"
+              title="Fit height"
+            >
+              <RectangleVertical size={16} />
             </button>
           </div>
 
-          <!-- Right: Actions -->
-          <div class="flex items-center gap-2">
+          <!-- Right: Layout & Actions -->
+          <div class="flex items-center gap-1">
+            <!-- Layout Options -->
+            <button
+              onclick={() => setViewerLayout('single')}
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
+              style="background-color: {viewerLayout === 'single' ? 'var(--nord2)' : 'transparent'};"
+              title="Single page"
+            >
+              <RectangleVertical size={16} />
+            </button>
+            <button
+              onclick={() => setViewerLayout('double')}
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
+              style="background-color: {viewerLayout === 'double' ? 'var(--nord2)' : 'transparent'};"
+              title="Two pages"
+            >
+              <Columns size={16} />
+            </button>
+            <button
+              onclick={() => setViewerLayout('grid')}
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
+              style="background-color: {viewerLayout === 'grid' ? 'var(--nord2)' : 'transparent'};"
+              title="Grid view"
+            >
+              <LayoutGrid size={16} />
+            </button>
+
+            <!-- Separator -->
+            <div class="w-px h-5 mx-1" style="background-color: var(--nord3);"></div>
+
             <button
               onclick={downloadMergedPdf}
               class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
               title="File location"
             >
-              <Download size={18} />
+              <Download size={16} />
             </button>
           </div>
         </div>
 
         <!-- Viewer Content -->
         <div
-          class="flex-1 overflow-auto p-4 flex items-center justify-center"
+          class="flex-1 overflow-auto p-4"
           style="background-color: var(--nord2);"
         >
-          {#if isLoadingViewer}
-            <div class="flex flex-col items-center gap-2">
+          {#if isLoadingViewer || isLoadingAllPages}
+            <div class="h-full flex flex-col items-center justify-center gap-2">
               <div class="w-6 h-6 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
-              <p class="opacity-60">Loading page...</p>
+              <p class="opacity-60">Loading {isLoadingAllPages ? 'pages' : 'page'}...</p>
+            </div>
+          {:else if viewerLayout === 'single'}
+            <!-- Single Page View -->
+            <div class="h-full flex items-center justify-center">
+              <img
+                src={viewerImage}
+                alt="Page {viewerCurrentPage}"
+                class="shadow-lg rounded"
+                style={fitStyle()}
+              />
+            </div>
+          {:else if viewerLayout === 'double'}
+            <!-- Two Page View -->
+            <div class="h-full flex items-center justify-center gap-4">
+              {#if allPageImages.length > 0}
+                {#each allPageImages.slice(0, Math.min(allPageImages.length, 2)) as img, idx}
+                  <img
+                    src={allPageImages[Math.floor((viewerCurrentPage - 1) / 2) * 2 + idx] || ''}
+                    alt="Page {Math.floor((viewerCurrentPage - 1) / 2) * 2 + idx + 1}"
+                    class="shadow-lg rounded max-h-full"
+                    style="max-width: 48%;"
+                  />
+                {/each}
+              {:else}
+                <p class="opacity-60">Loading pages...</p>
+              {/if}
             </div>
           {:else}
-            <img
-              src={viewerImage}
-              alt="Page {viewerCurrentPage}"
-              class="shadow-lg rounded"
-              style="transform: scale({viewerZoom / 100}); transform-origin: center center;"
-            />
+            <!-- Grid View -->
+            <div class="grid grid-cols-3 gap-4 auto-rows-max">
+              {#if allPageImages.length > 0}
+                {#each allPageImages as img, idx}
+                  <button
+                    onclick={() => { viewerLayout = 'single'; goToPage(idx + 1); }}
+                    class="relative group rounded overflow-hidden shadow hover:shadow-lg transition-shadow"
+                    style="background-color: var(--nord3);"
+                  >
+                    <img
+                      src={img}
+                      alt="Page {idx + 1}"
+                      class="w-full"
+                    />
+                    <div
+                      class="absolute bottom-0 left-0 right-0 py-1 text-xs text-center opacity-80"
+                      style="background-color: var(--nord0);"
+                    >
+                      Page {idx + 1}
+                    </div>
+                  </button>
+                {/each}
+              {:else}
+                <p class="col-span-3 text-center opacity-60">Loading pages...</p>
+              {/if}
+            </div>
           {/if}
         </div>
       {:else}
