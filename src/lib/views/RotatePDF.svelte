@@ -26,7 +26,7 @@
     error: string | null;
   }
 
-  const DEGREE_OPTIONS = [90, 180, 270, -90, -180, -270];
+  const DEGREE_OPTIONS = [0, 90, 180, 270, 360, -90, -180, -270];
 
   let file = $state<PDFFile | null>(null);
   let rotationMode = $state<'all' | 'pages' | 'groups'>('pages');
