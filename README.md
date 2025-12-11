@@ -1,6 +1,6 @@
 # I H PDF
 
-Desktop PDF toolkit for Linux built with Tauri (Rust) + Svelte/TypeScript and a Python 3.12 backend (PyMuPDF, pikepdf). This repo currently contains the Sprint 0 scaffold: frontend shell, Tauri 2.x skeleton, and Python environment setup.
+Desktop PDF toolkit for Linux built with Tauri (Rust) + Svelte/TypeScript and a Python 3.12 backend (PyMuPDF, pikepdf). Includes functional Merge, Split y Rotate flows with inline previews and per-page controls.
 
 ## Stack
 - Frontend: Svelte + Vite + Tailwind CSS + DaisyUI
@@ -48,7 +48,12 @@ backend/venv/bin/pip install -r backend/requirements.txt
 - Keep files focused; avoid monolith components/stores.
 - No co-authoring metadata in commits.
 
+## Current Features
+- Merge PDFs with drag-and-drop page ordering and inline preview.
+- Split PDFs (all, selected pages, or groups) with thumbnail selector.
+- Rotate PDFs with per-page or per-group angles, visual preview, and a result viewer (single / two-up / grid, fit width/height, thumbnails).
+
 ## Next Steps
-- Wire the Python bridge (Tauri commands → Python subprocess/runner).
-- Add core PDF operations module in Python (merge/split/reorder/rotate).
-- Lay out annotation/text-edit limited UI skeleton.
+- Add edit/annotate tooling UI from the figma baseline.
+- Implement mirroring in rotate (backend support needed) and batch conversions.
+- Harden packaging (Flatpak/AppImage) and add automated tests.

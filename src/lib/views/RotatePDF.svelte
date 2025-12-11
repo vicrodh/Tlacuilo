@@ -64,6 +64,9 @@
   let isLoadingViewer = $state(false);
   let viewerZoom = $state(100);
   let viewerLayout = $state<'single' | 'double' | 'grid'>('single');
+  let fitMode = $state<'auto' | 'width' | 'height'>('auto');
+  let resultThumbnails = $state<{ page: number; image: string }[]>([]);
+  let isLoadingThumbs = $state(false);
   let pageInputValue = $state('1');
   const ZOOM_LEVELS = [50, 75, 100, 125, 150, 200, 300];
 
@@ -214,6 +217,7 @@
       const img = await renderPageForViewer(pdfPath, p, 800 * (viewerZoom / 100));
       viewerImages = [...viewerImages, { page: p, image: img }];
     }
+    void loadResultThumbnails(pdfPath);
     isLoadingViewer = false;
   }
 
@@ -252,6 +256,27 @@
     if (resultPath) {
       await goToViewerPage(viewerCurrentPage);
     }
+  }
+
+  async function loadResultThumbnails(pdfPath: string) {
+    isLoadingThumbs = true;
+    resultThumbnails = [];
+    try {
+      const total = await getPageCount(pdfPath);
+      const thumbs: { page: number; image: string }[] = [];
+      for (let i = 1; i <= total; i++) {
+        const img = await renderPageForViewer(pdfPath, i, 180);
+        thumbs.push({ page: i, image: img });
+      }
+      resultThumbnails = thumbs;
+    } catch (err) {
+      console.error('Error loading thumbnails:', err);
+    }
+    isLoadingThumbs = false;
+  }
+
+  function thumbBorder(page: number): string {
+    return page === viewerCurrentPage ? '2px solid var(--nord8)' : '1px solid var(--nord3)';
   }
 
   async function handleRotate() {
@@ -406,33 +431,95 @@
               <ZoomIn size={14} />
             </button>
           </div>
+
+          <div class="flex items-center gap-1 ml-2">
+            <span class="text-xs opacity-60">Fit</span>
+            <div class="flex items-center gap-1">
+              <button
+                class="p-1 rounded border"
+                style="border-color: var(--nord3); background-color: {fitMode === 'auto' ? 'var(--nord8)' : 'var(--nord2)'};"
+                onclick={() => fitMode = 'auto'}
+                title="Auto"
+              >
+                <RectangleHorizontal size={14} />
+              </button>
+              <button
+                class="p-1 rounded border"
+                style="border-color: var(--nord3); background-color: {fitMode === 'width' ? 'var(--nord8)' : 'var(--nord2)'};"
+                onclick={() => fitMode = 'width'}
+                title="Fit width"
+              >
+                <RectangleHorizontal size={14} />
+              </button>
+              <button
+                class="p-1 rounded border"
+                style="border-color: var(--nord3); background-color: {fitMode === 'height' ? 'var(--nord8)' : 'var(--nord2)'};"
+                onclick={() => fitMode = 'height'}
+                title="Fit height"
+              >
+                <RectangleVertical size={14} />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       <div class="flex-1 overflow-auto p-4">
-        <div
-          class="w-full h-full rounded-lg flex items-center justify-center"
-          style="background-color: var(--nord1);"
-        >
-          {#if isLoadingViewer}
-            <div class="w-10 h-10 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
-          {:else if viewerImages.length > 0}
-            <div class="w-full h-full flex flex-wrap items-start justify-center gap-4 overflow-auto">
-              {#each viewerImages as item (item.page)}
-                <div class="flex flex-col items-center gap-1">
-                  <img
-                    src={item.image}
-                    alt={`Page ${item.page}`}
-                    class="max-h-[85vh] max-w-full object-contain"
-                    style="width: {viewerLayout === 'grid' ? '320px' : 'auto'};"
-                  />
-                  <span class="text-xs opacity-60">Page {item.page}</span>
-                </div>
-              {/each}
+        <div class="h-full flex gap-4">
+          <div
+            class="flex-1 rounded-lg flex items-center justify-center"
+            style="background-color: var(--nord1);"
+          >
+            {#if isLoadingViewer}
+              <div class="w-10 h-10 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
+            {:else if viewerImages.length > 0}
+              <div class="w-full h-full flex flex-wrap items-start justify-center gap-4 overflow-auto p-4">
+                {#each viewerImages as item (item.page)}
+                  <div class="flex flex-col items-center gap-1">
+                    <img
+                      src={item.image}
+                      alt={`Page ${item.page}`}
+                      class="max-h-[85vh] max-w-full object-contain"
+                      style={`width: ${viewerLayout === 'grid' ? '320px' : 'auto'}; ${fitMode === 'width' ? 'width: 100%; height: auto;' : ''}${fitMode === 'height' ? 'height: 80vh; width: auto;' : ''}`}
+                    />
+                    <span class="text-xs opacity-60">Page {item.page}</span>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <p class="opacity-60 text-sm">No preview available</p>
+            {/if}
+          </div>
+
+          <div
+            class="w-52 rounded-lg border p-3 flex flex-col gap-2"
+            style="background-color: var(--nord1); border-color: var(--nord3);"
+          >
+            <div class="flex items-center justify-between text-xs">
+              <span class="opacity-60">Thumbnails</span>
+              {#if isLoadingThumbs}
+                <span class="opacity-60">Loading...</span>
+              {/if}
             </div>
-          {:else}
-            <p class="opacity-60 text-sm">No preview available</p>
-          {/if}
+            <div class="flex-1 overflow-auto space-y-2">
+              {#if resultThumbnails.length === 0 && !isLoadingThumbs}
+                <p class="text-xs opacity-50">No thumbnails</p>
+              {:else}
+                {#each resultThumbnails as thumb (thumb.page)}
+                  <button
+                    class="w-full text-left rounded p-1 transition-colors"
+                    style={`border: ${thumbBorder(thumb.page)}; background-color: ${thumb.page === viewerCurrentPage ? 'var(--nord2)' : 'transparent'};`}
+                    onclick={() => goToViewerPage(thumb.page)}
+                  >
+                    <div class="w-full aspect-[3/4] overflow-hidden flex items-center justify-center" style="background-color: var(--nord0);">
+                      <img src={thumb.image} alt={`Page ${thumb.page}`} class="w-full object-contain" />
+                    </div>
+                    <div class="text-[11px] opacity-70 mt-1">Page {thumb.page}</div>
+                  </button>
+                {/each}
+              {/if}
+            </div>
+          </div>
         </div>
       </div>
     {:else}
