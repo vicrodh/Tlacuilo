@@ -1,5 +1,21 @@
 <script lang="ts">
-  import { Upload, FolderOpen, Trash2, FileText, RotateCw, Layers, Grid3x3, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-svelte';
+  import {
+    Upload,
+    FolderOpen,
+    Trash2,
+    FileText,
+    RotateCw,
+    Layers,
+    Grid3x3,
+    ChevronLeft,
+    ChevronRight,
+    ZoomIn,
+    ZoomOut,
+    Columns,
+    RectangleVertical,
+    RectangleHorizontal,
+    LayoutGrid
+  } from 'lucide-svelte';
   import { listen } from '@tauri-apps/api/event';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
@@ -42,11 +58,12 @@
   let resultPath = $state<string | null>(null);
 
   // Result viewer state
-  let viewerImage = $state<string>('');
+  let viewerImages = $state<{ page: number; image: string }[]>([]);
   let viewerTotalPages = $state(0);
   let viewerCurrentPage = $state(1);
   let isLoadingViewer = $state(false);
   let viewerZoom = $state(100);
+  let viewerLayout = $state<'single' | 'double' | 'grid'>('single');
   let pageInputValue = $state('1');
   const ZOOM_LEVELS = [50, 75, 100, 125, 150, 200, 300];
 
@@ -174,12 +191,29 @@
     return rotationDegrees;
   }
 
+  function pagesForLayout(base: number): number[] {
+    if (viewerLayout === 'single') return [base];
+    if (viewerLayout === 'double') return [base, Math.min(base + 1, viewerTotalPages)].filter((p, idx, arr) => arr.indexOf(p) === idx);
+    // grid: up to 4 pages
+    const pages: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const p = base + i;
+      if (p <= viewerTotalPages) pages.push(p);
+    }
+    return pages;
+  }
+
   async function loadResultViewer(pdfPath: string) {
     isLoadingViewer = true;
     viewerTotalPages = await getPageCount(pdfPath);
     viewerCurrentPage = 1;
     pageInputValue = '1';
-    viewerImage = await renderPageForViewer(pdfPath, 1);
+    const pages = pagesForLayout(1);
+    viewerImages = [];
+    for (const p of pages) {
+      const img = await renderPageForViewer(pdfPath, p, 800 * (viewerZoom / 100));
+      viewerImages = [...viewerImages, { page: p, image: img }];
+    }
     isLoadingViewer = false;
   }
 
@@ -188,7 +222,12 @@
     isLoadingViewer = true;
     viewerCurrentPage = page;
     pageInputValue = String(page);
-    viewerImage = await renderPageForViewer(resultPath, page, 800 * (viewerZoom / 100));
+    viewerImages = [];
+    const pages = pagesForLayout(page);
+    for (const p of pages) {
+      const img = await renderPageForViewer(resultPath, p, 800 * (viewerZoom / 100));
+      viewerImages = [...viewerImages, { page: p, image: img }];
+    }
     isLoadingViewer = false;
   }
 
@@ -205,6 +244,13 @@
     viewerZoom = ZOOM_LEVELS[nextIdx];
     if (resultPath) {
       goToViewerPage(viewerCurrentPage);
+    }
+  }
+
+  async function changeLayout(layout: 'single' | 'double' | 'grid') {
+    viewerLayout = layout;
+    if (resultPath) {
+      await goToViewerPage(viewerCurrentPage);
     }
   }
 
@@ -370,12 +416,20 @@
         >
           {#if isLoadingViewer}
             <div class="w-10 h-10 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
-          {:else if viewerImage}
-            <img
-              src={viewerImage}
-              alt="Rotated PDF page"
-              class="max-h-full max-w-full object-contain"
-            />
+          {:else if viewerImages.length > 0}
+            <div class="w-full h-full flex flex-wrap items-start justify-center gap-4 overflow-auto">
+              {#each viewerImages as item (item.page)}
+                <div class="flex flex-col items-center gap-1">
+                  <img
+                    src={item.image}
+                    alt={`Page ${item.page}`}
+                    class="max-h-[85vh] max-w-full object-contain"
+                    style="width: {viewerLayout === 'grid' ? '320px' : 'auto'};"
+                  />
+                  <span class="text-xs opacity-60">Page {item.page}</span>
+                </div>
+              {/each}
+            </div>
           {:else}
             <p class="opacity-60 text-sm">No preview available</p>
           {/if}
@@ -425,12 +479,12 @@
             </button>
           </div>
 
-          <div class="flex items-center gap-2 ml-auto">
-            <label class="text-xs opacity-60" for="rotation-select">Rotation</label>
-            <select
-              id="rotation-select"
-              class="text-xs px-2 py-1 rounded border"
-              style="background-color: var(--nord2); border-color: var(--nord3);"
+        <div class="flex items-center gap-2 ml-auto flex-wrap justify-end">
+          <label class="text-xs opacity-60" for="rotation-select">Rotation</label>
+          <select
+            id="rotation-select"
+            class="text-xs px-2 py-1 rounded border"
+            style="background-color: var(--nord2); border-color: var(--nord3);"
               bind:value={rotationDegrees}
               onchange={onRotationChange}
             >
@@ -446,6 +500,35 @@
             >
               {previewEnabled ? 'Preview on' : 'Preview off'}
             </button>
+            <div class="flex items-center gap-1 ml-2">
+              <span class="text-xs opacity-60">Layout</span>
+              <div class="flex items-center gap-1">
+                <button
+                  class="p-1 rounded border"
+                  style="border-color: var(--nord3); background-color: {viewerLayout === 'single' ? 'var(--nord8)' : 'var(--nord2)'};"
+                  onclick={() => changeLayout('single')}
+                  title="Single page"
+                >
+                  <RectangleVertical size={14} />
+                </button>
+                <button
+                  class="p-1 rounded border"
+                  style="border-color: var(--nord3); background-color: {viewerLayout === 'double' ? 'var(--nord8)' : 'var(--nord2)'};"
+                  onclick={() => changeLayout('double')}
+                  title="Two-up"
+                >
+                  <Columns size={14} />
+                </button>
+                <button
+                  class="p-1 rounded border"
+                  style="border-color: var(--nord3); background-color: {viewerLayout === 'grid' ? 'var(--nord8)' : 'var(--nord2)'};"
+                  onclick={() => changeLayout('grid')}
+                  title="2x2 grid"
+                >
+                  <LayoutGrid size={14} />
+                </button>
+              </div>
+            </div>
           </div>
 
           <span class="text-xs opacity-60">{rotationSummary()}</span>
