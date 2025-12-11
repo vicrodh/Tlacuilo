@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Upload, FolderOpen, Trash2, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Plus } from 'lucide-svelte';
-  import { dndzone } from 'svelte-dnd-action';
+  import { dndzone, SOURCES, TRIGGERS } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
   import { listen } from '@tauri-apps/api/event';
   import { open, save } from '@tauri-apps/plugin-dialog';
@@ -13,6 +13,7 @@
     name: string;
     path: string;
     thumbnail: string;
+    pageCount: number;
     pages: PDFPage[];
   }
 
@@ -34,12 +35,16 @@
   let isTopSectionCollapsed = $state(false);
   let status = $state<string>('');
   let unlistenDrop: (() => void) | null = null;
+  let loadingFiles = $state<Set<string>>(new Set()); // Track files being loaded
 
   // PDF Viewer state
   let viewerImage = $state<string>('');
   let viewerCurrentPage = $state(1);
   let viewerTotalPages = $state(0);
   let isLoadingViewer = $state(false);
+
+  // DnD state for copy behavior
+  let draggedFromSource = $state<PDFPage | null>(null);
 
   const flipDurationMs = 200;
 
@@ -61,59 +66,72 @@
   });
 
   async function addFiles(paths: string[]) {
-    status = 'Loading files...';
     for (const path of paths) {
       const name = path.split('/').pop() || path;
       const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-      try {
-        // Get thumbnail for file
-        const thumbnail = await renderFirstPageThumbnail(path, 160);
+      // Add file immediately with loading state
+      const placeholderFile: PDFFile = {
+        id: fileId,
+        name,
+        path,
+        thumbnail: '',
+        pageCount: 0,
+        pages: [],
+      };
+      files = [...files, placeholderFile];
+      activeFileIds = new Set([...activeFileIds, fileId]);
+      loadingFiles = new Set([...loadingFiles, fileId]);
 
-        // Get all page thumbnails
-        const pageThumbnails = await renderAllPageThumbnails(path, 120);
-
-        const pages: PDFPage[] = pageThumbnails.map((thumb, idx) => ({
-          id: `${fileId}-page-${idx}`,
-          fileId,
-          filePath: path,
-          fileName: name,
-          pageNumber: idx + 1,
-          thumbnail: thumb,
-        }));
-
-        const newFile: PDFFile = {
-          id: fileId,
-          name,
-          path,
-          thumbnail,
-          pages,
-        };
-
-        files = [...files, newFile];
-        activeFileIds = new Set([...activeFileIds, fileId]);
-
-        if (!activeTab) {
-          activeTab = fileId;
-        }
-      } catch (err) {
-        console.error('Error loading PDF:', err);
-        // Still add file even if thumbnail fails
-        const newFile: PDFFile = {
-          id: fileId,
-          name,
-          path,
-          thumbnail: '',
-          pages: [],
-        };
-        files = [...files, newFile];
-        activeFileIds = new Set([...activeFileIds, fileId]);
-        if (!activeTab) {
-          activeTab = fileId;
-        }
+      if (!activeTab) {
+        activeTab = fileId;
       }
+
+      // Load thumbnails asynchronously
+      loadFileData(fileId, path, name);
     }
-    status = '';
+  }
+
+  async function loadFileData(fileId: string, path: string, name: string) {
+    try {
+      // Get page count first
+      const pageCount = await getPageCount(path);
+
+      // Get thumbnail for file (first page)
+      const thumbnail = await renderFirstPageThumbnail(path, 160);
+
+      // Get all page thumbnails
+      const pageThumbnails = await renderAllPageThumbnails(path, 120);
+
+      const pages: PDFPage[] = pageThumbnails.map((thumb, idx) => ({
+        id: `${fileId}-page-${idx}`,
+        fileId,
+        filePath: path,
+        fileName: name,
+        pageNumber: idx + 1,
+        thumbnail: thumb,
+      }));
+
+      // Update file with loaded data
+      files = files.map((f) =>
+        f.id === fileId
+          ? { ...f, thumbnail, pageCount, pages }
+          : f
+      );
+    } catch (err) {
+      console.error('Error loading PDF:', err);
+      // Try to at least get page count
+      try {
+        const pageCount = await getPageCount(path);
+        files = files.map((f) =>
+          f.id === fileId ? { ...f, pageCount } : f
+        );
+      } catch {
+        // File might be corrupted, leave as is
+      }
+    } finally {
+      loadingFiles = new Set([...loadingFiles].filter((id) => id !== fileId));
+    }
   }
 
   async function handleFilePicker() {
@@ -165,17 +183,74 @@
     files = [...working, ...nonWorking];
   }
 
-  function handleSourcePagesDnd(e: CustomEvent<{ items: PDFPage[] }>) {
-    const activeFile = files.find((f) => f.id === activeTab);
-    if (activeFile) {
-      files = files.map((f) =>
-        f.id === activeTab ? { ...f, pages: e.detail.items } : f
-      );
+  function handleSourcePagesDnd(e: CustomEvent<{ items: PDFPage[]; info: { source: string; trigger: string } }>) {
+    const { items, info } = e.detail;
+
+    // If dragging started from source, track the page for copy behavior
+    if (info.source === SOURCES.POINTER && info.trigger === TRIGGERS.DRAG_STARTED) {
+      const draggedItem = items.find((item) => (item as any).isDndShadowItem);
+      if (draggedItem) {
+        draggedFromSource = { ...draggedItem, id: draggedItem.id.replace('id:dnd-shadow-placeholder-', '') };
+      }
+    }
+
+    // On finalize, restore original pages (don't remove from source)
+    if (info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER || info.trigger === TRIGGERS.DROPPED_OUTSIDE_OF_ANY) {
+      // Restore the page that was dragged - source should keep all pages
+      const activeFile = files.find((f) => f.id === activeTab);
+      if (activeFile) {
+        // Keep original pages unchanged
+        return;
+      }
+    }
+
+    // Only update for reordering within source
+    if (info.trigger === TRIGGERS.DROPPED_INTO_ZONE) {
+      const activeFile = files.find((f) => f.id === activeTab);
+      if (activeFile) {
+        // Filter out any shadow items and restore original IDs
+        const cleanItems = items.filter((item) => !(item as any).isDndShadowItem);
+        files = files.map((f) =>
+          f.id === activeTab ? { ...f, pages: cleanItems } : f
+        );
+      }
     }
   }
 
-  function handleDestinationPagesDnd(e: CustomEvent<{ items: PDFPage[] }>) {
-    destinationPages = e.detail.items;
+  function handleDestinationPagesDnd(e: CustomEvent<{ items: PDFPage[]; info: { source: string; trigger: string } }>) {
+    const { items, info } = e.detail;
+
+    // When a page is dropped from source, create a copy with new ID
+    if (info.trigger === TRIGGERS.DROPPED_INTO_ZONE && draggedFromSource) {
+      // Check if this is a new page from source (has source ID pattern)
+      const hasNewPage = items.some((item) =>
+        !item.id.startsWith('dest-') && !item.id.includes('dnd-shadow')
+      );
+
+      if (hasNewPage) {
+        // Transform items: give new IDs to pages from source
+        const transformedItems = items
+          .filter((item) => !(item as any).isDndShadowItem)
+          .map((item) => {
+            if (!item.id.startsWith('dest-')) {
+              // This is a page from source, give it a destination ID
+              return {
+                ...item,
+                id: `dest-${item.id}-${Date.now()}`,
+              };
+            }
+            return item;
+          });
+        destinationPages = transformedItems;
+        draggedFromSource = null;
+        return;
+      }
+    }
+
+    // Normal reordering within destination
+    const cleanItems = items.filter((item) => !(item as any).isDndShadowItem);
+    destinationPages = cleanItems;
+    draggedFromSource = null;
   }
 
   function addPageToDestination(page: PDFPage) {
@@ -292,7 +367,7 @@
   const totalPages = $derived(
     viewMode === 'page'
       ? destinationPages.length
-      : workingFiles.reduce((acc, f) => acc + f.pages.length, 0)
+      : workingFiles.reduce((acc, f) => acc + f.pageCount, 0)
   );
   const canMerge = $derived(
     viewMode === 'file' ? workingFiles.length >= 2 : destinationPages.length >= 1
@@ -383,7 +458,7 @@
                       title={file.name}
                     >
                       <p class="line-clamp-2 break-all leading-tight">{file.name}</p>
-                      <p class="opacity-60">{file.pages.length} pages</p>
+                      <p class="opacity-60">{file.pageCount} page{file.pageCount !== 1 ? 's' : ''}</p>
                     </div>
                   </div>
                 {/each}
@@ -394,11 +469,11 @@
             <div class="h-full flex flex-col gap-4">
               <!-- Source Pages -->
               <div class="flex-1 overflow-hidden">
-                <h4 class="text-xs opacity-60 mb-2 uppercase">Source Pages</h4>
+                <h4 class="text-xs opacity-60 mb-2 uppercase">Source Pages {activeFile ? `(${activeFile.pageCount} pages)` : ''}</h4>
                 <div
                   class="h-[calc(100%-24px)] overflow-x-auto overflow-y-hidden flex gap-2 p-2 rounded"
                   style="background-color: var(--nord0);"
-                  use:dndzone={{ items: activeFile?.pages || [], flipDurationMs, type: 'pages' }}
+                  use:dndzone={{ items: activeFile?.pages || [], flipDurationMs, type: 'mergepages', dropFromOthersDisabled: true, centreDraggedOnCursor: true }}
                   onconsider={handleSourcePagesDnd}
                   onfinalize={handleSourcePagesDnd}
                 >
@@ -442,15 +517,15 @@
               <div class="flex-1 overflow-hidden">
                 <h4 class="text-xs opacity-60 mb-2 uppercase">Merged Document ({destinationPages.length} pages)</h4>
                 <div
-                  class="h-[calc(100%-24px)] overflow-x-auto overflow-y-hidden flex gap-2 p-2 rounded"
+                  class="h-[calc(100%-24px)] overflow-x-auto overflow-y-hidden flex gap-2 p-2 rounded min-h-[120px]"
                   style="background-color: var(--nord0);"
-                  use:dndzone={{ items: destinationPages, flipDurationMs, type: 'destpages' }}
+                  use:dndzone={{ items: destinationPages, flipDurationMs, type: 'mergepages', dropFromOthersDisabled: false, centreDraggedOnCursor: true }}
                   onconsider={handleDestinationPagesDnd}
                   onfinalize={handleDestinationPagesDnd}
                 >
                   {#if destinationPages.length === 0}
                     <div class="h-full flex items-center justify-center opacity-60 w-full">
-                      <p class="text-xs">Click + on pages above to add them here</p>
+                      <p class="text-xs">Drag pages here or click + to add them</p>
                     </div>
                   {:else}
                     {#each destinationPages as page (page.id)}
@@ -588,17 +663,44 @@
         <h4 class="text-xs opacity-60 mb-3 uppercase">Files ({files.length})</h4>
         {#each files as file}
           {@const isActive = activeFileIds.has(file.id)}
+          {@const isLoading = loadingFiles.has(file.id)}
           <div
-            class="mb-2 p-2 rounded group hover:bg-[var(--nord2)] transition-colors"
+            class="mb-3 p-2 rounded group hover:bg-[var(--nord2)] transition-colors"
             class:opacity-50={!isActive}
             title={file.path}
           >
-            <div class="flex items-start justify-between gap-2">
-              <p class="text-xs flex-1 truncate">{file.name}</p>
+            <!-- Thumbnail -->
+            <div
+              class="w-full aspect-[3/4] rounded mb-2 overflow-hidden flex items-center justify-center"
+              style="background-color: var(--nord2);"
+            >
+              {#if isLoading}
+                <div class="flex flex-col items-center gap-1">
+                  <div class="w-4 h-4 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
+                  <span class="text-xs opacity-60">Loading...</span>
+                </div>
+              {:else if file.thumbnail}
+                <img src={file.thumbnail} alt={file.name} class="max-w-full max-h-full object-contain" />
+              {:else}
+                <span class="text-xs opacity-60">PDF</span>
+              {/if}
+            </div>
+            <!-- File info and actions -->
+            <div class="flex items-start justify-between gap-1">
+              <div class="flex-1 min-w-0">
+                <p class="text-xs truncate" title={file.name}>{file.name}</p>
+                <p class="text-xs opacity-50">
+                  {#if isLoading}
+                    Loading...
+                  {:else}
+                    {file.pageCount} page{file.pageCount !== 1 ? 's' : ''}
+                  {/if}
+                </p>
+              </div>
               {#if isActive}
                 <button
                   onclick={() => removeFile(file.id)}
-                  class="opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                  class="opacity-0 group-hover:opacity-100 transition-opacity p-1 flex-shrink-0"
                   style="color: var(--nord11);"
                   title="Remove file"
                 >
@@ -607,7 +709,7 @@
               {:else}
                 <button
                   onclick={() => addFileToWorkspace(file.id)}
-                  class="opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                  class="opacity-0 group-hover:opacity-100 transition-opacity p-1 flex-shrink-0"
                   style="color: var(--nord14);"
                   title="Add to workspace"
                 >
