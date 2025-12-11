@@ -163,7 +163,13 @@ fn split_pdf(
 }
 
 #[tauri::command]
-fn rotate_pdf(app: AppHandle, input: String, degrees: i32, output: Option<String>) -> Result<String, String> {
+fn rotate_pdf(
+  app: AppHandle,
+  input: String,
+  degrees: i32,
+  output: Option<String>,
+  rotations: Option<Vec<String>>,
+) -> Result<String, String> {
   let (script_path, _) = resolve_backend_script(&app)
     .ok_or_else(|| "Backend script not found (backend/pdf_pages.py)".to_string())?;
   let python_bin = resolve_python_bin();
@@ -175,15 +181,27 @@ fn rotate_pdf(app: AppHandle, input: String, degrees: i32, output: Option<String
     cache_dir.join("ihpdf-rotated.pdf").to_string_lossy().to_string()
   });
 
-  let output = Command::new(&python_bin)
+  let mut cmd = Command::new(&python_bin);
+  cmd
     .arg(&script_path)
     .arg("rotate")
     .arg("--input")
     .arg(&input)
-    .arg("--degrees")
-    .arg(degrees.to_string())
     .arg("--output")
-    .arg(&out_path)
+    .arg(&out_path);
+
+  if let Some(rotation_list) = rotations {
+    if !rotation_list.is_empty() {
+      cmd.arg("--rotation");
+      cmd.args(rotation_list);
+    } else {
+      cmd.arg("--degrees").arg(degrees.to_string());
+    }
+  } else {
+    cmd.arg("--degrees").arg(degrees.to_string());
+  }
+
+  let output = cmd
     .output()
     .map_err(|e| format!("Failed to spawn python ({python_bin}): {e}"))?;
 

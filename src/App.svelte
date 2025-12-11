@@ -8,6 +8,7 @@
   import Dashboard from './lib/views/Dashboard.svelte';
   import MergePDF from './lib/views/MergePDF.svelte';
   import SplitPDF from './lib/views/SplitPDF.svelte';
+  import RotatePDF from './lib/views/RotatePDF.svelte';
   import PlaceholderPage from './lib/views/PlaceholderPage.svelte';
   import { getStatus, toggleExpanded, clearLogs, type LogLevel } from './lib/stores/status.svelte';
 
@@ -98,6 +99,8 @@
       <MergePDF />
     {:else if currentPage === 'split'}
       <SplitPDF />
+    {:else if currentPage === 'rotate'}
+      <RotatePDF />
     {:else}
       <PlaceholderPage pageName={currentPage} />
     {/if}
