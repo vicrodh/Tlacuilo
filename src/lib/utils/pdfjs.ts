@@ -1,113 +1,111 @@
-import * as pdfjsLib from 'pdfjs-dist';
+/**
+ * PDF utilities using pdfjs-dist with Tauri fs plugin.
+ * This module is reusable across Merge, Split, Rotate, and Edit features.
+ */
 
-// Configure worker for Vite/Tauri: use URL relative to this module.
+import * as pdfjsLib from 'pdfjs-dist';
+import { readFile } from '@tauri-apps/plugin-fs';
+
+// Configure worker for Vite/Tauri
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
 ).toString();
 
-export async function renderFirstPageThumbnail(filePath: string, maxWidth = 220): Promise<string> {
-  // Read file via fetch(file://...) in Tauri context
-  const url = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
-  const res = await fetch(url);
-  const buf = await res.arrayBuffer();
-  const data = new Uint8Array(buf);
-  const loadingTask = (pdfjsLib as any).getDocument({
-    data,
-    disableRange: true,
-    disableAutoFetch: true
-  });
-  const pdf = await loadingTask.promise;
-  const page = await pdf.getPage(1);
-  const viewport = page.getViewport({ scale: 1 });
-  const scale = maxWidth / viewport.width;
-  const scaledViewport = page.getViewport({ scale });
+// Cache for loaded PDF documents to avoid re-reading files
+const pdfCache = new Map<string, any>();
 
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('Canvas context not available');
-
-  canvas.height = scaledViewport.height;
-  canvas.width = scaledViewport.width;
-
-  await page
-    .render({
-      canvasContext: context,
-      viewport: scaledViewport,
-      canvas
-    })
-    .promise;
-  const dataUrl = canvas.toDataURL('image/png');
-
-  await pdf.destroy();
-  return dataUrl;
-}
-
-export async function renderAllPageThumbnails(filePath: string, maxWidth = 160): Promise<string[]> {
-  const url = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
-  const res = await fetch(url);
-  const buf = await res.arrayBuffer();
-  const data = new Uint8Array(buf);
-  const loadingTask = (pdfjsLib as any).getDocument({
-    data,
-    disableRange: true,
-    disableAutoFetch: true
-  });
-  const pdf = await loadingTask.promise;
-  const thumbs: string[] = [];
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 1 });
-    const scale = maxWidth / viewport.width;
-    const scaledViewport = page.getViewport({ scale });
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) continue;
-    canvas.height = scaledViewport.height;
-    canvas.width = scaledViewport.width;
-    await page.render({ canvasContext: ctx, viewport: scaledViewport, canvas }).promise;
-    thumbs.push(canvas.toDataURL('image/png'));
+/**
+ * Load a PDF document from a file path using Tauri's fs plugin.
+ * Results are cached for performance.
+ */
+async function loadPdf(filePath: string): Promise<any> {
+  if (pdfCache.has(filePath)) {
+    return pdfCache.get(filePath);
   }
 
-  await pdf.destroy();
-  return thumbs;
+  try {
+    // Read file using Tauri's fs plugin
+    const data = await readFile(filePath);
+
+    const loadingTask = (pdfjsLib as any).getDocument({
+      data,
+      disableRange: true,
+      disableAutoFetch: true,
+    });
+
+    const pdf = await loadingTask.promise;
+    pdfCache.set(filePath, pdf);
+    return pdf;
+  } catch (err) {
+    console.error(`Failed to load PDF: ${filePath}`, err);
+    throw new Error(`Could not load PDF: ${err}`);
+  }
 }
 
+/**
+ * Clear a specific PDF from cache (call when file is removed from workspace)
+ */
+export function clearPdfCache(filePath: string): void {
+  const pdf = pdfCache.get(filePath);
+  if (pdf) {
+    pdf.destroy();
+    pdfCache.delete(filePath);
+  }
+}
+
+/**
+ * Clear all cached PDFs
+ */
+export function clearAllPdfCache(): void {
+  for (const [path, pdf] of pdfCache) {
+    pdf.destroy();
+  }
+  pdfCache.clear();
+}
+
+/**
+ * Get the number of pages in a PDF file.
+ * This is the foundation for page-based operations.
+ */
 export async function getPageCount(filePath: string): Promise<number> {
-  const url = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
-  const res = await fetch(url);
-  const buf = await res.arrayBuffer();
-  const data = new Uint8Array(buf);
-  const loadingTask = (pdfjsLib as any).getDocument({
-    data,
-    disableRange: true,
-    disableAutoFetch: true
-  });
-  const pdf = await loadingTask.promise;
-  const numPages = pdf.numPages;
-  await pdf.destroy();
-  return numPages;
+  const pdf = await loadPdf(filePath);
+  return pdf.numPages;
 }
 
-export async function renderPageForViewer(
+/**
+ * Information about a PDF file
+ */
+export interface PDFInfo {
+  pageCount: number;
+  filePath: string;
+}
+
+/**
+ * Get basic info about a PDF file
+ */
+export async function getPdfInfo(filePath: string): Promise<PDFInfo> {
+  const pdf = await loadPdf(filePath);
+  return {
+    pageCount: pdf.numPages,
+    filePath,
+  };
+}
+
+/**
+ * Render a specific page to a data URL (base64 PNG image).
+ * @param filePath - Path to the PDF file
+ * @param pageNumber - 1-indexed page number
+ * @param maxWidth - Maximum width for the rendered image
+ */
+export async function renderPage(
   filePath: string,
   pageNumber: number,
-  maxWidth = 800
+  maxWidth = 200
 ): Promise<string> {
-  const url = filePath.startsWith('file://') ? filePath : `file://${filePath}`;
-  const res = await fetch(url);
-  const buf = await res.arrayBuffer();
-  const data = new Uint8Array(buf);
-  const loadingTask = (pdfjsLib as any).getDocument({
-    data,
-    disableRange: true,
-    disableAutoFetch: true
-  });
-  const pdf = await loadingTask.promise;
+  const pdf = await loadPdf(filePath);
 
   if (pageNumber < 1 || pageNumber > pdf.numPages) {
-    await pdf.destroy();
     throw new Error(`Invalid page number: ${pageNumber}. PDF has ${pdf.numPages} pages.`);
   }
 
@@ -126,10 +124,96 @@ export async function renderPageForViewer(
   await page.render({
     canvasContext: context,
     viewport: scaledViewport,
-    canvas
   }).promise;
 
-  const dataUrl = canvas.toDataURL('image/png');
-  await pdf.destroy();
-  return dataUrl;
+  return canvas.toDataURL('image/png');
 }
+
+/**
+ * Render the first page as a thumbnail (convenience function)
+ */
+export async function renderFirstPageThumbnail(
+  filePath: string,
+  maxWidth = 160
+): Promise<string> {
+  return renderPage(filePath, 1, maxWidth);
+}
+
+/**
+ * Render all pages of a PDF as thumbnails
+ * @param filePath - Path to the PDF file
+ * @param maxWidth - Maximum width for thumbnails
+ * @param onProgress - Optional callback for progress updates
+ */
+export async function renderAllPages(
+  filePath: string,
+  maxWidth = 120,
+  onProgress?: (current: number, total: number) => void
+): Promise<string[]> {
+  const pdf = await loadPdf(filePath);
+  const thumbnails: string[] = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const thumbnail = await renderPage(filePath, i, maxWidth);
+    thumbnails.push(thumbnail);
+    onProgress?.(i, pdf.numPages);
+  }
+
+  return thumbnails;
+}
+
+/**
+ * Page data structure used across the application
+ */
+export interface PageData {
+  id: string;
+  fileId: string;
+  filePath: string;
+  fileName: string;
+  pageNumber: number;
+  thumbnail: string;
+}
+
+/**
+ * Load all pages from a PDF file with their thumbnails.
+ * This is the main function for initializing page-based views.
+ */
+export async function loadPdfPages(
+  filePath: string,
+  fileId: string,
+  fileName: string,
+  maxWidth = 120,
+  onProgress?: (current: number, total: number) => void
+): Promise<PageData[]> {
+  const pdf = await loadPdf(filePath);
+  const pages: PageData[] = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const thumbnail = await renderPage(filePath, i, maxWidth);
+    pages.push({
+      id: `${fileId}-page-${i}`,
+      fileId,
+      filePath,
+      fileName,
+      pageNumber: i,
+      thumbnail,
+    });
+    onProgress?.(i, pdf.numPages);
+  }
+
+  return pages;
+}
+
+/**
+ * Render a page for the main viewer (larger size)
+ */
+export async function renderPageForViewer(
+  filePath: string,
+  pageNumber: number,
+  maxWidth = 800
+): Promise<string> {
+  return renderPage(filePath, pageNumber, maxWidth);
+}
+
+// Legacy exports for backward compatibility
+export { renderAllPages as renderAllPageThumbnails };
