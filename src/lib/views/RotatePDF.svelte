@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Upload, FolderOpen, Trash2, FileText, RotateCw, Layers, Grid3x3 } from 'lucide-svelte';
+  import { Upload, FolderOpen, Trash2, FileText, RotateCw, Layers, Grid3x3, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-svelte';
   import { listen } from '@tauri-apps/api/event';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
@@ -7,6 +7,7 @@
   import {
     getPageCount,
     loadPdfPages,
+    renderPageForViewer,
     clearPdfCache,
     type PageData
   } from '$lib/utils/pdfjs';
@@ -32,10 +33,22 @@
   let rotationMode = $state<'all' | 'pages' | 'groups'>('pages');
   let rotationDegrees = $state<number>(90);
   let groupDegrees = $state<number[]>([]);
+  let pageRotations = $state<Map<number, number>>(new Map());
+  let previewEnabled = $state(false);
   let selectedPages = $state<Set<number>>(new Set());
   let groups = $state<number[][]>([]);
   let isRotating = $state(false);
   let unlistenDrop: (() => void) | null = null;
+  let resultPath = $state<string | null>(null);
+
+  // Result viewer state
+  let viewerImage = $state<string>('');
+  let viewerTotalPages = $state(0);
+  let viewerCurrentPage = $state(1);
+  let isLoadingViewer = $state(false);
+  let viewerZoom = $state(100);
+  let pageInputValue = $state('1');
+  const ZOOM_LEVELS = [50, 75, 100, 125, 150, 200, 300];
 
   // Preview modal state
   let previewPage = $state<PageData | null>(null);
@@ -81,6 +94,9 @@
     selectedPages = new Set();
     groups = [];
     groupDegrees = [];
+    pageRotations = new Map();
+    previewEnabled = false;
+    resultPath = null;
 
     try {
       const pageCount = await getPageCount(path);
@@ -116,12 +132,25 @@
       selectedPages = new Set();
       groups = [];
       groupDegrees = [];
+      pageRotations = new Map();
+      resultPath = null;
+      previewEnabled = false;
     }
   }
 
   function onRotationChange(event: Event) {
     const value = Number((event.target as HTMLSelectElement).value);
     rotationDegrees = value;
+  }
+
+  function handlePageRotationChange(pageNumber: number, degrees: number) {
+    const next = new Map(pageRotations);
+    if (degrees === 0 || degrees === 360 || degrees === -0) {
+      next.delete(pageNumber);
+    } else {
+      next.set(pageNumber, degrees);
+    }
+    pageRotations = next;
   }
 
   function onGroupRotationChange(idx: number, event: Event) {
@@ -131,8 +160,58 @@
     groupDegrees = next;
   }
 
+  function getRotationForPage(pageNumber: number): number {
+    // 1-indexed pageNumber
+    if (rotationMode === 'all') return rotationDegrees;
+    if (rotationMode === 'pages') {
+      return pageRotations.get(pageNumber) ?? rotationDegrees;
+    }
+    // groups
+    const groupIdx = groups.findIndex(g => g.includes(pageNumber));
+    if (groupIdx >= 0) {
+      return pageRotations.get(pageNumber) ?? (groupDegrees[groupIdx] ?? rotationDegrees);
+    }
+    return rotationDegrees;
+  }
+
+  async function loadResultViewer(pdfPath: string) {
+    isLoadingViewer = true;
+    viewerTotalPages = await getPageCount(pdfPath);
+    viewerCurrentPage = 1;
+    pageInputValue = '1';
+    viewerImage = await renderPageForViewer(pdfPath, 1);
+    isLoadingViewer = false;
+  }
+
+  async function goToViewerPage(page: number) {
+    if (!resultPath || page < 1 || page > viewerTotalPages) return;
+    isLoadingViewer = true;
+    viewerCurrentPage = page;
+    pageInputValue = String(page);
+    viewerImage = await renderPageForViewer(resultPath, page, 800 * (viewerZoom / 100));
+    isLoadingViewer = false;
+  }
+
+  function handleViewerPageInput(e: Event) {
+    const value = parseInt((e.target as HTMLInputElement).value, 10);
+    if (!isNaN(value)) {
+      goToViewerPage(value);
+    }
+  }
+
+  function changeZoom(delta: number) {
+    const idx = ZOOM_LEVELS.findIndex((z) => z >= viewerZoom);
+    const nextIdx = Math.min(Math.max(idx + delta, 0), ZOOM_LEVELS.length - 1);
+    viewerZoom = ZOOM_LEVELS[nextIdx];
+    if (resultPath) {
+      goToViewerPage(viewerCurrentPage);
+    }
+  }
+
   async function handleRotate() {
     if (!file || file.pages.length === 0) return;
+
+    resultPath = null;
 
     // Determine rotations
     let rotationEntries: string[] = [];
@@ -146,7 +225,7 @@
       }
       rotationEntries = [...selectedPages]
         .sort((a, b) => a - b)
-        .map(p => `${p - 1}=${rotationDegrees}`);
+        .map(p => `${p - 1}=${getRotationForPage(p)}`);
     } else if (rotationMode === 'groups') {
       const nonEmptyGroups = groups.filter(g => g.length > 0);
       if (nonEmptyGroups.length === 0) {
@@ -154,7 +233,7 @@
         return;
       }
       rotationEntries = groups.flatMap((group, idx) =>
-        group.map(pageNum => `${pageNum - 1}=${groupDegrees[idx] ?? rotationDegrees}`)
+        group.map(pageNum => `${pageNum - 1}=${pageRotations.get(pageNum) ?? groupDegrees[idx] ?? rotationDegrees}`)
       );
     }
 
@@ -178,6 +257,8 @@
       });
 
       logSuccess(`Rotation complete: ${result}`, MODULE);
+      resultPath = result;
+      await loadResultViewer(result);
     } catch (err) {
       console.error('Rotate error:', err);
       logError(`Rotate failed: ${err}`, MODULE);
@@ -223,142 +304,234 @@
 <div class="flex-1 flex overflow-hidden">
   <!-- Main Content Area -->
   <div class="flex-1 flex flex-col overflow-hidden">
-    <!-- Rotate Mode Toolbar -->
-    {#if file && file.pages.length > 0}
+    {#if resultPath}
+      <!-- Result viewer -->
       <div
-        class="flex items-center gap-4 px-4 py-2 border-b"
+        class="flex items-center gap-3 px-4 py-2 border-b"
         style="background-color: var(--nord1); border-color: var(--nord3);"
       >
-        <span class="text-xs opacity-60 uppercase">Rotate Mode:</span>
-
-        <div class="flex items-center gap-1">
-          <button
-            onclick={() => rotationMode = 'all'}
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
-            style="background-color: {rotationMode === 'all' ? 'var(--nord8)' : 'var(--nord2)'};
-                   color: {rotationMode === 'all' ? 'var(--nord0)' : 'var(--nord4)'};"
-            title="Rotate all pages"
-          >
-            <Grid3x3 size={14} />
-            <span>All Pages</span>
-          </button>
-
-          <button
-            onclick={() => rotationMode = 'pages'}
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
-            style="background-color: {rotationMode === 'pages' ? 'var(--nord8)' : 'var(--nord2)'};
-                   color: {rotationMode === 'pages' ? 'var(--nord0)' : 'var(--nord4)'};"
-            title="Rotate selected pages"
-          >
-            <RotateCw size={14} />
-            <span>Select Pages</span>
-          </button>
-
-          <button
-            onclick={() => rotationMode = 'groups'}
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
-            style="background-color: {rotationMode === 'groups' ? 'var(--nord8)' : 'var(--nord2)'};
-                   color: {rotationMode === 'groups' ? 'var(--nord0)' : 'var(--nord4)'};"
-            title="Rotate by groups"
-          >
-            <Layers size={14} />
-            <span>Groups</span>
-          </button>
-        </div>
-
+        <button
+          class="px-3 py-1.5 rounded text-xs hover:bg-[var(--nord2)] transition-colors"
+          style="border: 1px solid var(--nord3);"
+          onclick={() => { resultPath = null; previewEnabled = false; }}
+        >
+          Back to rotate
+        </button>
+        <span class="text-xs opacity-60 truncate">Previewing: {resultPath}</span>
         <div class="flex items-center gap-2 ml-auto">
-          <label class="text-xs opacity-60" for="rotation-select">Rotation</label>
-          <select
-            id="rotation-select"
-            class="text-xs px-2 py-1 rounded border"
-            style="background-color: var(--nord2); border-color: var(--nord3);"
-            bind:value={rotationDegrees}
-            onchange={onRotationChange}
+          <button
+            class="p-2 rounded hover:bg-[var(--nord2)]"
+            onclick={() => goToViewerPage(viewerCurrentPage - 1)}
+            disabled={viewerCurrentPage <= 1 || isLoadingViewer}
           >
-            {#each DEGREE_OPTIONS as deg}
-              <option value={deg}>{deg}°</option>
-            {/each}
-          </select>
-        </div>
+            <ChevronLeft size={14} />
+          </button>
+          <div class="flex items-center gap-1 text-xs">
+            <input
+              class="w-12 px-2 py-1 rounded border text-center"
+              style="background-color: var(--nord0); border-color: var(--nord3);"
+              value={pageInputValue}
+              oninput={handleViewerPageInput}
+            />
+            <span class="opacity-60">/ {viewerTotalPages}</span>
+          </div>
+          <button
+            class="p-2 rounded hover:bg-[var(--nord2)]"
+            onclick={() => goToViewerPage(viewerCurrentPage + 1)}
+            disabled={viewerCurrentPage >= viewerTotalPages || isLoadingViewer}
+          >
+            <ChevronRight size={14} />
+          </button>
 
-        <span class="text-xs opacity-60">{rotationSummary()}</span>
+          <div class="flex items-center gap-1 ml-4">
+            <button
+              class="p-2 rounded hover:bg-[var(--nord2)]"
+              onclick={() => changeZoom(-1)}
+              disabled={isLoadingViewer}
+            >
+              <ZoomOut size={14} />
+            </button>
+            <span class="text-xs w-10 text-center">{viewerZoom}%</span>
+            <button
+              class="p-2 rounded hover:bg-[var(--nord2)]"
+              onclick={() => changeZoom(1)}
+              disabled={isLoadingViewer}
+            >
+              <ZoomIn size={14} />
+            </button>
+          </div>
+        </div>
       </div>
 
-      {#if rotationMode === 'groups' && groups.length > 0}
+      <div class="flex-1 overflow-auto p-4">
         <div
-          class="px-4 py-2 border-b flex items-center gap-2 flex-wrap"
+          class="w-full h-full rounded-lg flex items-center justify-center"
+          style="background-color: var(--nord1);"
+        >
+          {#if isLoadingViewer}
+            <div class="w-10 h-10 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
+          {:else if viewerImage}
+            <img
+              src={viewerImage}
+              alt="Rotated PDF page"
+              class="max-h-full max-w-full object-contain"
+            />
+          {:else}
+            <p class="opacity-60 text-sm">No preview available</p>
+          {/if}
+        </div>
+      </div>
+    {:else}
+      <!-- Rotate Mode Toolbar -->
+      {#if file && file.pages.length > 0}
+        <div
+          class="flex items-center gap-4 px-4 py-2 border-b"
           style="background-color: var(--nord1); border-color: var(--nord3);"
         >
-          <span class="text-xs opacity-60">Group angles:</span>
-          {#each groups as group, idx}
-            <div
-              class="flex items-center gap-2 px-2 py-1 rounded"
-              style="background-color: var(--nord2); border: 1px solid var(--nord3);"
+          <span class="text-xs opacity-60 uppercase">Rotate Mode:</span>
+
+          <div class="flex items-center gap-1">
+            <button
+              onclick={() => rotationMode = 'all'}
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
+              style="background-color: {rotationMode === 'all' ? 'var(--nord8)' : 'var(--nord2)'};
+                     color: {rotationMode === 'all' ? 'var(--nord0)' : 'var(--nord4)'};"
+              title="Rotate all pages"
             >
-              <span class="text-xs">Group {idx + 1}</span>
-              <select
-                class="text-xs px-2 py-1 rounded border"
-                style="background-color: var(--nord0); border-color: var(--nord3);"
-                bind:value={groupDegrees[idx]}
-                onchange={(e) => onGroupRotationChange(idx, e)}
+              <Grid3x3 size={14} />
+              <span>All Pages</span>
+            </button>
+
+            <button
+              onclick={() => rotationMode = 'pages'}
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
+              style="background-color: {rotationMode === 'pages' ? 'var(--nord8)' : 'var(--nord2)'};
+                     color: {rotationMode === 'pages' ? 'var(--nord0)' : 'var(--nord4)'};"
+              title="Rotate selected pages"
+            >
+              <RotateCw size={14} />
+              <span>Select Pages</span>
+            </button>
+
+            <button
+              onclick={() => rotationMode = 'groups'}
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
+              style="background-color: {rotationMode === 'groups' ? 'var(--nord8)' : 'var(--nord2)'};
+                     color: {rotationMode === 'groups' ? 'var(--nord0)' : 'var(--nord4)'};"
+              title="Rotate by groups"
+            >
+              <Layers size={14} />
+              <span>Groups</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2 ml-auto">
+            <label class="text-xs opacity-60" for="rotation-select">Rotation</label>
+            <select
+              id="rotation-select"
+              class="text-xs px-2 py-1 rounded border"
+              style="background-color: var(--nord2); border-color: var(--nord3);"
+              bind:value={rotationDegrees}
+              onchange={onRotationChange}
+            >
+              {#each DEGREE_OPTIONS as deg}
+                <option value={deg}>{deg}°</option>
+              {/each}
+            </select>
+            <button
+              class="px-2 py-1 rounded text-xs border transition-colors"
+              style="border-color: var(--nord3); background-color: {previewEnabled ? 'var(--nord8)' : 'var(--nord2)'}; color: {previewEnabled ? 'var(--nord0)' : 'var(--nord4)'};"
+              onclick={() => previewEnabled = !previewEnabled}
+              title="Preview shows rotations on thumbnails only"
+            >
+              {previewEnabled ? 'Preview on' : 'Preview off'}
+            </button>
+          </div>
+
+          <span class="text-xs opacity-60">{rotationSummary()}</span>
+        </div>
+
+        {#if rotationMode === 'groups' && groups.length > 0}
+          <div
+            class="px-4 py-2 border-b flex items-center gap-2 flex-wrap"
+            style="background-color: var(--nord1); border-color: var(--nord3);"
+          >
+            <span class="text-xs opacity-60">Group angles:</span>
+            {#each groups as group, idx}
+              <div
+                class="flex items-center gap-2 px-2 py-1 rounded"
+                style="background-color: var(--nord2); border: 1px solid var(--nord3);"
               >
-                {#each DEGREE_OPTIONS as deg}
-                  <option value={deg}>{deg}°</option>
-                {/each}
-              </select>
-              <span class="text-[11px] opacity-60">{group.length} page(s)</span>
+                <span class="text-xs">Group {idx + 1}</span>
+                <select
+                  class="text-xs px-2 py-1 rounded border"
+                  style="background-color: var(--nord0); border-color: var(--nord3);"
+                  bind:value={groupDegrees[idx]}
+                  onchange={(e) => onGroupRotationChange(idx, e)}
+                >
+                  {#each DEGREE_OPTIONS as deg}
+                    <option value={deg}>{deg}°</option>
+                  {/each}
+                </select>
+                <span class="text-[11px] opacity-60">{group.length} page(s)</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Content -->
+        <div class="flex-1 overflow-auto p-4">
+          {#if !file}
+            <!-- Empty State -->
+            <div
+              class="h-full flex flex-col items-center justify-center rounded-lg"
+              style="background-color: var(--nord1);"
+            >
+              <RotateCw size={48} class="opacity-40 mb-4" />
+              <p class="text-lg opacity-60 mb-2">No file loaded</p>
+              <p class="text-sm opacity-40">Add a PDF file using the panel on the right</p>
             </div>
-          {/each}
+          {:else if file.isLoading}
+            <!-- Loading State -->
+            <div
+              class="h-full flex flex-col items-center justify-center rounded-lg"
+              style="background-color: var(--nord1);"
+            >
+              <div class="w-8 h-8 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin mb-4"></div>
+              <p class="opacity-60">Loading pages...</p>
+            </div>
+          {:else if file.error}
+            <!-- Error State -->
+            <div
+              class="h-full flex flex-col items-center justify-center rounded-lg"
+              style="background-color: var(--nord1);"
+            >
+              <p class="text-lg mb-2" style="color: var(--nord11);">Error loading PDF</p>
+              <p class="text-sm opacity-60">{file.error}</p>
+            </div>
+          {:else}
+            <!-- Page Selector -->
+            <div
+              class="h-full rounded-lg p-4"
+              style="background-color: var(--nord1);"
+            >
+              <PageSelector
+                pages={file.pages}
+                mode={rotationMode}
+                bind:selectedPages
+                bind:groups
+                onPreviewPage={handlePreviewPage}
+                showRotationControls={rotationMode !== 'all'}
+                rotationValues={pageRotations}
+                rotationOptions={DEGREE_OPTIONS}
+                onRotationChange={handlePageRotationChange}
+                previewRotationForPage={previewEnabled ? getRotationForPage : undefined}
+              />
+            </div>
+          {/if}
         </div>
       {/if}
     {/if}
-
-    <!-- Content -->
-    <div class="flex-1 overflow-auto p-4">
-      {#if !file}
-        <!-- Empty State -->
-        <div
-          class="h-full flex flex-col items-center justify-center rounded-lg"
-          style="background-color: var(--nord1);"
-        >
-          <RotateCw size={48} class="opacity-40 mb-4" />
-          <p class="text-lg opacity-60 mb-2">No file loaded</p>
-          <p class="text-sm opacity-40">Add a PDF file using the panel on the right</p>
-        </div>
-      {:else if file.isLoading}
-        <!-- Loading State -->
-        <div
-          class="h-full flex flex-col items-center justify-center rounded-lg"
-          style="background-color: var(--nord1);"
-        >
-          <div class="w-8 h-8 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p class="opacity-60">Loading pages...</p>
-        </div>
-      {:else if file.error}
-        <!-- Error State -->
-        <div
-          class="h-full flex flex-col items-center justify-center rounded-lg"
-          style="background-color: var(--nord1);"
-        >
-          <p class="text-lg mb-2" style="color: var(--nord11);">Error loading PDF</p>
-          <p class="text-sm opacity-60">{file.error}</p>
-        </div>
-      {:else}
-        <!-- Page Selector -->
-        <div
-          class="h-full rounded-lg p-4"
-          style="background-color: var(--nord1);"
-        >
-          <PageSelector
-            pages={file.pages}
-            mode={rotationMode}
-            bind:selectedPages
-            bind:groups
-            onPreviewPage={handlePreviewPage}
-          />
-        </div>
-      {/if}
-    </div>
   </div>
 
   <!-- Right Sidebar -->

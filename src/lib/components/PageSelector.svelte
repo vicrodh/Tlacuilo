@@ -17,6 +17,11 @@
     onSelectionChange?: (selected: Set<number>) => void;
     onGroupsChange?: (groups: number[][]) => void;
     onPreviewPage?: (page: PageData) => void;
+    rotationValues?: Map<number, number>;
+    rotationOptions?: number[];
+    showRotationControls?: boolean;
+    onRotationChange?: (pageNumber: number, degrees: number) => void;
+    previewRotationForPage?: (pageNumber: number) => number | null;
   }
 
   let {
@@ -27,6 +32,11 @@
     onSelectionChange,
     onGroupsChange,
     onPreviewPage,
+    rotationValues = new Map<number, number>(),
+    rotationOptions = [],
+    showRotationControls = false,
+    onRotationChange,
+    previewRotationForPage,
   }: Props = $props();
 
   let activeGroupIndex = $state<number | null>(null);
@@ -126,6 +136,10 @@
     if (mode === 'groups') return getPageGroup(pageNumber) !== null;
     return false;
   }
+
+  function rotationForPage(pageNumber: number): number | null {
+    return previewRotationForPage ? previewRotationForPage(pageNumber) : null;
+  }
 </script>
 
 <div class="flex flex-col h-full">
@@ -223,11 +237,34 @@
                   alt="Page {page.pageNumber}"
                   class="max-w-full max-h-full object-contain"
                   class:opacity-50={!isSelected && mode !== 'all'}
+                  style={`transform: rotate(${rotationForPage(page.pageNumber) ?? 0}deg); transition: transform 120ms ease;`}
                 />
               {:else}
                 <span class="text-xs opacity-60">P{page.pageNumber}</span>
               {/if}
             </div>
+
+            {#if showRotationControls && mode !== 'all' && rotationOptions.length > 0}
+              <div
+                class="w-full px-2 py-1 flex items-center justify-between text-[11px]"
+                style="background-color: var(--nord0); border-top: 1px solid var(--nord3);"
+              >
+                <span class="opacity-60">Rotate</span>
+                <select
+                  class="bg-[var(--nord2)] border border-[var(--nord3)] rounded px-1 py-0.5 text-[11px]"
+                  value={rotationValues.get(page.pageNumber) ?? ''}
+                  onchange={(e) => {
+                    const deg = Number((e.target as HTMLSelectElement).value || 0);
+                    onRotationChange?.(page.pageNumber, deg);
+                  }}
+                >
+                  <option value="">Default</option>
+                  {#each rotationOptions as deg}
+                    <option value={deg}>{deg}°</option>
+                  {/each}
+                </select>
+              </div>
+            {/if}
 
             <!-- Selection indicator -->
             {#if isSelected && mode !== 'all'}
