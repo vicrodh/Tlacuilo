@@ -1,5 +1,5 @@
 <svelte:head>
-  <title>I H PDF</title>
+  <title>Tlacuilo</title>
 </svelte:head>
 
 <script lang="ts">
@@ -75,11 +75,11 @@
           class="w-8 h-8 rounded flex items-center justify-center"
           style="background-color: var(--nord8);"
         >
-          <span class="text-lg" style="color: var(--nord0);">H</span>
+          <span class="text-lg" style="color: var(--nord0);">T</span>
         </div>
         <div>
-          <h1 class="leading-none" style="color: var(--nord6);">I H PDF</h1>
-          <p class="text-xs opacity-60">H as in hate</p>
+          <h1 class="leading-none" style="color: var(--nord6);">Tlacuilo</h1>
+          <p class="text-xs opacity-60">Offline PDF toolkit</p>
         </div>
       </div>
     </div>

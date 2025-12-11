@@ -1,8 +1,8 @@
 [package]
-name = "ihpdf"
+name = "tlacuilo"
 version = "0.1.0"
-description = "I H PDF desktop application"
-authors = ["ihpdf"]
+description = "Tlacuilo desktop PDF toolkit"
+authors = ["Tlacuilo"]
 license = "MIT"
 repository = ""
 edition = "2021"

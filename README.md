@@ -1,6 +1,6 @@
-# I H PDF
+# Tlacuilo
 
-Desktop PDF toolkit for Linux built with Tauri (Rust) + Svelte/TypeScript and a Python 3.12 backend (PyMuPDF, pikepdf). Includes functional Merge, Split y Rotate flows with inline previews and per-page controls.
+Tlacuilo is an offline PDF toolkit for Linux built with Tauri (Rust) + Svelte/TypeScript and a Python 3.12 backend (PyMuPDF, pikepdf). Includes functional Merge, Split y Rotate flows with inline previews and per-page controls.
 
 ## Stack
 - Frontend: Svelte + Vite + Tailwind CSS + DaisyUI
@@ -39,7 +39,7 @@ backend/venv/bin/pip install -r backend/requirements.txt
 ├── src/            # Svelte frontend
 ├── src-tauri/      # Tauri Rust project
 ├── backend/        # Python backend (venv + libs)
-└── ihpdf-docs/     # Untracked docs (states/handoffs) – kept outside repo root
+└── tlacuilo-docs/  # Untracked docs (states/handoffs) – kept outside repo root
 ```
 
 ## Conventions

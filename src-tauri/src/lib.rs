@@ -15,7 +15,7 @@ fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Re
       .path()
       .app_cache_dir()
       .unwrap_or_else(|_| std::env::temp_dir());
-    cache_dir.join("ihpdf-merge.pdf").to_string_lossy().to_string()
+    cache_dir.join("tlacuilo-merge.pdf").to_string_lossy().to_string()
   });
 
   let python_bin = resolve_python_bin();
@@ -63,7 +63,7 @@ fn merge_pages(
             .app_cache_dir()
             .unwrap_or_else(|_| std::env::temp_dir());
         cache_dir
-            .join("ihpdf-merged-pages.pdf")
+            .join("tlacuilo-merged-pages.pdf")
             .to_string_lossy()
             .to_string()
     });
@@ -118,7 +118,7 @@ fn split_pdf(
       .path()
       .app_cache_dir()
       .unwrap_or_else(|_| std::env::temp_dir());
-    cache_dir.join("ihpdf-split").to_string_lossy().to_string()
+    cache_dir.join("tlacuilo-split").to_string_lossy().to_string()
   });
 
   let mut cmd = Command::new(&python_bin);
@@ -178,7 +178,7 @@ fn rotate_pdf(
       .path()
       .app_cache_dir()
       .unwrap_or_else(|_| std::env::temp_dir());
-    cache_dir.join("ihpdf-rotated.pdf").to_string_lossy().to_string()
+    cache_dir.join("tlacuilo-rotated.pdf").to_string_lossy().to_string()
   });
 
   let mut cmd = Command::new(&python_bin);
@@ -231,7 +231,7 @@ fn resolve_backend_script(app: &AppHandle) -> Option<(PathBuf, Vec<PathBuf>)> {
     }
   }
 
-  // Try relative to executable: /ihpdf/src-tauri/target/debug/ihpdf -> pop 4 -> /ihpdf/backend/pdf_pages.py
+  // Try relative to executable: /tlacuilo/src-tauri/target/debug/tlacuilo -> pop 4 -> /tlacuilo/backend/pdf_pages.py
   if let Ok(mut exe) = std::env::current_exe() {
     for _ in 0..4 {
       exe.pop();
@@ -310,7 +310,7 @@ pub fn run() {
         .build()?;
 
       let help = SubmenuBuilder::new(app, "Help")
-        .item(&MenuItemBuilder::new("About I H PDF").id("about").build(app)?)
+        .item(&MenuItemBuilder::new("About Tlacuilo").id("about").build(app)?)
         .build()?;
 
       MenuBuilder::new(app).items(&[&file, &edit, &help]).build()
