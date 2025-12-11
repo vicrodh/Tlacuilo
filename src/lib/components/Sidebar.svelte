@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Home, Clock, Wrench, ListTodo, Settings, Merge, FileArchive, Edit } from 'lucide-svelte';
+  import { Home, Clock, Wrench, ListTodo, Settings, Merge, FileArchive, Edit, Scissors } from 'lucide-svelte';
 
   interface Props {
     isOpen: boolean;
@@ -19,6 +19,7 @@
 
   const favoriteItems = [
     { icon: Merge, label: 'Merge PDF', page: 'merge' },
+    { icon: Scissors, label: 'Split PDF', page: 'split' },
     { icon: FileArchive, label: 'Compress PDF', page: 'compress' },
     { icon: Edit, label: 'Edit', page: 'edit' },
   ];
