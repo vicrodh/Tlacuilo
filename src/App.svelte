@@ -7,6 +7,7 @@
   import Sidebar from './lib/components/Sidebar.svelte';
   import Dashboard from './lib/views/Dashboard.svelte';
   import MergePDF from './lib/views/MergePDF.svelte';
+  import SplitPDF from './lib/views/SplitPDF.svelte';
   import PlaceholderPage from './lib/views/PlaceholderPage.svelte';
 
   let sidebarOpen = $state(true);
@@ -64,6 +65,8 @@
       <Dashboard onNavigate={navigate} />
     {:else if currentPage === 'merge'}
       <MergePDF />
+    {:else if currentPage === 'split'}
+      <SplitPDF />
     {:else}
       <PlaceholderPage pageName={currentPage} />
     {/if}
