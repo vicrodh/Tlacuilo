@@ -12,6 +12,9 @@
   } from '$lib/utils/pdfjs';
   import PageSelector from '$lib/components/PageSelector.svelte';
   import PagePreviewModal from '$lib/components/PagePreviewModal.svelte';
+  import { log, logSuccess, logError, registerFile, unregisterModule } from '$lib/stores/status.svelte';
+
+  const MODULE = 'Split';
 
   interface PDFFile {
     id: string;
@@ -27,7 +30,6 @@
   let splitMode = $state<'all' | 'pages' | 'groups'>('pages');
   let selectedPages = $state<Set<number>>(new Set());
   let groups = $state<number[][]>([]);
-  let status = $state<string>('');
   let isSplitting = $state(false);
   let unlistenDrop: (() => void) | null = null;
 
@@ -46,6 +48,7 @@
   onDestroy(() => {
     if (unlistenDrop) unlistenDrop();
     if (file) clearPdfCache(file.path);
+    unregisterModule(MODULE);
   });
 
   async function loadFile(path: string) {
@@ -77,9 +80,14 @@
 
       const pages = await loadPdfPages(path, fileId, name, 140);
       file = { ...file, pages, isLoading: false };
+
+      // Register file and log
+      registerFile(path, name, MODULE);
+      log(`Loaded ${name} (${pageCount} pages)`, 'info', MODULE);
     } catch (err) {
       console.error('Error loading PDF:', err);
       file = { ...file, isLoading: false, error: String(err) };
+      logError(`Failed to load ${name}: ${err}`, MODULE);
     }
   }
 
@@ -96,6 +104,7 @@
   function removeFile() {
     if (file) {
       clearPdfCache(file.path);
+      unregisterModule(MODULE);
       file = null;
       selectedPages = new Set();
       groups = [];
@@ -114,7 +123,7 @@
     } else if (splitMode === 'pages') {
       // Each selected page becomes a separate file
       if (selectedPages.size === 0) {
-        status = 'Select at least one page to split';
+        log('Select at least one page to split', 'warning', MODULE);
         return;
       }
       pagesToSplit = [...selectedPages].sort((a, b) => a - b).map(p => [p]);
@@ -122,7 +131,7 @@
       // Each group becomes a file
       const nonEmptyGroups = groups.filter(g => g.length > 0);
       if (nonEmptyGroups.length === 0) {
-        status = 'Create at least one group with pages';
+        log('Create at least one group with pages', 'warning', MODULE);
         return;
       }
       pagesToSplit = nonEmptyGroups;
@@ -136,12 +145,11 @@
     });
 
     if (!outputDir) {
-      status = '';
       return;
     }
 
     isSplitting = true;
-    status = `Splitting into ${pagesToSplit.length} file(s)...`;
+    log(`Splitting into ${pagesToSplit.length} file(s)...`, 'info', MODULE);
 
     try {
       // Convert page groups to ranges for the backend (e.g., [1,2,3] -> "1,2,3")
@@ -156,11 +164,10 @@
         ranges: ranges,
       });
 
-      status = `Split complete! Created ${pagesToSplit.length} file(s) in ${dirPath}`;
-      setTimeout(() => status = '', 5000);
+      logSuccess(`Split complete! Created ${pagesToSplit.length} file(s) in ${dirPath}`, MODULE);
     } catch (err) {
       console.error('Split error:', err);
-      status = `Error: ${err}`;
+      logError(`Split failed: ${err}`, MODULE);
     }
 
     isSplitting = false;
@@ -360,16 +367,6 @@
       <FolderOpen size={18} />
       <span class="text-sm">{file ? 'Change File' : 'Add File'}</span>
     </button>
-
-    <!-- Status -->
-    {#if status}
-      <div
-        class="px-3 py-2 rounded text-xs"
-        style="background-color: var(--nord2);"
-      >
-        {status}
-      </div>
-    {/if}
 
     <!-- Split Button -->
     <button

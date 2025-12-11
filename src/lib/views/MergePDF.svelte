@@ -13,6 +13,9 @@
     clearPdfCache,
     type PageData
   } from '$lib/utils/pdfjs';
+  import { log, logSuccess, logError, registerFile, unregisterFile, unregisterModule } from '$lib/stores/status.svelte';
+
+  const MODULE = 'Merge';
 
   interface PDFFile {
     id: string;
@@ -31,7 +34,6 @@
   let destinationPages = $state<PageData[]>([]);
   let mergedPDFPath = $state<string | null>(null);
   let isTopSectionCollapsed = $state(false);
-  let status = $state<string>('');
   let unlistenDrop: (() => void) | null = null;
 
   // PDF Viewer state
@@ -67,6 +69,7 @@
 
   onDestroy(() => {
     if (unlistenDrop) unlistenDrop();
+    unregisterModule(MODULE);
   });
 
   async function addFiles(paths: string[]) {
@@ -116,6 +119,13 @@
       files = files.map((f) =>
         f.id === fileId ? { ...f, pages, isLoading: false } : f
       );
+
+      // Register and log
+      const file = files.find(f => f.id === fileId);
+      if (file) {
+        registerFile(path, name, MODULE);
+        log(`Loaded ${name} (${pageCount} pages)`, 'info', MODULE);
+      }
     } catch (err) {
       console.error('Error loading PDF:', err);
       files = files.map((f) =>
@@ -123,6 +133,7 @@
           ? { ...f, isLoading: false, error: String(err) }
           : f
       );
+      logError(`Failed to load ${name}: ${err}`, MODULE);
     }
   }
 
@@ -140,6 +151,7 @@
     const file = files.find((f) => f.id === fileId);
     if (file) {
       clearPdfCache(file.path);
+      unregisterFile(file.path, MODULE);
     }
     files = files.filter((f) => f.id !== fileId);
     activeFileIds = new Set([...activeFileIds].filter((id) => id !== fileId));
@@ -255,10 +267,7 @@
   async function downloadMergedPdf() {
     if (!mergedPDFPath) return;
     // The file is already saved, just show a notification
-    status = `PDF saved to: ${mergedPDFPath}`;
-    setTimeout(() => {
-      if (status.startsWith('PDF saved')) status = '';
-    }, 3000);
+    logSuccess(`PDF saved to: ${mergedPDFPath}`, MODULE);
   }
 
   function setFitMode(mode: 'none' | 'page' | 'width' | 'height') {
@@ -311,11 +320,11 @@
     const usePageMerge = viewMode === 'page' && destinationPages.length > 0;
 
     if (viewMode === 'page' && destinationPages.length === 0) {
-      status = 'Add pages to the Merged Document first';
+      log('Add pages to the Merged Document first', 'warning', MODULE);
       return;
     }
 
-    status = 'Merging PDFs...';
+    log('Merging PDFs...', 'info', MODULE);
     try {
       const outputPath = await save({
         filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
@@ -323,7 +332,6 @@
       });
 
       if (!outputPath) {
-        status = '';
         return;
       }
 
@@ -338,11 +346,11 @@
       }
 
       mergedPDFPath = result;
-      status = 'Merge complete!';
+      logSuccess(`Merge complete! Saved to ${outputPath}`, MODULE);
       await loadMergedPDFPreview(result);
     } catch (err) {
       console.error('Merge error:', err);
-      status = `Error: ${err}`;
+      logError(`Merge failed: ${err}`, MODULE);
     }
   }
 
@@ -824,8 +832,6 @@
               <div class="w-6 h-6 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
               <p class="opacity-60">Loading preview...</p>
             </div>
-          {:else if status}
-            <p class="opacity-60">{status}</p>
           {:else}
             <p class="opacity-60">PDF preview will appear here after merge</p>
           {/if}
