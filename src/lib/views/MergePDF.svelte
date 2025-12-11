@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Upload, FolderOpen, Trash2, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Plus, FileText } from 'lucide-svelte';
+  import { Upload, FolderOpen, Trash2, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Plus, FileText, ZoomIn, ZoomOut, Download, Maximize, RotateCw } from 'lucide-svelte';
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
   import { listen } from '@tauri-apps/api/event';
@@ -39,6 +39,12 @@
   let viewerCurrentPage = $state(1);
   let viewerTotalPages = $state(0);
   let isLoadingViewer = $state(false);
+  let viewerZoom = $state(100);
+  let pageInputValue = $state('1');
+
+  const ZOOM_LEVELS = [25, 50, 75, 100, 125, 150, 200, 300];
+  const MIN_ZOOM = 25;
+  const MAX_ZOOM = 300;
 
   const flipDurationMs = 200;
 
@@ -198,11 +204,57 @@
     isLoadingViewer = true;
     try {
       viewerCurrentPage = page;
+      pageInputValue = String(page);
       viewerImage = await renderPageForViewer(mergedPDFPath, page);
     } catch (err) {
       console.error('Error loading page:', err);
     }
     isLoadingViewer = false;
+  }
+
+  function handlePageInput(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const value = parseInt(input.value, 10);
+    if (!isNaN(value) && value >= 1 && value <= viewerTotalPages) {
+      goToPage(value);
+    }
+  }
+
+  function handlePageInputKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      handlePageInput(e);
+    }
+  }
+
+  function zoomIn() {
+    const nextLevel = ZOOM_LEVELS.find((z) => z > viewerZoom);
+    if (nextLevel) {
+      viewerZoom = nextLevel;
+    } else if (viewerZoom < MAX_ZOOM) {
+      viewerZoom = Math.min(viewerZoom + 25, MAX_ZOOM);
+    }
+  }
+
+  function zoomOut() {
+    const prevLevels = ZOOM_LEVELS.filter((z) => z < viewerZoom);
+    if (prevLevels.length > 0) {
+      viewerZoom = prevLevels[prevLevels.length - 1];
+    } else if (viewerZoom > MIN_ZOOM) {
+      viewerZoom = Math.max(viewerZoom - 25, MIN_ZOOM);
+    }
+  }
+
+  function resetZoom() {
+    viewerZoom = 100;
+  }
+
+  async function downloadMergedPdf() {
+    if (!mergedPDFPath) return;
+    // The file is already saved, just show a notification
+    status = `PDF saved to: ${mergedPDFPath}`;
+    setTimeout(() => {
+      if (status.startsWith('PDF saved')) status = '';
+    }, 3000);
   }
 
   async function handleMerge() {
@@ -510,52 +562,120 @@
     {/if}
 
     <!-- Bottom Section - PDF Viewer -->
-    <div class="flex-1 overflow-auto p-6">
-      <div
-        class="h-full rounded-lg flex flex-col items-center justify-center relative"
-        style="background-color: var(--nord2);"
-      >
-        {#if isLoadingViewer}
-          <div class="flex flex-col items-center gap-2">
-            <div class="w-6 h-6 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
-            <p class="opacity-60">Loading preview...</p>
-          </div>
-        {:else if viewerImage && mergedPDFPath}
-          <div class="flex-1 flex items-center justify-center p-4 overflow-auto w-full">
-            <img
-              src={viewerImage}
-              alt="Page {viewerCurrentPage}"
-              class="max-h-full object-contain shadow-lg rounded"
-            />
-          </div>
-          <div
-            class="flex items-center gap-4 py-3 px-4 rounded-t-lg"
-            style="background-color: var(--nord1);"
-          >
+    <div class="flex-1 overflow-hidden flex flex-col">
+      {#if viewerImage && mergedPDFPath}
+        <!-- Toolbar -->
+        <div
+          class="flex items-center justify-between px-4 py-2 border-b flex-shrink-0"
+          style="background-color: var(--nord1); border-color: var(--nord3);"
+        >
+          <!-- Left: Page Navigation -->
+          <div class="flex items-center gap-2">
             <button
               onclick={() => goToPage(viewerCurrentPage - 1)}
               disabled={viewerCurrentPage <= 1}
-              class="p-2 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
+              title="Previous page"
             >
-              <ChevronLeft size={20} />
+              <ChevronLeft size={18} />
             </button>
-            <span class="text-sm">
-              Page {viewerCurrentPage} of {viewerTotalPages}
-            </span>
+            <div class="flex items-center gap-1 text-sm">
+              <input
+                type="text"
+                bind:value={pageInputValue}
+                onblur={handlePageInput}
+                onkeydown={handlePageInputKeydown}
+                class="w-12 px-2 py-1 rounded text-center text-sm"
+                style="background-color: var(--nord0); border: 1px solid var(--nord3);"
+              />
+              <span class="opacity-60">/ {viewerTotalPages}</span>
+            </div>
             <button
               onclick={() => goToPage(viewerCurrentPage + 1)}
               disabled={viewerCurrentPage >= viewerTotalPages}
-              class="p-2 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
+              title="Next page"
             >
-              <ChevronRight size={20} />
+              <ChevronRight size={18} />
             </button>
           </div>
-        {:else if status}
-          <p class="opacity-60">{status}</p>
-        {:else}
-          <p class="opacity-60">PDF preview will appear here after merge</p>
-        {/if}
-      </div>
+
+          <!-- Center: Zoom Controls -->
+          <div class="flex items-center gap-2">
+            <button
+              onclick={zoomOut}
+              disabled={viewerZoom <= MIN_ZOOM}
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
+              title="Zoom out"
+            >
+              <ZoomOut size={18} />
+            </button>
+            <button
+              onclick={resetZoom}
+              class="px-2 py-1 rounded hover:bg-[var(--nord2)] transition-colors text-sm min-w-[60px]"
+              title="Reset zoom"
+            >
+              {viewerZoom}%
+            </button>
+            <button
+              onclick={zoomIn}
+              disabled={viewerZoom >= MAX_ZOOM}
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
+              title="Zoom in"
+            >
+              <ZoomIn size={18} />
+            </button>
+          </div>
+
+          <!-- Right: Actions -->
+          <div class="flex items-center gap-2">
+            <button
+              onclick={downloadMergedPdf}
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
+              title="File location"
+            >
+              <Download size={18} />
+            </button>
+          </div>
+        </div>
+
+        <!-- Viewer Content -->
+        <div
+          class="flex-1 overflow-auto p-4 flex items-center justify-center"
+          style="background-color: var(--nord2);"
+        >
+          {#if isLoadingViewer}
+            <div class="flex flex-col items-center gap-2">
+              <div class="w-6 h-6 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
+              <p class="opacity-60">Loading page...</p>
+            </div>
+          {:else}
+            <img
+              src={viewerImage}
+              alt="Page {viewerCurrentPage}"
+              class="shadow-lg rounded"
+              style="transform: scale({viewerZoom / 100}); transform-origin: center center;"
+            />
+          {/if}
+        </div>
+      {:else}
+        <!-- Empty State -->
+        <div
+          class="flex-1 flex flex-col items-center justify-center rounded-lg m-4"
+          style="background-color: var(--nord2);"
+        >
+          {#if isLoadingViewer}
+            <div class="flex flex-col items-center gap-2">
+              <div class="w-6 h-6 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
+              <p class="opacity-60">Loading preview...</p>
+            </div>
+          {:else if status}
+            <p class="opacity-60">{status}</p>
+          {:else}
+            <p class="opacity-60">PDF preview will appear here after merge</p>
+          {/if}
+        </div>
+      {/if}
     </div>
   </div>
 
