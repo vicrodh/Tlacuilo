@@ -144,16 +144,19 @@
     status = `Splitting into ${pagesToSplit.length} file(s)...`;
 
     try {
-      // Convert page groups to ranges for the backend
+      // Convert page groups to ranges for the backend (e.g., [1,2,3] -> "1,2,3")
       const ranges = pagesToSplit.map(group => group.join(','));
+
+      // Extract directory from the save dialog path
+      const dirPath = outputDir.replace(/\/[^/]*$/, '');
 
       const result = await invoke<string[]>('split_pdf', {
         input: file.path,
-        outputDir: outputDir.replace(/\/[^/]*$/, ''), // Get directory part
-        // Note: Current backend splits all pages. We'll need to update it.
+        outputDir: dirPath,
+        ranges: ranges,
       });
 
-      status = `Split complete! Created ${pagesToSplit.length} file(s)`;
+      status = `Split complete! Created ${pagesToSplit.length} file(s) in ${dirPath}`;
       setTimeout(() => status = '', 5000);
     } catch (err) {
       console.error('Split error:', err);

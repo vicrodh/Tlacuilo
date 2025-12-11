@@ -103,7 +103,12 @@ fn merge_pages(
 }
 
 #[tauri::command]
-fn split_pdf(app: AppHandle, input: String, output_dir: Option<String>) -> Result<Vec<String>, String> {
+fn split_pdf(
+  app: AppHandle,
+  input: String,
+  output_dir: Option<String>,
+  ranges: Option<Vec<String>>,
+) -> Result<Vec<String>, String> {
   let (script_path, _) = resolve_backend_script(&app)
     .ok_or_else(|| "Backend script not found (backend/pdf_pages.py)".to_string())?;
   let python_bin = resolve_python_bin();
@@ -116,13 +121,24 @@ fn split_pdf(app: AppHandle, input: String, output_dir: Option<String>) -> Resul
     cache_dir.join("ihpdf-split").to_string_lossy().to_string()
   });
 
-  let output = Command::new(&python_bin)
+  let mut cmd = Command::new(&python_bin);
+  cmd
     .arg(&script_path)
     .arg("split")
     .arg("--input")
     .arg(&input)
     .arg("--output-dir")
-    .arg(&out_dir)
+    .arg(&out_dir);
+
+  // Add ranges if provided
+  if let Some(ref range_list) = ranges {
+    if !range_list.is_empty() {
+      cmd.arg("--ranges");
+      cmd.args(range_list);
+    }
+  }
+
+  let output = cmd
     .output()
     .map_err(|e| format!("Failed to spawn python ({python_bin}): {e}"))?;
 
@@ -137,8 +153,13 @@ fn split_pdf(app: AppHandle, input: String, output_dir: Option<String>) -> Resul
     ));
   }
 
-  // The python script reports paths via stdout? Not yet; return directory for now.
-  Ok(vec![out_dir])
+  // Return the output directory and the number of files created based on ranges
+  let num_files = ranges.as_ref().map(|r| r.len()).unwrap_or(0);
+  let mut result = vec![out_dir.clone()];
+  for i in 1..=num_files.max(1) {
+    result.push(format!("{}/split_{}.pdf", out_dir, i));
+  }
+  Ok(result)
 }
 
 #[tauri::command]

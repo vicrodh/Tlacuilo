@@ -2,7 +2,7 @@
   /**
    * Resizable modal for previewing PDF pages with zoom.
    */
-  import { X, ZoomIn, ZoomOut, ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { X, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Maximize, ArrowLeftRight, ArrowUpDown } from 'lucide-svelte';
   import { renderPageForViewer } from '$lib/utils/pdfjs';
   import type { PageData } from '$lib/utils/pdfjs';
 
@@ -16,8 +16,10 @@
   let { page, totalPages, onClose, onNavigate }: Props = $props();
 
   let zoom = $state(100);
+  let fitMode = $state<'none' | 'page' | 'width' | 'height'>('none');
   let highResImage = $state<string>('');
   let isLoading = $state(false);
+  let contentRef = $state<HTMLDivElement | null>(null);
 
   const MIN_ZOOM = 50;
   const MAX_ZOOM = 400;
@@ -43,11 +45,34 @@
 
   function zoomIn() {
     zoom = Math.min(zoom + 25, MAX_ZOOM);
+    fitMode = 'none';
   }
 
   function zoomOut() {
     zoom = Math.max(zoom - 25, MIN_ZOOM);
+    fitMode = 'none';
   }
+
+  function setFitMode(mode: 'none' | 'page' | 'width' | 'height') {
+    fitMode = mode;
+  }
+
+  // Compute fit style based on fitMode
+  const fitStyle = $derived(() => {
+    if (fitMode === 'none') {
+      return `transform: scale(${zoom / 100}); transform-origin: center center; max-width: none;`;
+    }
+    if (fitMode === 'page') {
+      return 'max-width: 100%; max-height: 100%; object-fit: contain;';
+    }
+    if (fitMode === 'width') {
+      return 'width: 100%; height: auto;';
+    }
+    if (fitMode === 'height') {
+      return 'height: 100%; width: auto;';
+    }
+    return '';
+  });
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
@@ -122,18 +147,49 @@
           <div class="flex items-center gap-1">
             <button
               onclick={zoomOut}
-              disabled={zoom <= MIN_ZOOM}
+              disabled={zoom <= MIN_ZOOM || fitMode !== 'none'}
               class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
             >
               <ZoomOut size={18} />
             </button>
-            <span class="text-sm min-w-[50px] text-center">{zoom}%</span>
+            <span class="text-sm min-w-[50px] text-center">{fitMode === 'none' ? `${zoom}%` : 'Fit'}</span>
             <button
               onclick={zoomIn}
-              disabled={zoom >= MAX_ZOOM}
+              disabled={zoom >= MAX_ZOOM || fitMode !== 'none'}
               class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors disabled:opacity-30"
             >
               <ZoomIn size={18} />
+            </button>
+          </div>
+
+          <!-- Separator -->
+          <div class="w-px h-5" style="background-color: var(--nord3);"></div>
+
+          <!-- Fit Controls -->
+          <div class="flex items-center gap-1">
+            <button
+              onclick={() => setFitMode('page')}
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
+              style={fitMode === 'page' ? 'background-color: var(--nord8); color: var(--nord0);' : ''}
+              title="Fit Page"
+            >
+              <Maximize size={18} />
+            </button>
+            <button
+              onclick={() => setFitMode('width')}
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
+              style={fitMode === 'width' ? 'background-color: var(--nord8); color: var(--nord0);' : ''}
+              title="Fit Width"
+            >
+              <ArrowLeftRight size={18} />
+            </button>
+            <button
+              onclick={() => setFitMode('height')}
+              class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
+              style={fitMode === 'height' ? 'background-color: var(--nord8); color: var(--nord0);' : ''}
+              title="Fit Height"
+            >
+              <ArrowUpDown size={18} />
             </button>
           </div>
         </div>
@@ -161,7 +217,7 @@
             src={highResImage || page.thumbnail}
             alt="Page {page.pageNumber}"
             class="shadow-lg rounded"
-            style="transform: scale({zoom / 100}); transform-origin: center center; max-width: none;"
+            style={fitStyle()}
           />
         {/if}
       </div>
