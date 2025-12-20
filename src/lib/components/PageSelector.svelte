@@ -1,18 +1,22 @@
 <script lang="ts">
   /**
    * Reusable page selector component for Split, Rotate, Edit operations.
-   * Supports three selection modes:
-   * - 'all': All pages selected
-   * - 'pages': Individual page selection
+   * Supports selection modes:
+   * - 'all': All pages selected (read-only)
+   * - 'pages': Individual page selection (each becomes a file)
    * - 'groups': Group pages into separate outputs
+   * - 'extract': Select pages to keep (one output file)
+   * - 'remove': Select pages to delete (one output file)
    */
   import { Search, Plus, X, Check } from 'lucide-svelte';
   import type { PageData } from '$lib/utils/pdfjs';
 
+  type SelectionMode = 'all' | 'pages' | 'groups' | 'extract' | 'remove';
+
   interface Props {
     pages: PageData[];
-    mode: 'all' | 'pages' | 'groups';
-    selectedPages?: Set<number>; // For 'pages' mode - page numbers (1-indexed)
+    mode: SelectionMode;
+    selectedPages?: Set<number>; // For 'pages'/'extract'/'remove' modes - page numbers (1-indexed)
     groups?: number[][]; // For 'groups' mode - array of page number arrays
     onSelectionChange?: (selected: Set<number>) => void;
     onGroupsChange?: (groups: number[][]) => void;
@@ -23,6 +27,9 @@
     onRotationChange?: (pageNumber: number, degrees: number) => void;
     previewRotationForPage?: (pageNumber: number) => number | null;
   }
+
+  // Modes that use individual page selection
+  const pageSelectionModes: SelectionMode[] = ['pages', 'extract', 'remove'];
 
   let {
     pages,
@@ -41,9 +48,14 @@
 
   let activeGroupIndex = $state<number | null>(null);
 
-  // Toggle page selection in 'pages' mode
+  // Check if current mode uses page selection
+  function isPageSelectionMode(): boolean {
+    return pageSelectionModes.includes(mode);
+  }
+
+  // Toggle page selection in page selection modes
   function togglePage(pageNumber: number) {
-    if (mode !== 'pages') return;
+    if (!isPageSelectionMode()) return;
 
     const newSelected = new Set(selectedPages);
     if (newSelected.has(pageNumber)) {
@@ -132,9 +144,24 @@
   // Check if page is selected based on mode
   function isPageSelected(pageNumber: number): boolean {
     if (mode === 'all') return true;
-    if (mode === 'pages') return selectedPages.has(pageNumber);
+    if (isPageSelectionMode()) return selectedPages.has(pageNumber);
     if (mode === 'groups') return getPageGroup(pageNumber) !== null;
     return false;
+  }
+
+  // Get highlight color based on mode
+  function getModeHighlightColor(): string {
+    if (mode === 'extract') return 'var(--nord14)'; // green
+    if (mode === 'remove') return 'var(--nord11)';  // red
+    return 'var(--nord8)'; // cyan (default)
+  }
+
+  // Get mode-specific label for selection count
+  function getSelectionLabel(): string {
+    const count = selectedPages.size;
+    if (mode === 'extract') return `${count} to keep`;
+    if (mode === 'remove') return `${count} to remove`;
+    return `${count} selected`;
   }
 
   function rotationForPage(pageNumber: number): number | null {
@@ -144,7 +171,7 @@
 
 <div class="flex flex-col h-full">
   <!-- Mode-specific controls -->
-  {#if mode === 'pages'}
+  {#if isPageSelectionMode()}
     <div class="flex items-center gap-2 mb-3 text-xs">
       <button
         onclick={selectAll}
@@ -160,7 +187,7 @@
       >
         Deselect All
       </button>
-      <span class="opacity-60 ml-auto">{selectedPages.size} selected</span>
+      <span class="opacity-60 ml-auto">{getSelectionLabel()}</span>
     </div>
   {:else if mode === 'groups'}
     <div class="flex flex-col gap-2 mb-3">
@@ -219,12 +246,12 @@
         <div class="relative group">
           <button
             onclick={() => {
-              if (mode === 'pages') togglePage(page.pageNumber);
+              if (isPageSelectionMode()) togglePage(page.pageNumber);
               else if (mode === 'groups') togglePageInGroup(page.pageNumber);
             }}
             disabled={mode === 'all'}
             class="w-full rounded overflow-hidden transition-all"
-            style="outline: {isSelected ? '3px solid ' + (groupIdx !== null ? getGroupColor(groupIdx) : 'var(--nord8)') : '2px solid var(--nord3)'};"
+            style="outline: {isSelected ? '3px solid ' + (groupIdx !== null ? getGroupColor(groupIdx) : getModeHighlightColor()) : '2px solid var(--nord3)'};"
           >
             <!-- Thumbnail -->
             <div
@@ -270,10 +297,12 @@
             {#if isSelected && mode !== 'all'}
               <div
                 class="absolute top-1 left-1 w-5 h-5 rounded-full flex items-center justify-center"
-                style="background-color: {groupIdx !== null ? getGroupColor(groupIdx) : 'var(--nord8)'};"
+                style="background-color: {groupIdx !== null ? getGroupColor(groupIdx) : getModeHighlightColor()};"
               >
                 {#if mode === 'groups' && groupIdx !== null}
                   <span class="text-xs font-bold" style="color: var(--nord0);">{groupIdx + 1}</span>
+                {:else if mode === 'remove'}
+                  <X size={12} style="color: var(--nord6);" />
                 {:else}
                   <Check size={12} style="color: var(--nord0);" />
                 {/if}

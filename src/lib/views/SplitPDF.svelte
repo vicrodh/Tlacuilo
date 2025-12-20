@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Upload, FolderOpen, Trash2, FileText, Scissors, Layers, Grid3x3 } from 'lucide-svelte';
+  import { Upload, FolderOpen, Trash2, FileText, Scissors, Layers, Grid3x3, FileOutput, FileX, HelpCircle } from 'lucide-svelte';
   import { listen } from '@tauri-apps/api/event';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
@@ -27,7 +27,7 @@
   }
 
   let file = $state<PDFFile | null>(null);
-  let splitMode = $state<'all' | 'pages' | 'groups'>('pages');
+  let splitMode = $state<'all' | 'pages' | 'groups' | 'extract' | 'remove'>('pages');
   let selectedPages = $state<Set<number>>(new Set());
   let groups = $state<number[][]>([]);
   let isSplitting = $state(false);
@@ -135,6 +135,26 @@
         return;
       }
       pagesToSplit = nonEmptyGroups;
+    } else if (splitMode === 'extract') {
+      // All selected pages go into ONE file
+      if (selectedPages.size === 0) {
+        log('Select at least one page to extract', 'warning', MODULE);
+        return;
+      }
+      pagesToSplit = [[...selectedPages].sort((a, b) => a - b)];
+    } else if (splitMode === 'remove') {
+      // All NON-selected pages go into ONE file
+      if (selectedPages.size === 0) {
+        log('Select at least one page to remove', 'warning', MODULE);
+        return;
+      }
+      if (selectedPages.size === file.pageCount) {
+        log('Cannot remove all pages', 'warning', MODULE);
+        return;
+      }
+      const allPages = file.pages.map(p => p.pageNumber);
+      const remaining = allPages.filter(p => !selectedPages.has(p));
+      pagesToSplit = [remaining];
     }
 
     // Get output directory
@@ -193,12 +213,21 @@
       return selectedPages.size === 0
         ? 'Select pages to split'
         : `${selectedPages.size} file(s) will be created`;
-    } else {
+    } else if (splitMode === 'groups') {
       const nonEmpty = groups.filter(g => g.length > 0).length;
       return nonEmpty === 0
         ? 'Create groups to split'
         : `${nonEmpty} file(s) will be created`;
+    } else if (splitMode === 'extract') {
+      return selectedPages.size === 0
+        ? 'Select pages to extract'
+        : `1 file with ${selectedPages.size} page(s)`;
+    } else if (splitMode === 'remove') {
+      if (selectedPages.size === 0) return 'Select pages to remove';
+      if (selectedPages.size === file.pageCount) return 'Cannot remove all pages';
+      return `1 file with ${file.pageCount - selectedPages.size} page(s)`;
     }
+    return '';
   });
 
   const canSplit = $derived(() => {
@@ -206,6 +235,8 @@
     if (splitMode === 'all') return true;
     if (splitMode === 'pages') return selectedPages.size > 0;
     if (splitMode === 'groups') return groups.some(g => g.length > 0);
+    if (splitMode === 'extract') return selectedPages.size > 0;
+    if (splitMode === 'remove') return selectedPages.size > 0 && selectedPages.size < file.pageCount;
     return false;
   });
 </script>
@@ -219,41 +250,100 @@
         class="flex items-center gap-4 px-4 py-2 border-b"
         style="background-color: var(--nord1); border-color: var(--nord3);"
       >
-        <span class="text-xs opacity-60 uppercase">Split Mode:</span>
+        <span class="text-xs opacity-60 uppercase">Mode:</span>
 
         <div class="flex items-center gap-1">
-          <button
-            onclick={() => splitMode = 'all'}
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
-            style="background-color: {splitMode === 'all' ? 'var(--nord8)' : 'var(--nord2)'};
-                   color: {splitMode === 'all' ? 'var(--nord0)' : 'var(--nord4)'};"
-            title="Split all pages - each page becomes a separate file"
-          >
-            <Grid3x3 size={14} />
-            <span>All Pages</span>
-          </button>
+          <!-- Split: All Pages -->
+          <div class="relative group">
+            <button
+              onclick={() => splitMode = 'all'}
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
+              style="background-color: {splitMode === 'all' ? 'var(--nord8)' : 'var(--nord2)'};
+                     color: {splitMode === 'all' ? 'var(--nord0)' : 'var(--nord4)'};"
+            >
+              <Grid3x3 size={14} />
+              <span>All Pages</span>
+              <HelpCircle size={12} class="opacity-50" />
+            </button>
+            <div class="absolute left-0 top-full mt-1 px-3 py-2 rounded text-xs w-56 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none"
+                 style="background-color: var(--nord3); color: var(--nord6);">
+              Split every page into its own file. A 10-page PDF becomes 10 separate files.
+            </div>
+          </div>
 
-          <button
-            onclick={() => splitMode = 'pages'}
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
-            style="background-color: {splitMode === 'pages' ? 'var(--nord8)' : 'var(--nord2)'};
-                   color: {splitMode === 'pages' ? 'var(--nord0)' : 'var(--nord4)'};"
-            title="Select pages - each selected page becomes a separate file"
-          >
-            <Scissors size={14} />
-            <span>Select Pages</span>
-          </button>
+          <!-- Split: Select Pages -->
+          <div class="relative group">
+            <button
+              onclick={() => splitMode = 'pages'}
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
+              style="background-color: {splitMode === 'pages' ? 'var(--nord8)' : 'var(--nord2)'};
+                     color: {splitMode === 'pages' ? 'var(--nord0)' : 'var(--nord4)'};"
+            >
+              <Scissors size={14} />
+              <span>Split Pages</span>
+              <HelpCircle size={12} class="opacity-50" />
+            </button>
+            <div class="absolute left-0 top-full mt-1 px-3 py-2 rounded text-xs w-56 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none"
+                 style="background-color: var(--nord3); color: var(--nord6);">
+              Select pages to split. Each selected page becomes its own file.
+            </div>
+          </div>
 
-          <button
-            onclick={() => splitMode = 'groups'}
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
-            style="background-color: {splitMode === 'groups' ? 'var(--nord8)' : 'var(--nord2)'};
-                   color: {splitMode === 'groups' ? 'var(--nord0)' : 'var(--nord4)'};"
-            title="Group pages - each group becomes a separate file"
-          >
-            <Layers size={14} />
-            <span>Groups</span>
-          </button>
+          <!-- Split: Groups -->
+          <div class="relative group">
+            <button
+              onclick={() => splitMode = 'groups'}
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
+              style="background-color: {splitMode === 'groups' ? 'var(--nord8)' : 'var(--nord2)'};
+                     color: {splitMode === 'groups' ? 'var(--nord0)' : 'var(--nord4)'};"
+            >
+              <Layers size={14} />
+              <span>Groups</span>
+              <HelpCircle size={12} class="opacity-50" />
+            </button>
+            <div class="absolute left-0 top-full mt-1 px-3 py-2 rounded text-xs w-56 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none"
+                 style="background-color: var(--nord3); color: var(--nord6);">
+              Create custom groups of pages. Each group becomes a separate file.
+            </div>
+          </div>
+
+          <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
+
+          <!-- Extract Pages -->
+          <div class="relative group">
+            <button
+              onclick={() => splitMode = 'extract'}
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
+              style="background-color: {splitMode === 'extract' ? 'var(--nord14)' : 'var(--nord2)'};
+                     color: {splitMode === 'extract' ? 'var(--nord0)' : 'var(--nord4)'};"
+            >
+              <FileOutput size={14} />
+              <span>Extract</span>
+              <HelpCircle size={12} class="opacity-50" />
+            </button>
+            <div class="absolute left-0 top-full mt-1 px-3 py-2 rounded text-xs w-56 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none"
+                 style="background-color: var(--nord3); color: var(--nord6);">
+              Keep only the selected pages. Creates ONE file containing just those pages.
+            </div>
+          </div>
+
+          <!-- Remove Pages -->
+          <div class="relative group">
+            <button
+              onclick={() => splitMode = 'remove'}
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
+              style="background-color: {splitMode === 'remove' ? 'var(--nord11)' : 'var(--nord2)'};
+                     color: {splitMode === 'remove' ? 'var(--nord6)' : 'var(--nord4)'};"
+            >
+              <FileX size={14} />
+              <span>Remove</span>
+              <HelpCircle size={12} class="opacity-50" />
+            </button>
+            <div class="absolute left-0 top-full mt-1 px-3 py-2 rounded text-xs w-56 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none"
+                 style="background-color: var(--nord3); color: var(--nord6);">
+              Delete the selected pages. Creates ONE file without those pages.
+            </div>
+          </div>
         </div>
 
         <span class="text-xs opacity-60 ml-auto">{splitSummary()}</span>
@@ -368,21 +458,32 @@
       <span class="text-sm">{file ? 'Change File' : 'Add File'}</span>
     </button>
 
-    <!-- Split Button -->
-    <button
-      onclick={handleSplit}
-      disabled={!canSplit() || isSplitting}
-      class="px-4 py-3 rounded transition-colors disabled:opacity-50 hover:opacity-90 flex items-center justify-center gap-2"
-      style="background-color: var(--nord8); color: var(--nord0);"
-    >
-      {#if isSplitting}
-        <div class="w-4 h-4 border-2 border-[var(--nord0)] border-t-transparent rounded-full animate-spin"></div>
-        <span>Splitting...</span>
-      {:else}
-        <Scissors size={18} />
-        <span>Split</span>
-      {/if}
-    </button>
+    <!-- Action Button -->
+    {#if true}
+      {@const actionLabel = splitMode === 'extract' ? 'Extract' : splitMode === 'remove' ? 'Remove' : 'Split'}
+      {@const actionColor = splitMode === 'extract' ? 'var(--nord14)' : splitMode === 'remove' ? 'var(--nord11)' : 'var(--nord8)'}
+      {@const textColor = splitMode === 'remove' ? 'var(--nord6)' : 'var(--nord0)'}
+      <button
+        onclick={handleSplit}
+        disabled={!canSplit() || isSplitting}
+        class="px-4 py-3 rounded transition-colors disabled:opacity-50 hover:opacity-90 flex items-center justify-center gap-2"
+        style="background-color: {actionColor}; color: {textColor};"
+      >
+        {#if isSplitting}
+          <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+          <span>{actionLabel}ing...</span>
+        {:else}
+          {#if splitMode === 'extract'}
+            <FileOutput size={18} />
+          {:else if splitMode === 'remove'}
+            <FileX size={18} />
+          {:else}
+            <Scissors size={18} />
+          {/if}
+          <span>{actionLabel}</span>
+        {/if}
+      </button>
+    {/if}
   </div>
 </div>
 
