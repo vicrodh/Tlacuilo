@@ -5,8 +5,10 @@ Tlacuilo is a full-featured offline PDF toolkit for Linux built with Tauri (Rust
 ## Stack
 - Frontend: Svelte 5 (runes) + Vite + Tailwind CSS
 - Desktop shell: Tauri 2.x with tauri-plugin-store for persistence
+- PDF Rendering: MuPDF (Rust) - high-quality, statically compiled
 - Backend: Python 3.12 (PyMuPDF, pikepdf, pypdf, reportlab, Pillow)
 - Theme: Nord color palette
+- License: AGPL-3.0 (required by MuPDF)
 
 ## Prerequisites
 - Node.js 18+ and npm
@@ -68,7 +70,7 @@ backend/venv/bin/pip install -r backend/requirements.txt
 - **PDF to Images**: Export pages as PNG, JPG, WEBP, or TIFF at configurable DPI
 
 ### UI/UX
-- **Unified PDF Viewer**: Full-featured viewer with toolbar, sidebar thumbnails, zoom controls, and annotation tools (pen, highlight, text, redact, stamp)
+- **High-Quality PDF Viewer**: MuPDF-powered viewer with Sumatra PDF-level rendering quality, toolbar, sidebar thumbnails, zoom controls, and panning support
 - **Persistent Settings**: User favorites and recent files stored via tauri-plugin-store
 - **Dynamic Dashboard**: Expandable tool groups with macOS-style dropdowns
 - **Customizable Favorites**: User-configurable quick access in sidebar
@@ -81,3 +83,30 @@ backend/venv/bin/pip install -r backend/requirements.txt
 - Digital signatures
 - Detachable viewer windows
 - Form field editing
+
+## Known Issues
+
+### File dialog crash on Linux (KDE)
+
+**Symptoms**: Application crashes when selecting a file in the native file picker (before clicking Open).
+
+**Cause**: Conflict with certain PDF applications installed via Flatpak or system packages that may interfere with the GTK/Qt file dialog or PDF library bindings.
+
+**Known conflicting applications** (tested on Arch Linux/KDE Plasma):
+- `com.github.jeromerobert.pdfarranger` (PDF Arranger) - Flatpak
+- `com.github.junrrein.PDFSlicer` (PDF Slicer) - Flatpak
+- `eu.scarpetta.PDFMixTool` (PDF Mix Tool) - Flatpak
+- `sumatrapdf` (Sumatra PDF via Wine) - AUR package
+
+**Solution**: Uninstall conflicting applications:
+```bash
+# Flatpak apps
+flatpak uninstall com.github.jeromerobert.pdfarranger
+flatpak uninstall com.github.junrrein.PDFSlicer
+flatpak uninstall eu.scarpetta.PDFMixTool
+
+# AUR packages
+yay -R sumatrapdf
+```
+
+**Note**: This issue is external to Tlacuilo and relates to system-level library conflicts. The crash does not occur in a clean environment.
