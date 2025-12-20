@@ -1,24 +1,35 @@
 <script lang="ts">
-  import { open } from '@tauri-apps/plugin-dialog';
+  import { open, save } from '@tauri-apps/plugin-dialog';
+  import { copyFile } from '@tauri-apps/plugin-fs';
   import { FolderOpen, FileText } from 'lucide-svelte';
-  import { PDFViewer } from '$lib/components/PDFViewer';
+  import { MuPDFViewer } from '$lib/components/PDFViewer';
   import { registerFile } from '$lib/stores/status.svelte';
+  import { useTranslations } from '$lib/i18n';
 
   const MODULE = 'Viewer';
+  const t = $derived(useTranslations());
 
   let filePath = $state<string | null>(null);
   let fileName = $state<string>('');
+  let hasUnsavedChanges = $state(false);
 
   async function handleOpenFile() {
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
-    });
+    console.log('[ViewerPage] Opening file dialog...');
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
+      });
+      console.log('[ViewerPage] File dialog returned:', selected);
 
-    if (selected && typeof selected === 'string') {
-      filePath = selected;
-      fileName = selected.split('/').pop() || 'Document';
-      registerFile(selected, fileName, MODULE);
+      if (selected && typeof selected === 'string') {
+        filePath = selected;
+        fileName = selected.split('/').pop() || 'Document';
+        registerFile(selected, fileName, MODULE);
+        console.log('[ViewerPage] File selected:', fileName);
+      }
+    } catch (err) {
+      console.error('[ViewerPage] File dialog error:', err);
     }
   }
 
@@ -26,16 +37,51 @@
     filePath = null;
     fileName = '';
   }
+
+  async function handleSave() {
+    if (!filePath) return;
+
+    if (!hasUnsavedChanges) {
+      console.log('No changes to save');
+      return;
+    }
+
+    try {
+      console.log('File saved:', filePath);
+    } catch (err) {
+      console.error('Failed to save file:', err);
+    }
+  }
+
+  async function handleSaveAs() {
+    if (!filePath) return;
+
+    try {
+      const savePath = await save({
+        filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
+        defaultPath: fileName,
+      });
+
+      if (savePath) {
+        await copyFile(filePath, savePath);
+        filePath = savePath;
+        fileName = savePath.split('/').pop() || 'Document';
+        registerFile(savePath, fileName, MODULE);
+        console.log('File saved as:', savePath);
+      }
+    } catch (err) {
+      console.error('Failed to save file:', err);
+    }
+  }
 </script>
 
 <div class="flex-1 flex flex-col overflow-hidden">
   {#if filePath}
-    <PDFViewer
+    <MuPDFViewer
       {filePath}
-      showToolbar={true}
-      showSidebar={true}
-      showDetachButton={true}
       onClose={handleClose}
+      onSave={handleSave}
+      onSaveAs={handleSaveAs}
     />
   {:else}
     <!-- Empty state with open file button -->
@@ -55,9 +101,9 @@
         </div>
 
         <div class="text-center">
-          <h2 class="text-xl mb-2" style="color: var(--nord6);">PDF Viewer</h2>
+          <h2 class="text-xl mb-2" style="color: var(--nord6);">{t.viewer.title}</h2>
           <p class="text-sm opacity-60 max-w-xs">
-            Open a PDF to view, annotate, and edit. Use the tools in the toolbar to highlight, draw, add text, and more.
+            {t.viewer.description}
           </p>
         </div>
 
@@ -67,7 +113,7 @@
           style="background-color: var(--nord8); color: var(--nord0);"
         >
           <FolderOpen size={20} />
-          <span class="font-medium">Open PDF</span>
+          <span class="font-medium">{t.viewer.openPdf}</span>
         </button>
 
         <p class="text-xs opacity-40">

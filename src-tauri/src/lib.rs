@@ -2,6 +2,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
+
+mod pdf_viewer;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Manager};
 
@@ -493,7 +495,12 @@ pub fn run() {
       split_pdf,
       rotate_pdf,
       images_to_pdf,
-      pdf_to_images
+      pdf_to_images,
+      pdf_viewer::pdf_open,
+      pdf_viewer::pdf_render_page,
+      pdf_viewer::pdf_render_thumbnail,
+      pdf_viewer::pdf_render_thumbnails,
+      pdf_viewer::pdf_close
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

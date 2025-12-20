@@ -1,0 +1,244 @@
+//! PDF Viewer module using MuPDF for high-quality rendering.
+//!
+//! This module provides Tauri commands for:
+//! - Loading PDF documents
+//! - Rendering pages at various DPI/quality levels
+//! - Getting document metadata
+
+use base64::Engine;
+use mupdf::{Colorspace, Document, Matrix};
+use serde::{Deserialize, Serialize};
+use std::io::Cursor;
+
+/// PDF document info
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PdfInfo {
+    pub path: String,
+    pub num_pages: u32,
+    pub page_sizes: Vec<PageSize>,
+}
+
+/// Page size in points (1/72 inch)
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PageSize {
+    pub width: f32,
+    pub height: f32,
+}
+
+/// Rendered page result
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RenderedPage {
+    /// Base64-encoded PNG image data
+    pub data: String,
+    /// Width of the rendered image in pixels
+    pub width: u32,
+    /// Height of the rendered image in pixels
+    pub height: u32,
+    /// Page number (1-indexed)
+    pub page: u32,
+}
+
+/// Load a PDF and return its info
+#[tauri::command]
+pub fn pdf_open(path: String) -> Result<PdfInfo, String> {
+    let document = Document::open(&path)
+        .map_err(|e| format!("Failed to load PDF: {:?}", e))?;
+
+    let num_pages = document
+        .page_count()
+        .map_err(|e| format!("Failed to get page count: {:?}", e))? as u32;
+
+    let mut page_sizes = Vec::with_capacity(num_pages as usize);
+
+    for i in 0..num_pages {
+        match document.load_page(i as i32) {
+            Ok(page) => {
+                let bounds = page.bounds().map_err(|e| format!("Failed to get page bounds: {:?}", e))?;
+                page_sizes.push(PageSize {
+                    width: bounds.width(),
+                    height: bounds.height(),
+                });
+            }
+            Err(e) => {
+                log::warn!("Failed to load page {}: {:?}", i, e);
+                page_sizes.push(PageSize {
+                    width: 612.0, // Default letter width
+                    height: 792.0, // Default letter height
+                });
+            }
+        }
+    }
+
+    Ok(PdfInfo {
+        path,
+        num_pages,
+        page_sizes,
+    })
+}
+
+/// Render a single page at the specified DPI
+#[tauri::command]
+pub fn pdf_render_page(
+    path: String,
+    page: u32,
+    dpi: Option<u32>,
+    max_width: Option<u32>,
+    max_height: Option<u32>,
+) -> Result<RenderedPage, String> {
+    let dpi = dpi.unwrap_or(150);
+
+    let document = Document::open(&path)
+        .map_err(|e| format!("Failed to load PDF: {:?}", e))?;
+
+    let page_index = (page - 1) as i32;
+    let pdf_page = document
+        .load_page(page_index)
+        .map_err(|e| format!("Failed to get page {}: {:?}", page, e))?;
+
+    // Get page dimensions in points (72 points per inch)
+    let bounds = pdf_page.bounds().map_err(|e| format!("Failed to get page bounds: {:?}", e))?;
+    let width_points = bounds.width();
+    let height_points = bounds.height();
+
+    // Calculate scale factor based on DPI (PDF default is 72 DPI)
+    let mut scale = dpi as f32 / 72.0;
+
+    // Calculate pixel dimensions
+    let mut pixel_width = (width_points * scale) as u32;
+    let mut pixel_height = (height_points * scale) as u32;
+
+    // Apply max constraints if specified
+    if let Some(max_w) = max_width {
+        if pixel_width > max_w {
+            let constraint_scale = max_w as f32 / pixel_width as f32;
+            scale *= constraint_scale;
+            pixel_width = max_w;
+            pixel_height = (pixel_height as f32 * constraint_scale) as u32;
+        }
+    }
+    if let Some(max_h) = max_height {
+        if pixel_height > max_h {
+            let constraint_scale = max_h as f32 / pixel_height as f32;
+            scale *= constraint_scale;
+            pixel_height = max_h;
+            pixel_width = (pixel_width as f32 * constraint_scale) as u32;
+        }
+    }
+
+    // Create transformation matrix for scaling
+    let matrix = Matrix::new_scale(scale, scale);
+
+    // Render the page to a pixmap (RGB with alpha, show annotations)
+    let pixmap = pdf_page
+        .to_pixmap(&matrix, &Colorspace::device_rgb(), true, true)
+        .map_err(|e| format!("Failed to render page: {:?}", e))?;
+
+    // Get actual rendered dimensions
+    let actual_width = pixmap.width() as u32;
+    let actual_height = pixmap.height() as u32;
+
+    // Write pixmap to PNG
+    let mut png_data = Vec::new();
+    let mut cursor = Cursor::new(&mut png_data);
+    pixmap
+        .write_to(&mut cursor, mupdf::ImageFormat::PNG)
+        .map_err(|e| format!("Failed to encode PNG: {:?}", e))?;
+
+    // Encode as base64
+    let base64_data = base64::engine::general_purpose::STANDARD.encode(&png_data);
+
+    Ok(RenderedPage {
+        data: base64_data,
+        width: actual_width,
+        height: actual_height,
+        page,
+    })
+}
+
+/// Render a thumbnail (low-res) for a page
+#[tauri::command]
+pub fn pdf_render_thumbnail(
+    path: String,
+    page: u32,
+    max_size: Option<u32>,
+) -> Result<RenderedPage, String> {
+    let max_size = max_size.unwrap_or(200);
+    pdf_render_page(path, page, Some(72), Some(max_size), Some(max_size))
+}
+
+/// Batch render multiple thumbnails
+#[tauri::command]
+pub fn pdf_render_thumbnails(
+    path: String,
+    pages: Vec<u32>,
+    max_size: Option<u32>,
+) -> Result<Vec<RenderedPage>, String> {
+    let max_size = max_size.unwrap_or(200);
+
+    let document = Document::open(&path)
+        .map_err(|e| format!("Failed to load PDF: {:?}", e))?;
+
+    let mut results = Vec::with_capacity(pages.len());
+
+    for page_num in pages {
+        let page_index = (page_num - 1) as i32;
+
+        match document.load_page(page_index) {
+            Ok(pdf_page) => {
+                match pdf_page.bounds() {
+                    Ok(bounds) => {
+                        let width_points = bounds.width();
+                        let height_points = bounds.height();
+
+                        // Calculate thumbnail scale maintaining aspect ratio
+                        let aspect = width_points / height_points;
+                        let thumb_width = if aspect > 1.0 {
+                            max_size as f32
+                        } else {
+                            max_size as f32 * aspect
+                        };
+
+                        // Calculate scale to achieve thumbnail size
+                        let scale = thumb_width / width_points;
+                        let matrix = Matrix::new_scale(scale, scale);
+
+                        match pdf_page.to_pixmap(&matrix, &Colorspace::device_rgb(), true, false) {
+                            Ok(pixmap) => {
+                                let mut png_data = Vec::new();
+                                let mut cursor = Cursor::new(&mut png_data);
+
+                                if pixmap.write_to(&mut cursor, mupdf::ImageFormat::PNG).is_ok() {
+                                    let base64_data =
+                                        base64::engine::general_purpose::STANDARD.encode(&png_data);
+                                    results.push(RenderedPage {
+                                        data: base64_data,
+                                        width: pixmap.width() as u32,
+                                        height: pixmap.height() as u32,
+                                        page: page_num,
+                                    });
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!("Failed to render thumbnail for page {}: {:?}", page_num, e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to get bounds for page {}: {:?}", page_num, e);
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("Failed to get page {}: {:?}", page_num, e);
+            }
+        }
+    }
+
+    Ok(results)
+}
+
+/// Close a document (no-op since MuPDF handles cleanup automatically)
+#[tauri::command]
+pub fn pdf_close(_path: String) -> Result<(), String> {
+    Ok(())
+}
