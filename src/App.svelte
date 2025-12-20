@@ -9,6 +9,8 @@
   import MergePDF from './lib/views/MergePDF.svelte';
   import SplitPDF from './lib/views/SplitPDF.svelte';
   import RotatePDF from './lib/views/RotatePDF.svelte';
+  import ConvertToPDF from './lib/views/ConvertToPDF.svelte';
+  import ConvertFromPDF from './lib/views/ConvertFromPDF.svelte';
   import PlaceholderPage from './lib/views/PlaceholderPage.svelte';
   import { getStatus, toggleExpanded, clearLogs, type LogLevel } from './lib/stores/status.svelte';
 
@@ -101,6 +103,10 @@
       <SplitPDF />
     {:else if currentPage === 'rotate'}
       <RotatePDF />
+    {:else if currentPage === 'convert'}
+      <ConvertToPDF />
+    {:else if currentPage === 'export'}
+      <ConvertFromPDF />
     {:else}
       <PlaceholderPage pageName={currentPage} />
     {/if}
