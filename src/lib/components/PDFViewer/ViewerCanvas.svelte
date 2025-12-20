@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
   import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 
   interface Props {
@@ -23,10 +23,13 @@
   let annotationCanvas: HTMLCanvasElement;
   let isRendering = $state(false);
   let currentRenderTask: any = null;
+  let renderVersion = 0; // Track render version to prevent stale renders
 
   // Render the current page
-  async function renderPage() {
-    if (!pdfDoc || !canvas || isRendering) return;
+  async function renderPage(version: number) {
+    // Use untrack to prevent isRendering from triggering effect re-runs
+    const shouldSkip = untrack(() => isRendering);
+    if (!pdfDoc || !canvas || shouldSkip) return;
 
     // Cancel any ongoing render
     if (currentRenderTask) {
@@ -179,7 +182,16 @@
   };
 
   $effect(() => {
-    renderPage();
+    // Track dependencies explicitly
+    const doc = pdfDoc;
+    const page = currentPage;
+    const z = zoom;
+    const r = rotation;
+
+    // Increment version and render
+    renderVersion++;
+    const version = renderVersion;
+    renderPage(version);
   });
 
   onMount(() => {

@@ -3,6 +3,8 @@
  * Uses Svelte 5 runes for reactivity.
  */
 
+import { addRecentFile } from './settings.svelte';
+
 export type LogLevel = 'info' | 'success' | 'warning' | 'error';
 
 export interface LogEntry {
@@ -74,6 +76,9 @@ export function registerFile(path: string, name: string, module: string) {
   // Remove existing file from same module
   openFiles = openFiles.filter(f => f.module !== module || f.path !== path);
   openFiles = [...openFiles, { path, name, module }];
+
+  // Also add to recent files for persistence
+  addRecentFile(path, name, module);
 }
 
 /**

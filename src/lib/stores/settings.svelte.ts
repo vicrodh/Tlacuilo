@@ -23,26 +23,44 @@ export interface RecentFile {
   module: string; // which module opened it
 }
 
+// Supported languages
+export type Language = 'en' | 'es' | 'pt' | 'fr' | 'de';
+
+export const LANGUAGES: { id: Language; label: string; native: string }[] = [
+  { id: 'en', label: 'English', native: 'English' },
+  { id: 'es', label: 'Spanish', native: 'Espanol' },
+  { id: 'pt', label: 'Portuguese', native: 'Portugues' },
+  { id: 'fr', label: 'French', native: 'Francais' },
+  { id: 'de', label: 'German', native: 'Deutsch' },
+];
+
 // Settings shape
 export interface AppSettings {
   favorites: string[]; // tool IDs
   recentFiles: RecentFile[];
   recentFilesExpanded: boolean;
+  showRecentFilesInHome: boolean;
   maxRecentFiles: number;
   theme: 'dark' | 'light' | 'system';
+  language: Language;
 }
 
 // Default settings
 const DEFAULT_SETTINGS: AppSettings = {
-  favorites: ['merge', 'split', 'rotate', 'convert-images-to-pdf'],
+  favorites: ['viewer', 'merge', 'split', 'rotate', 'convert-images-to-pdf'],
   recentFiles: [],
   recentFilesExpanded: true,
+  showRecentFilesInHome: true,
   maxRecentFiles: 10,
   theme: 'dark',
+  language: 'en',
 };
 
 // Complete tool catalog
 export const TOOL_CATALOG: Tool[] = [
+  // Viewer (first position)
+  { id: 'viewer', label: 'Viewer', icon: 'BookOpen', page: 'viewer', description: 'View, annotate, and edit PDFs' },
+
   // Standalone tools
   { id: 'merge', label: 'Merge PDF', icon: 'Merge', page: 'merge', description: 'Combine multiple PDFs into one' },
   { id: 'split', label: 'Split PDF', icon: 'Scissors', page: 'split', description: 'Extract or separate pages' },
@@ -98,15 +116,19 @@ async function initStore(): Promise<void> {
     const favorites = await store.get<string[]>('favorites');
     const recentFiles = await store.get<RecentFile[]>('recentFiles');
     const recentFilesExpanded = await store.get<boolean>('recentFilesExpanded');
+    const showRecentFilesInHome = await store.get<boolean>('showRecentFilesInHome');
     const maxRecentFiles = await store.get<number>('maxRecentFiles');
     const theme = await store.get<'dark' | 'light' | 'system'>('theme');
+    const language = await store.get<Language>('language');
 
     settings = {
       favorites: favorites ?? DEFAULT_SETTINGS.favorites,
       recentFiles: recentFiles ?? DEFAULT_SETTINGS.recentFiles,
       recentFilesExpanded: recentFilesExpanded ?? DEFAULT_SETTINGS.recentFilesExpanded,
+      showRecentFilesInHome: showRecentFilesInHome ?? DEFAULT_SETTINGS.showRecentFilesInHome,
       maxRecentFiles: maxRecentFiles ?? DEFAULT_SETTINGS.maxRecentFiles,
       theme: theme ?? DEFAULT_SETTINGS.theme,
+      language: language ?? DEFAULT_SETTINGS.language,
     };
 
     isLoaded = true;
@@ -166,6 +188,18 @@ export async function toggleRecentFilesExpanded(): Promise<void> {
   await saveSetting('recentFilesExpanded', !settings.recentFilesExpanded);
 }
 
+export async function setShowRecentFilesInHome(value: boolean): Promise<void> {
+  await saveSetting('showRecentFilesInHome', value);
+}
+
+export async function setLanguage(language: Language): Promise<void> {
+  await saveSetting('language', language);
+}
+
+export async function setTheme(theme: 'dark' | 'light' | 'system'): Promise<void> {
+  await saveSetting('theme', theme);
+}
+
 // Get settings (reactive)
 export function getSettings() {
   // Initialize on first access
@@ -177,8 +211,10 @@ export function getSettings() {
     get favorites() { return settings.favorites; },
     get recentFiles() { return settings.recentFiles; },
     get recentFilesExpanded() { return settings.recentFilesExpanded; },
+    get showRecentFilesInHome() { return settings.showRecentFilesInHome; },
     get maxRecentFiles() { return settings.maxRecentFiles; },
     get theme() { return settings.theme; },
+    get language() { return settings.language; },
     get isLoaded() { return isLoaded; },
   };
 }

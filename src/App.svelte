@@ -11,6 +11,8 @@
   import RotatePDF from './lib/views/RotatePDF.svelte';
   import ConvertToPDF from './lib/views/ConvertToPDF.svelte';
   import ConvertFromPDF from './lib/views/ConvertFromPDF.svelte';
+  import ViewerPage from './lib/views/ViewerPage.svelte';
+  import Settings from './lib/views/Settings.svelte';
   import PlaceholderPage from './lib/views/PlaceholderPage.svelte';
   import { getStatus, toggleExpanded, clearLogs, type LogLevel } from './lib/stores/status.svelte';
 
@@ -107,6 +109,10 @@
       <ConvertToPDF />
     {:else if currentPage === 'export'}
       <ConvertFromPDF />
+    {:else if currentPage === 'viewer'}
+      <ViewerPage />
+    {:else if currentPage === 'settings'}
+      <Settings />
     {:else}
       <PlaceholderPage pageName={currentPage} />
     {/if}

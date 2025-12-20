@@ -25,7 +25,8 @@
     Upload,
     ShieldCheck,
     ScanText,
-    Star
+    Star,
+    BookOpen
   } from 'lucide-svelte';
   import { getSettings, getToolById, type Tool } from '$lib/stores/settings.svelte';
 
@@ -56,6 +57,7 @@
   // Map tool ID to icon and page
   function getToolIcon(toolId: string): typeof Merge {
     const mapping: Record<string, typeof Merge> = {
+      'viewer': BookOpen,
       'merge': Merge,
       'split': Scissors,
       'rotate': RotateCw,
@@ -80,6 +82,7 @@
 
   function getToolPage(toolId: string): string {
     const mapping: Record<string, string> = {
+      'viewer': 'viewer',
       'merge': 'merge',
       'split': 'split',
       'rotate': 'rotate',
@@ -104,6 +107,7 @@
 
   function getToolLabel(toolId: string): string {
     const mapping: Record<string, string> = {
+      'viewer': 'Viewer',
       'merge': 'Merge PDF',
       'split': 'Split PDF',
       'rotate': 'Rotate PDF',

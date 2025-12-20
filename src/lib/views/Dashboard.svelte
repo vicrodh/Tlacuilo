@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    BookOpen,
     Merge,
     Scissors,
     RotateCw,
@@ -47,7 +48,7 @@
 
   // Icon mapping
   const iconMap: Record<string, typeof Merge> = {
-    Merge, Scissors, RotateCw, RefreshCw, Shield, Pencil, PenTool,
+    BookOpen, Merge, Scissors, RotateCw, RefreshCw, Shield, Pencil, PenTool,
     FileArchive, ScanText, Image, Images, FileText, FileOutput,
     Lock, Unlock, EyeOff, Droplet, Hash, Stamp, Upload, ShieldCheck
   };
@@ -99,6 +100,7 @@
 
   // Standalone tools (no dropdown)
   const standaloneTools = [
+    { id: 'viewer', label: 'Viewer', icon: BookOpen, page: 'viewer' },
     { id: 'merge', label: 'Merge', icon: Merge, page: 'merge' },
     { id: 'split', label: 'Split', icon: Scissors, page: 'split' },
     { id: 'rotate', label: 'Rotate', icon: RotateCw, page: 'rotate' },
@@ -251,6 +253,7 @@
   {/if}
 
   <!-- Recent Files Section -->
+  {#if settings.showRecentFilesInHome}
   <div
     class="rounded-xl overflow-hidden"
     style="background-color: var(--nord1);"
@@ -322,6 +325,7 @@
       </div>
     {/if}
   </div>
+  {/if}
 </div>
 
 <style>
