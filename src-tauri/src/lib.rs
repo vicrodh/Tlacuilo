@@ -1,8 +1,16 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+use serde::{Deserialize, Serialize};
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Manager};
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ImageTransform {
+  rotation: Option<i32>,
+  flip_h: Option<bool>,
+  flip_v: Option<bool>,
+}
 
 #[tauri::command]
 fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Result<String, String> {
@@ -227,6 +235,7 @@ fn images_to_pdf(
   page_size: Option<String>,
   orientation: Option<String>,
   margin: Option<f64>,
+  transforms: Option<Vec<ImageTransform>>,
 ) -> Result<String, String> {
   if images.is_empty() {
     return Err("Provide at least one image path.".into());
@@ -261,6 +270,13 @@ fn images_to_pdf(
   }
   if let Some(m) = margin {
     cmd.arg("--margin").arg(m.to_string());
+  }
+
+  // Pass transforms as JSON string if provided
+  if let Some(ref t) = transforms {
+    let transforms_json = serde_json::to_string(t)
+      .map_err(|e| format!("Failed to serialize transforms: {e}"))?;
+    cmd.arg("--transforms").arg(transforms_json);
   }
 
   let output = cmd

@@ -75,6 +75,7 @@ def images_to_pdf(
     orientation: str = "auto",
     margin_mm: float = 0,
     quality: int = 95,
+    transforms: Sequence[dict] | None = None,
 ) -> Path:
     """
     Convert multiple images to a single PDF.
@@ -86,6 +87,7 @@ def images_to_pdf(
         orientation: "auto", "portrait", or "landscape"
         margin_mm: Margin in millimeters
         quality: JPEG quality for compression (1-100)
+        transforms: List of transform dicts with rotation, flip_h, flip_v per image
 
     Returns:
         Path to created PDF.
@@ -114,14 +116,52 @@ def images_to_pdf(
 
     try:
         doc = fitz.open()
+        temp_files: list[Path] = []
 
-        for img_path in validated_paths:
+        for idx, img_path in enumerate(validated_paths):
+            # Get transform for this image if provided
+            transform = transforms[idx] if transforms and idx < len(transforms) else None
+            actual_img_path = img_path
+
+            # Apply transforms using PIL if needed
+            if transform and (transform.get("rotation") or transform.get("flip_h") or transform.get("flip_v")):
+                from PIL import Image
+                import tempfile
+
+                pil_img = Image.open(str(img_path))
+
+                # Apply rotation
+                rotation = transform.get("rotation", 0)
+                if rotation:
+                    # PIL rotates counter-clockwise, we want clockwise
+                    pil_img = pil_img.rotate(-rotation, expand=True)
+
+                # Apply flips
+                if transform.get("flip_h"):
+                    pil_img = pil_img.transpose(Image.FLIP_LEFT_RIGHT)
+                if transform.get("flip_v"):
+                    pil_img = pil_img.transpose(Image.FLIP_TOP_BOTTOM)
+
+                # Save to temp file
+                suffix = img_path.suffix if hasattr(img_path, 'suffix') else Path(str(img_path)).suffix
+                temp_fd, temp_path = tempfile.mkstemp(suffix=suffix)
+                temp_path = Path(temp_path)
+                temp_files.append(temp_path)
+
+                # Convert RGBA to RGB for JPEG
+                if pil_img.mode == 'RGBA' and suffix.lower() in ['.jpg', '.jpeg']:
+                    pil_img = pil_img.convert('RGB')
+
+                pil_img.save(str(temp_path))
+                pil_img.close()
+                actual_img_path = temp_path
+
             # Open image to get dimensions
-            img_doc = fitz.open(str(img_path))
+            img_doc = fitz.open(str(actual_img_path))
             img_page = img_doc[0]
-            img_rect = img_page.rect
-            img_width = img_rect.width
-            img_height = img_rect.height
+            img_rect_orig = img_page.rect
+            img_width = img_rect_orig.width
+            img_height = img_rect_orig.height
 
             # Determine page dimensions
             if base_size is None:  # "fit" mode
@@ -171,7 +211,7 @@ def images_to_pdf(
             )
 
             # Insert image
-            page.insert_image(img_rect, filename=str(img_path))
+            page.insert_image(img_rect, filename=str(actual_img_path))
             img_doc.close()
 
         # Save with compression
@@ -184,9 +224,22 @@ def images_to_pdf(
         )
         doc.close()
 
+        # Cleanup temp files
+        for temp_file in temp_files:
+            try:
+                temp_file.unlink()
+            except OSError:
+                pass
+
         return output_path
 
     except fitz.FitzError as e:
+        # Cleanup temp files on error too
+        for temp_file in temp_files:
+            try:
+                temp_file.unlink()
+            except OSError:
+                pass
         raise ConversionError("images", "pdf", str(e)) from e
 
 
@@ -360,6 +413,7 @@ def _build_parser() -> argparse.ArgumentParser:
     img2pdf.add_argument("--orientation", default="auto", help="portrait, landscape, or auto")
     img2pdf.add_argument("--margin", type=float, default=0, help="Margin in mm")
     img2pdf.add_argument("--quality", type=int, default=95, help="Image quality (1-100)")
+    img2pdf.add_argument("--transforms", help="JSON array of transforms [{rotation, flip_h, flip_v}, ...]")
 
     # pdf-to-images
     pdf2img = sub.add_parser("pdf-to-images", help="Convert PDF to images")
@@ -379,6 +433,12 @@ def _main(argv: list[str]) -> int:
 
     try:
         if args.command == "images-to-pdf":
+            # Parse transforms if provided
+            transforms = None
+            if args.transforms:
+                import json
+                transforms = json.loads(args.transforms)
+
             result = images_to_pdf(
                 [Path(p) for p in args.inputs],
                 Path(args.output),
@@ -386,6 +446,7 @@ def _main(argv: list[str]) -> int:
                 orientation=args.orientation,
                 margin_mm=args.margin,
                 quality=args.quality,
+                transforms=transforms,
             )
             print(f"Created: {result}")
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Upload, FolderOpen, Trash2, X, Image, FileText, HelpCircle } from 'lucide-svelte';
+  import { Upload, FolderOpen, Trash2, X, Image, FileText, HelpCircle, RotateCw, FlipHorizontal, FlipVertical } from 'lucide-svelte';
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
   import { listen } from '@tauri-apps/api/event';
@@ -19,6 +19,21 @@
     error: string | null;
     width?: number;
     height?: number;
+    // Per-image transforms
+    rotation: 0 | 90 | 180 | 270;
+    flipH: boolean;
+    flipV: boolean;
+  }
+
+  // Chunked base64 conversion for large files
+  function arrayBufferToBase64(buffer: Uint8Array): string {
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < buffer.length; i += chunkSize) {
+      const chunk = buffer.subarray(i, Math.min(i + chunkSize, buffer.length));
+      binary += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    return btoa(binary);
   }
 
   // State
@@ -64,6 +79,9 @@
         thumbnail: null,
         isLoading: true,
         error: null,
+        rotation: 0,
+        flipH: false,
+        flipV: false,
       };
 
       files = [...files, newFile];
@@ -84,7 +102,7 @@
                        ext === 'bmp' ? 'image/bmp' :
                        'image/png';
 
-      const base64 = btoa(String.fromCharCode(...contents));
+      const base64 = arrayBufferToBase64(contents);
       const thumbnail = `data:${mimeType};base64,${base64}`;
 
       files = files.map((f) =>
@@ -120,6 +138,28 @@
     files = [];
   }
 
+  function rotateImage(fileId: string) {
+    files = files.map((f) => {
+      if (f.id === fileId) {
+        const newRotation = ((f.rotation + 90) % 360) as 0 | 90 | 180 | 270;
+        return { ...f, rotation: newRotation };
+      }
+      return f;
+    });
+  }
+
+  function flipImageH(fileId: string) {
+    files = files.map((f) =>
+      f.id === fileId ? { ...f, flipH: !f.flipH } : f
+    );
+  }
+
+  function flipImageV(fileId: string) {
+    files = files.map((f) =>
+      f.id === fileId ? { ...f, flipV: !f.flipV } : f
+    );
+  }
+
   function handleFilesDnd(e: CustomEvent<{ items: ImageFile[] }>) {
     files = e.detail.items;
   }
@@ -141,14 +181,25 @@
         return;
       }
 
-      const imagePaths = files.map((f) => f.path);
+      // Build image data with transforms
+      const imageData = files.map((f) => ({
+        path: f.path,
+        rotation: f.rotation,
+        flipH: f.flipH,
+        flipV: f.flipV,
+      }));
 
       const result = await invoke<string>('images_to_pdf', {
-        images: imagePaths,
+        images: imageData.map(d => d.path),
         output: outputPath,
         pageSize: pageSize,
         orientation: orientation,
         margin: marginMm,
+        transforms: imageData.map(d => ({
+          rotation: d.rotation,
+          flip_h: d.flipH,
+          flip_v: d.flipV,
+        })),
       });
 
       logSuccess(`Created PDF: ${result}`, MODULE);
@@ -309,13 +360,44 @@
                     <img
                       src={file.thumbnail}
                       alt={file.name}
-                      class="max-w-full max-h-full object-contain"
+                      class="max-w-full max-h-full object-contain transition-transform"
+                      style="transform: rotate({file.rotation}deg) scaleX({file.flipH ? -1 : 1}) scaleY({file.flipV ? -1 : 1});"
                     />
                   {:else if file.error}
                     <span class="text-xs text-center px-2" style="color: var(--nord11);">Error</span>
                   {:else}
                     <Image size={32} class="opacity-40" />
                   {/if}
+                </div>
+
+                <!-- Transform Controls (bottom) -->
+                <div
+                  class="absolute bottom-0 left-0 right-0 flex justify-center gap-1 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  style="background: linear-gradient(transparent, rgba(0,0,0,0.6));"
+                >
+                  <button
+                    onclick={(e) => { e.stopPropagation(); rotateImage(file.id); }}
+                    class="p-1 rounded hover:bg-[var(--nord3)] transition-colors"
+                    title="Rotate 90°"
+                  >
+                    <RotateCw size={12} style="color: var(--nord6);" />
+                  </button>
+                  <button
+                    onclick={(e) => { e.stopPropagation(); flipImageH(file.id); }}
+                    class="p-1 rounded hover:bg-[var(--nord3)] transition-colors"
+                    style="background-color: {file.flipH ? 'var(--nord10)' : 'transparent'};"
+                    title="Flip Horizontal"
+                  >
+                    <FlipHorizontal size={12} style="color: var(--nord6);" />
+                  </button>
+                  <button
+                    onclick={(e) => { e.stopPropagation(); flipImageV(file.id); }}
+                    class="p-1 rounded hover:bg-[var(--nord3)] transition-colors"
+                    style="background-color: {file.flipV ? 'var(--nord10)' : 'transparent'};"
+                    title="Flip Vertical"
+                  >
+                    <FlipVertical size={12} style="color: var(--nord6);" />
+                  </button>
                 </div>
 
                 <!-- Remove Button -->
