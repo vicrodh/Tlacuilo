@@ -443,6 +443,14 @@ fn resolve_python_bin() -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  // On Linux/Wayland (especially KDE), force GTK dialogs to use XDG Desktop Portal.
+  // This avoids GTK-native file chooser code paths that can crash when other statically
+  // linked C libraries (e.g. MuPDF vendored deps) interpose common symbols.
+  #[cfg(target_os = "linux")]
+  {
+    std::env::set_var("GTK_USE_PORTAL", "1");
+  }
+
   tauri::Builder::default()
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_dialog::init())

@@ -5,7 +5,7 @@ Tlacuilo is a full-featured offline PDF toolkit for Linux built with Tauri (Rust
 ## Stack
 - Frontend: Svelte 5 (runes) + Vite + Tailwind CSS
 - Desktop shell: Tauri 2.x with tauri-plugin-store for persistence
-- PDF Rendering: MuPDF (Rust) - high-quality, statically compiled
+- PDF Rendering: MuPDF (Rust) - high-quality (links common deps from the system to avoid GTK crashes on Linux)
 - Backend: Python 3.12 (PyMuPDF, pikepdf, pypdf, reportlab, Pillow)
 - Theme: Nord color palette
 - License: AGPL-3.0 (required by MuPDF)
@@ -14,6 +14,7 @@ Tlacuilo is a full-featured offline PDF toolkit for Linux built with Tauri (Rust
 - Node.js 18+ and npm
 - Rust toolchain (for Tauri)
 - Python 3.12.x
+- Build deps (Linux): `pkg-config`, `libjpeg`, `zlib`, `freetype2`, `harfbuzz`
 - System libs (optional): libreoffice-fresh (Office conversions), ghostscript (compression), tesseract-ocr (OCR)
 
 ## Install

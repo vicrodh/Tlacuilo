@@ -28,5 +28,16 @@ tauri-plugin-fs = "2"
 tauri-plugin-store = "2.4.1"
 
 # PDF rendering with MuPDF engine (AGPL licensed)
-mupdf = "0.5"
+#
+# NOTE: MuPDF bundles several C libraries (e.g. libjpeg/zlib/harfbuzz/freetype) by default.
+# When statically linked, their global symbols can conflict with GTK/GdkPixbuf loaders used by
+# the native file dialog on Linux, causing hard crashes (SIGSEGV) while browsing folders.
+# Prefer linking common GUI-stack libs from the system to avoid symbol interposition issues.
+mupdf = { version = "0.5", default-features = false, features = [
+  "system-fonts",
+  "sys-lib-libjpeg",
+  "sys-lib-zlib",
+  "sys-lib-harfbuzz",
+  "sys-lib-freetype",
+] }
 base64 = "0.22"
