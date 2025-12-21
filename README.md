@@ -17,6 +17,28 @@ Tlacuilo is a full-featured offline PDF toolkit for Linux built with Tauri (Rust
 - Build deps (Linux): `pkg-config`, `libjpeg`, `zlib`, `freetype2`, `harfbuzz`
 - System libs (optional): libreoffice-fresh (Office conversions), ghostscript (compression), tesseract-ocr (OCR)
 
+### Linux build dependencies (by distro)
+
+MuPDF is configured to link common dependencies from the system on Linux to avoid hard crashes in GTK file dialogs.
+
+- Arch Linux:
+  - `sudo pacman -S --needed pkgconf libjpeg-turbo zlib freetype2 harfbuzz`
+- Debian/Ubuntu:
+  - `sudo apt-get install -y pkg-config libjpeg62-turbo-dev zlib1g-dev libfreetype6-dev libharfbuzz-dev`
+- Fedora:
+  - `sudo dnf install -y pkgconf-pkg-config libjpeg-turbo-devel zlib-devel freetype-devel harfbuzz-devel`
+
+### Linux file dialogs (KDE / GNOME)
+
+On Linux we default to the XDG Desktop Portal file dialogs for better Wayland + KDE/GNOME integration.
+
+- Runtime packages:
+  - KDE Plasma: `xdg-desktop-portal` + `xdg-desktop-portal-kde`
+  - GNOME: `xdg-desktop-portal` + `xdg-desktop-portal-gtk`
+- Debug override:
+  - Disable portal dialogs: `TLACUILO_GTK_USE_PORTAL=0`
+  - Force portal dialogs: `TLACUILO_GTK_USE_PORTAL=1`
+
 ## Install
 ```bash
 npm install

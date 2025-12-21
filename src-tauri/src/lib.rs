@@ -443,12 +443,28 @@ fn resolve_python_bin() -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  // On Linux/Wayland (especially KDE), force GTK dialogs to use XDG Desktop Portal.
-  // This avoids GTK-native file chooser code paths that can crash when other statically
-  // linked C libraries (e.g. MuPDF vendored deps) interpose common symbols.
+  // On Linux/Wayland (especially KDE), prefer XDG Desktop Portal file dialogs.
+  //
+  // Notes:
+  // - Some GTK-native file chooser paths have been observed to hard-crash (SIGSEGV) when other
+  //   statically linked C libraries interpose common symbols (e.g. from vendored deps).
+  // - Portals generally provide a better KDE/GNOME native experience on Wayland.
+  //
+  // Overrides:
+  // - If `GTK_USE_PORTAL` is already set, we respect it.
+  // - Otherwise we set it from `TLACUILO_GTK_USE_PORTAL` (default: "1").
   #[cfg(target_os = "linux")]
   {
-    std::env::set_var("GTK_USE_PORTAL", "1");
+    if std::env::var_os("GTK_USE_PORTAL").is_none() {
+      let desired = std::env::var("TLACUILO_GTK_USE_PORTAL").unwrap_or_else(|_| "1".to_string());
+      let normalized = desired.trim().to_ascii_lowercase();
+      let value = match normalized.as_str() {
+        "0" | "false" | "no" | "off" => "0",
+        "1" | "true" | "yes" | "on" => "1",
+        _ => "1",
+      };
+      std::env::set_var("GTK_USE_PORTAL", value);
+    }
   }
 
   tauri::Builder::default()
