@@ -37,6 +37,7 @@
     toggleRecentFilesExpanded,
     type RecentFile
   } from '$lib/stores/settings.svelte';
+  import { setPendingOpenFile } from '$lib/stores/status.svelte';
 
   interface Props {
     onNavigate?: (page: string) => void;
@@ -131,6 +132,11 @@
     expandedGroup = null;
     dropdownPosition = null;
     onNavigate?.(page);
+  }
+
+  function handleRecentFileClick(file: RecentFile) {
+    setPendingOpenFile(file.path);
+    onNavigate?.('viewer');
   }
 
   function handleClickOutside(event: MouseEvent) {
@@ -302,7 +308,11 @@
           <div class="space-y-0.5">
             {#each settings.recentFiles as file}
               <div
+                onclick={() => handleRecentFileClick(file)}
+                onkeydown={(e) => e.key === 'Enter' && handleRecentFileClick(file)}
                 class="flex items-center justify-between px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--nord2)] cursor-pointer group"
+                role="button"
+                tabindex="0"
               >
                 <div class="flex items-center gap-2 min-w-0 flex-1">
                   <FileIcon size={14} style="color: var(--nord8);" class="flex-shrink-0" />

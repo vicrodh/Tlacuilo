@@ -3,7 +3,8 @@
 </svelte:head>
 
 <script lang="ts">
-  import { Menu, Activity, ChevronUp, ChevronDown, CheckCircle, AlertCircle, AlertTriangle, Info, Trash2 } from 'lucide-svelte';
+  import { Menu, Activity, ChevronUp, ChevronDown, CheckCircle, AlertCircle, AlertTriangle, Info, Trash2, FolderOpen, Settings as SettingsIcon, ChevronRight } from 'lucide-svelte';
+  import { open } from '@tauri-apps/plugin-dialog';
   import Sidebar from './lib/components/Sidebar.svelte';
   import Dashboard from './lib/views/Dashboard.svelte';
   import MergePDF from './lib/views/MergePDF.svelte';
@@ -14,10 +15,11 @@
   import ViewerPage from './lib/views/ViewerPage.svelte';
   import Settings from './lib/views/Settings.svelte';
   import PlaceholderPage from './lib/views/PlaceholderPage.svelte';
-  import { getStatus, toggleExpanded, clearLogs, type LogLevel } from './lib/stores/status.svelte';
+  import { getStatus, toggleExpanded, clearLogs, setPendingOpenFile, type LogLevel } from './lib/stores/status.svelte';
 
   let sidebarOpen = $state(true);
   let currentPage = $state('home');
+  let fileMenuOpen = $state(false);
 
   const status = getStatus();
 
@@ -27,6 +29,35 @@
 
   function toggleSidebar() {
     sidebarOpen = !sidebarOpen;
+  }
+
+  function toggleFileMenu() {
+    fileMenuOpen = !fileMenuOpen;
+  }
+
+  function closeFileMenu() {
+    fileMenuOpen = false;
+  }
+
+  async function handleOpenFromMenu() {
+    closeFileMenu();
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
+      });
+      if (selected && typeof selected === 'string') {
+        setPendingOpenFile(selected);
+        navigate('viewer');
+      }
+    } catch (err) {
+      console.error('[App] File dialog error:', err);
+    }
+  }
+
+  function handleSettingsFromMenu() {
+    closeFileMenu();
+    navigate('settings');
   }
 
   const currentDate = new Date().toLocaleDateString();
@@ -73,6 +104,45 @@
       >
         <Menu size={20} />
       </button>
+
+      <!-- File Menu -->
+      <div class="relative">
+        <button
+          onclick={toggleFileMenu}
+          class="px-3 py-1.5 rounded-md hover:bg-[var(--nord2)] transition-colors text-sm flex items-center gap-1"
+        >
+          File
+          <ChevronDown size={14} class="opacity-60" />
+        </button>
+        {#if fileMenuOpen}
+          <div
+            class="absolute top-full left-0 mt-1 py-1 rounded-lg shadow-xl z-50 min-w-[160px]"
+            style="background-color: var(--nord2); border: 1px solid var(--nord3);"
+          >
+            <button
+              onclick={handleOpenFromMenu}
+              class="w-full flex items-center gap-3 px-4 py-2 text-sm text-left hover:bg-[var(--nord3)] transition-colors"
+            >
+              <FolderOpen size={16} class="opacity-80" />
+              Open
+            </button>
+            <div class="h-px mx-2 my-1" style="background-color: var(--nord3);"></div>
+            <button
+              onclick={handleSettingsFromMenu}
+              class="w-full flex items-center gap-3 px-4 py-2 text-sm text-left hover:bg-[var(--nord3)] transition-colors"
+            >
+              <SettingsIcon size={16} class="opacity-80" />
+              Settings
+            </button>
+          </div>
+          <!-- Backdrop to close menu on outside click -->
+          <button
+            class="fixed inset-0 z-40"
+            onclick={closeFileMenu}
+            aria-label="Close menu"
+          ></button>
+        {/if}
+      </div>
 
       <div class="flex items-center gap-3">
         <div

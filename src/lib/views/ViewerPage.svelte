@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { copyFile } from '@tauri-apps/plugin-fs';
   import { FolderOpen, FileText } from 'lucide-svelte';
   import { MuPDFViewer } from '$lib/components/PDFViewer';
-  import { registerFile } from '$lib/stores/status.svelte';
+  import { registerFile, consumePendingOpenFile } from '$lib/stores/status.svelte';
   import { useTranslations } from '$lib/i18n';
 
   const MODULE = 'Viewer';
@@ -12,6 +13,16 @@
   let filePath = $state<string | null>(null);
   let fileName = $state<string>('');
   let hasUnsavedChanges = $state(false);
+
+  // Check for pending file to open (from app menu)
+  onMount(() => {
+    const pending = consumePendingOpenFile();
+    if (pending) {
+      filePath = pending;
+      fileName = pending.split('/').pop() || 'Document';
+      registerFile(pending, fileName, MODULE);
+    }
+  });
 
   async function handleOpenFile() {
     console.log('[ViewerPage] Opening file dialog...');

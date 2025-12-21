@@ -28,6 +28,9 @@ let logs = $state<LogEntry[]>([]);
 let openFiles = $state<OpenFile[]>([]);
 let isExpanded = $state(false);
 
+// Pending file to open (used for passing file from menu to viewer)
+let pendingOpenFile = $state<string | null>(null);
+
 // Max log entries to keep
 const MAX_LOGS = 100;
 
@@ -116,6 +119,22 @@ export function clearLogs() {
   logs = [];
   currentStatus = 'Ready';
   currentLevel = 'info';
+}
+
+/**
+ * Set a pending file to open in the viewer
+ */
+export function setPendingOpenFile(path: string) {
+  pendingOpenFile = path;
+}
+
+/**
+ * Consume and clear the pending file (returns null if none)
+ */
+export function consumePendingOpenFile(): string | null {
+  const file = pendingOpenFile;
+  pendingOpenFile = null;
+  return file;
 }
 
 /**

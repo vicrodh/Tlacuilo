@@ -1,17 +1,16 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import {
     ChevronLeft,
     ChevronRight,
-    ZoomIn,
-    ZoomOut,
     RotateCw,
     X,
     Minus,
     Plus,
-    Check,
-    ExternalLink,
+    MoveHorizontal,
+    MoveVertical,
+    Maximize,
   } from 'lucide-svelte';
 
   interface Props {
@@ -60,20 +59,28 @@
   let error = $state<string | null>(null);
   let fileName = $state('');
 
-  // Current page image
-  let pageImage = $state<string | null>(null);
-  let pageWidth = $state(0);
-  let pageHeight = $state(0);
-  let isRenderingPage = $state(false);
-
   // Sidebar state
   let sidebarCollapsed = $state(false);
   let thumbnails = $state<RenderedPage[]>([]);
   let isLoadingThumbnails = $state(false);
 
+  // Zoom mode: 'manual', 'fit-width', 'fit-height', 'fit-page'
+  type ZoomMode = 'manual' | 'fit-width' | 'fit-height' | 'fit-page';
+  let zoomMode = $state<ZoomMode>('manual');
+
   // UI elements
   let canvasContainer: HTMLDivElement;
   let pageInputValue = $state('1');
+
+  // Page elements for scroll tracking
+  let pageElements: Map<number, HTMLDivElement> = new Map();
+
+  // Rendered pages for continuous view
+  let renderedPages = $state<RenderedPage[]>([]);
+  let isLoadingPages = $state(false);
+
+  // Prevent scroll handler from updating currentPage during programmatic scroll
+  let isScrollingToPage = $state(false);
 
   // Load PDF info
   async function loadPDF() {
@@ -90,13 +97,19 @@
 
       console.log('[MuPDFViewer] PDF loaded:', pdfInfo.num_pages, 'pages');
 
-      // Render current page
-      await renderCurrentPage();
+      // Load all pages for continuous view
+      await loadAllPages();
 
       // Load thumbnails in background
       loadThumbnails();
 
       isLoading = false;
+
+      // Scroll to initial page after render
+      await tick();
+      if (initialPage > 1) {
+        scrollToPage(initialPage);
+      }
     } catch (err) {
       console.error('[MuPDFViewer] Failed to load PDF:', err);
       error = String(err);
@@ -104,33 +117,58 @@
     }
   }
 
-  // Render current page at current zoom
-  async function renderCurrentPage() {
-    if (!pdfInfo || isRenderingPage) return;
+  // Load all pages for continuous view
+  async function loadAllPages() {
+    if (!pdfInfo || isLoadingPages) return;
 
-    isRenderingPage = true;
+    isLoadingPages = true;
+    renderedPages = [];
 
     try {
-      // Calculate DPI based on zoom (base DPI is 150 for good quality)
       const dpi = Math.round(150 * zoom);
-
-      console.log('[MuPDFViewer] Rendering page', currentPage, 'at DPI', dpi);
-
-      const rendered = await invoke<RenderedPage>('pdf_render_page', {
-        path: filePath,
-        page: currentPage,
-        dpi: dpi,
-        maxWidth: null,
-        maxHeight: null,
-      });
-
-      pageImage = `data:image/png;base64,${rendered.data}`;
-      pageWidth = rendered.width;
-      pageHeight = rendered.height;
+      for (let i = 1; i <= totalPages; i++) {
+        const rendered = await invoke<RenderedPage>('pdf_render_page', {
+          path: filePath,
+          page: i,
+          dpi: dpi,
+          maxWidth: null,
+          maxHeight: null,
+        });
+        renderedPages = [...renderedPages, rendered];
+      }
     } catch (err) {
-      console.error('[MuPDFViewer] Failed to render page:', err);
+      console.error('[MuPDFViewer] Failed to load pages:', err);
     } finally {
-      isRenderingPage = false;
+      isLoadingPages = false;
+    }
+  }
+
+  // Re-render all pages when zoom changes
+  async function reRenderPages() {
+    if (!pdfInfo || isLoadingPages) return;
+
+    isLoadingPages = true;
+
+    try {
+      const dpi = Math.round(150 * zoom);
+      const newPages: RenderedPage[] = [];
+
+      for (let i = 1; i <= totalPages; i++) {
+        const rendered = await invoke<RenderedPage>('pdf_render_page', {
+          path: filePath,
+          page: i,
+          dpi: dpi,
+          maxWidth: null,
+          maxHeight: null,
+        });
+        newPages.push(rendered);
+      }
+
+      renderedPages = newPages;
+    } catch (err) {
+      console.error('[MuPDFViewer] Failed to re-render pages:', err);
+    } finally {
+      isLoadingPages = false;
     }
   }
 
@@ -158,12 +196,25 @@
     }
   }
 
+  // Scroll to a specific page
+  function scrollToPage(page: number) {
+    const element = pageElements.get(page);
+    if (element && canvasContainer) {
+      isScrollingToPage = true;
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Reset flag after scroll animation
+      setTimeout(() => {
+        isScrollingToPage = false;
+      }, 500);
+    }
+  }
+
   // Navigation
   function goToPage(page: number) {
-    if (page >= 1 && page <= totalPages && page !== currentPage) {
+    if (page >= 1 && page <= totalPages) {
       currentPage = page;
       pageInputValue = String(page);
-      renderCurrentPage();
+      scrollToPage(page);
     }
   }
 
@@ -177,10 +228,12 @@
 
   // Zoom
   function zoomIn() {
+    zoomMode = 'manual';
     setZoom(Math.min(zoom + 0.25, 4));
   }
 
   function zoomOut() {
+    zoomMode = 'manual';
     setZoom(Math.max(zoom - 0.25, 0.25));
   }
 
@@ -188,8 +241,62 @@
     const newZoom = Math.max(0.25, Math.min(4, value));
     if (newZoom !== zoom) {
       zoom = newZoom;
-      renderCurrentPage();
+      reRenderPages();
     }
+  }
+
+  function setZoomPreset(value: number) {
+    zoomMode = 'manual';
+    setZoom(value);
+  }
+
+  // Calculate zoom to fit width/height/page
+  function calculateFitZoom(mode: ZoomMode): number {
+    if (!pdfInfo || !canvasContainer) return 1;
+
+    const pageSize = pdfInfo.page_sizes[currentPage - 1];
+    if (!pageSize) return 1;
+
+    // Get container dimensions (subtract padding and sidebar)
+    const containerWidth = canvasContainer.clientWidth - 32; // 16px padding each side
+    const containerHeight = canvasContainer.clientHeight - 32;
+
+    // Page dimensions in points (72 DPI)
+    const pageWidthPts = pageSize.width;
+    const pageHeightPts = pageSize.height;
+
+    // Calculate zoom factors (150 DPI base)
+    const widthZoom = containerWidth / (pageWidthPts * (150 / 72));
+    const heightZoom = containerHeight / (pageHeightPts * (150 / 72));
+
+    switch (mode) {
+      case 'fit-width':
+        return Math.min(Math.max(widthZoom, 0.25), 4);
+      case 'fit-height':
+        return Math.min(Math.max(heightZoom, 0.25), 4);
+      case 'fit-page':
+        return Math.min(Math.max(Math.min(widthZoom, heightZoom), 0.25), 4);
+      default:
+        return 1;
+    }
+  }
+
+  function fitWidth() {
+    zoomMode = 'fit-width';
+    const newZoom = calculateFitZoom('fit-width');
+    setZoom(newZoom);
+  }
+
+  function fitHeight() {
+    zoomMode = 'fit-height';
+    const newZoom = calculateFitZoom('fit-height');
+    setZoom(newZoom);
+  }
+
+  function fitPage() {
+    zoomMode = 'fit-page';
+    const newZoom = calculateFitZoom('fit-page');
+    setZoom(newZoom);
   }
 
   // Rotation (client-side only for now)
@@ -214,6 +321,33 @@
       } else {
         pageInputValue = String(currentPage);
       }
+    }
+  }
+
+  // Scroll tracking - update currentPage based on visible page
+  function handleScroll() {
+    if (!canvasContainer || isScrollingToPage) return;
+
+    const containerRect = canvasContainer.getBoundingClientRect();
+    const containerMiddle = containerRect.top + containerRect.height / 3;
+
+    let closestPage = 1;
+    let closestDistance = Infinity;
+
+    pageElements.forEach((element, page) => {
+      const rect = element.getBoundingClientRect();
+      const elementMiddle = rect.top + rect.height / 2;
+      const distance = Math.abs(elementMiddle - containerMiddle);
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestPage = page;
+      }
+    });
+
+    if (closestPage !== currentPage) {
+      currentPage = closestPage;
+      pageInputValue = String(closestPage);
     }
   }
 
@@ -266,6 +400,28 @@
     } else if (e.key === '-') {
       zoomOut();
     }
+  }
+
+  // Mouse wheel zoom
+  function handleWheel(e: WheelEvent) {
+    if (e.ctrlKey) {
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        zoomIn();
+      } else {
+        zoomOut();
+      }
+    }
+  }
+
+  // Action to register page element
+  function pageRef(element: HTMLDivElement, page: number) {
+    pageElements.set(page, element);
+    return {
+      destroy() {
+        pageElements.delete(page);
+      }
+    };
   }
 
   // Zoom presets
@@ -367,7 +523,7 @@
           >
             {#each zoomPresets as preset}
               <button
-                onclick={() => setZoom(preset)}
+                onclick={() => setZoomPreset(preset)}
                 class="w-full px-3 py-1.5 text-sm text-left hover:bg-[var(--nord3)] transition-colors"
                 style="color: {zoom === preset ? 'var(--nord8)' : 'var(--nord4)'};"
               >
@@ -383,6 +539,36 @@
           title="Zoom in"
         >
           <Plus size={16} />
+        </button>
+
+        <!-- Fit buttons -->
+        <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
+
+        <button
+          onclick={fitWidth}
+          class="p-1.5 rounded transition-colors hover:bg-[var(--nord2)]"
+          class:bg-[var(--nord2)]={zoomMode === 'fit-width'}
+          title="Fit width"
+        >
+          <MoveHorizontal size={16} />
+        </button>
+
+        <button
+          onclick={fitHeight}
+          class="p-1.5 rounded transition-colors hover:bg-[var(--nord2)]"
+          class:bg-[var(--nord2)]={zoomMode === 'fit-height'}
+          title="Fit height"
+        >
+          <MoveVertical size={16} />
+        </button>
+
+        <button
+          onclick={fitPage}
+          class="p-1.5 rounded transition-colors hover:bg-[var(--nord2)]"
+          class:bg-[var(--nord2)]={zoomMode === 'fit-page'}
+          title="Fit page"
+        >
+          <Maximize size={16} />
         </button>
 
         <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
@@ -485,7 +671,7 @@
       </button>
     {/if}
 
-    <!-- Main canvas -->
+    <!-- Main canvas - Continuous scroll view -->
     <div class="flex-1 overflow-hidden">
       {#if isLoading}
         <div class="h-full flex items-center justify-center">
@@ -508,32 +694,50 @@
             </button>
           </div>
         </div>
-      {:else if pageImage}
+      {:else}
         <div
           bind:this={canvasContainer}
-          class="h-full overflow-auto flex items-center justify-center p-4"
+          class="h-full overflow-auto p-4"
           style="background-color: var(--nord0); cursor: {isPanning ? 'grabbing' : 'grab'};"
           onmousedown={handlePanStart}
           onmousemove={handlePanMove}
+          onscroll={handleScroll}
+          onwheel={handleWheel}
           role="application"
           aria-label="PDF viewer"
         >
-          <div class="relative shadow-2xl">
-            <img
-              src={pageImage}
-              alt="Page {currentPage}"
-              class="block"
-              style="
-                background: white;
-                transform: rotate({rotation}deg);
-                max-width: none;
-              "
-              draggable="false"
-            />
-
-            {#if isRenderingPage}
-              <div class="absolute inset-0 flex items-center justify-center bg-white/50">
-                <div class="w-6 h-6 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
+          <div class="flex flex-col items-center gap-4">
+            {#if isLoadingPages && renderedPages.length === 0}
+              <div class="flex flex-col items-center gap-4 py-8">
+                <div class="w-8 h-8 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
+                <p class="text-sm opacity-60">Loading pages...</p>
+              </div>
+            {/if}
+            {#each renderedPages as page (page.page)}
+              <div
+                class="relative shadow-2xl"
+                use:pageRef={page.page}
+                data-page={page.page}
+              >
+                <img
+                  src="data:image/png;base64,{page.data}"
+                  alt="Page {page.page}"
+                  class="block"
+                  style="background: white; transform: rotate({rotation}deg);"
+                  draggable="false"
+                />
+                <div
+                  class="absolute bottom-2 right-2 px-2 py-1 rounded text-xs"
+                  style="background-color: var(--nord0); color: var(--nord4);"
+                >
+                  {page.page}
+                </div>
+              </div>
+            {/each}
+            {#if isLoadingPages && renderedPages.length > 0}
+              <div class="flex items-center gap-2 py-4">
+                <div class="w-4 h-4 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
+                <span class="text-xs opacity-60">Loading more...</span>
               </div>
             {/if}
           </div>
