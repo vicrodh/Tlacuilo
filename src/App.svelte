@@ -4,7 +4,7 @@
 
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { Menu, Activity, ChevronUp, ChevronDown, CheckCircle, AlertCircle, AlertTriangle, Info, Trash2 } from 'lucide-svelte';
+  import { Activity, ChevronUp, ChevronDown, CheckCircle, AlertCircle, AlertTriangle, Info, Trash2 } from 'lucide-svelte';
   import { open } from '@tauri-apps/plugin-dialog';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import Sidebar from './lib/components/Sidebar.svelte';
@@ -19,7 +19,7 @@
   import PlaceholderPage from './lib/views/PlaceholderPage.svelte';
   import { getStatus, toggleExpanded, clearLogs, setPendingOpenFile, type LogLevel } from './lib/stores/status.svelte';
 
-  let sidebarOpen = $state(true);
+  let sidebarExpanded = $state(true);
   let currentPage = $state('home');
 
   const status = getStatus();
@@ -40,7 +40,7 @@
   }
 
   function toggleSidebar() {
-    sidebarOpen = !sidebarOpen;
+    sidebarExpanded = !sidebarExpanded;
   }
 
   async function handleMenuOpen() {
@@ -90,61 +90,36 @@
 </script>
 
 <div class="h-screen flex flex-col" style="background-color: var(--nord0);">
-  <!-- Header / Top Menu Bar -->
-  <header
-    class="h-14 flex items-center justify-between px-4 border-b"
-    style="background-color: var(--nord1); border-color: var(--nord3);"
-  >
-    <div class="flex items-center gap-4">
-      <button
-        onclick={toggleSidebar}
-        class="p-2 rounded-md hover:bg-[var(--nord2)] transition-colors"
-      >
-        <Menu size={20} />
-      </button>
-
-      <div class="flex items-center gap-3">
-        <div
-          class="w-8 h-8 rounded flex items-center justify-center"
-          style="background-color: var(--nord8);"
-        >
-          <span class="text-lg" style="color: var(--nord0);">T</span>
-        </div>
-        <div>
-          <h1 class="leading-none" style="color: var(--nord6);">Tlacuilo</h1>
-          <p class="text-xs opacity-60">Offline PDF toolkit</p>
-        </div>
-      </div>
-    </div>
-
-    <div class="flex items-center gap-2">
-      <span class="text-sm opacity-60">v1.0.0</span>
-    </div>
-  </header>
-
-  <!-- Main Content Area -->
+  <!-- Main Content Area (no header) -->
   <div class="flex-1 flex overflow-hidden">
-    <Sidebar isOpen={sidebarOpen} {currentPage} onNavigate={navigate} />
+    <Sidebar
+      isExpanded={sidebarExpanded}
+      {currentPage}
+      onNavigate={navigate}
+      onToggle={toggleSidebar}
+    />
 
-    {#if currentPage === 'home'}
-      <Dashboard onNavigate={navigate} />
-    {:else if currentPage === 'merge'}
-      <MergePDF />
-    {:else if currentPage === 'split'}
-      <SplitPDF />
-    {:else if currentPage === 'rotate'}
-      <RotatePDF />
-    {:else if currentPage === 'convert'}
-      <ConvertToPDF />
-    {:else if currentPage === 'export'}
-      <ConvertFromPDF />
-    {:else if currentPage === 'viewer'}
-      <ViewerPage />
-    {:else if currentPage === 'settings'}
-      <Settings />
-    {:else}
-      <PlaceholderPage pageName={currentPage} />
-    {/if}
+    <main class="flex-1 flex flex-col overflow-hidden">
+      {#if currentPage === 'home'}
+        <Dashboard onNavigate={navigate} />
+      {:else if currentPage === 'merge'}
+        <MergePDF />
+      {:else if currentPage === 'split'}
+        <SplitPDF />
+      {:else if currentPage === 'rotate'}
+        <RotatePDF />
+      {:else if currentPage === 'convert'}
+        <ConvertToPDF />
+      {:else if currentPage === 'export'}
+        <ConvertFromPDF />
+      {:else if currentPage === 'viewer'}
+        <ViewerPage />
+      {:else if currentPage === 'settings'}
+        <Settings />
+      {:else}
+        <PlaceholderPage pageName={currentPage} />
+      {/if}
+    </main>
   </div>
 
   <!-- Log Panel (expandable) -->

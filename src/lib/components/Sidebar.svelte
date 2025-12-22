@@ -3,7 +3,6 @@
     Home,
     Clock,
     Wrench,
-    ListTodo,
     Settings,
     Merge,
     Scissors,
@@ -26,32 +25,28 @@
     ShieldCheck,
     ScanText,
     Star,
-    BookOpen
+    BookOpen,
+    ChevronsLeft,
+    ChevronsRight
   } from 'lucide-svelte';
-  import { getSettings, getToolById, type Tool } from '$lib/stores/settings.svelte';
+  import { getSettings, type Tool } from '$lib/stores/settings.svelte';
 
   interface Props {
-    isOpen: boolean;
+    isExpanded: boolean;
     currentPage: string;
     onNavigate: (page: string) => void;
+    onToggle: () => void;
   }
 
-  let { isOpen, currentPage, onNavigate }: Props = $props();
+  let { isExpanded, currentPage, onNavigate, onToggle }: Props = $props();
 
   const settings = getSettings();
 
-  // Icon mapping for dynamic rendering
-  const iconMap: Record<string, typeof Merge> = {
-    Merge, Scissors, RotateCw, FileArchive, Image, Images, FileText, FileOutput,
-    Lock, Unlock, EyeOff, Droplet, Hash, Stamp, PenTool, Upload, ShieldCheck,
-    ScanText, Download, Edit
-  };
-
+  // Navigation items (without Settings - it goes at the bottom)
   const navigationItems = [
     { icon: Home, label: 'Home', page: 'home' },
     { icon: Clock, label: 'Recent Files', page: 'recent' },
     { icon: Wrench, label: 'All Tools', page: 'tools' },
-    { icon: Settings, label: 'Settings', page: 'settings' },
   ];
 
   // Map tool ID to icon and page
@@ -131,60 +126,112 @@
   }
 </script>
 
-{#if isOpen}
-  <aside
-    class="w-[14%] min-w-[180px] flex flex-col"
-    style="background-color: var(--nord1);"
-  >
-    <!-- Navigation Section -->
-    <div class="flex-1 p-4">
-      <h3 class="mb-3 opacity-60 tracking-wider text-xs uppercase">Navigation</h3>
-      <nav class="space-y-0.5">
-        {#each navigationItems as item}
-          <button
-            onclick={() => onNavigate(item.page)}
-            class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md transition-colors hover:bg-[var(--nord2)] text-left text-sm"
-            style={currentPage === item.page ? 'background-color: var(--nord2);' : ''}
-          >
-            <item.icon size={16} />
-            <span>{item.label}</span>
-          </button>
-        {/each}
-      </nav>
-    </div>
+<aside
+  class="relative flex flex-col h-full transition-all duration-200"
+  style="background-color: var(--nord1); width: {isExpanded ? '200px' : '64px'};"
+>
+  <!-- App Branding -->
+  <div class="p-3 {isExpanded ? 'px-4' : 'px-2'}">
+    <button
+      onclick={() => onNavigate('home')}
+      class="flex items-center gap-3 w-full rounded-lg p-2 hover:bg-[var(--nord2)] transition-colors"
+      title="Tlacuilo"
+    >
+      <div
+        class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+        style="background-color: var(--nord8);"
+      >
+        <span class="text-xl font-bold" style="color: var(--nord0);">T</span>
+      </div>
+      {#if isExpanded}
+        <div class="text-left overflow-hidden">
+          <h1 class="font-semibold leading-tight truncate" style="color: var(--nord6);">Tlacuilo</h1>
+          <p class="text-[10px] opacity-50 truncate">PDF Toolkit</p>
+        </div>
+      {/if}
+    </button>
+  </div>
 
-    <!-- Separator -->
-    <div
-      class="h-px mx-6"
-      style="background-color: var(--nord3);"
-    ></div>
+  <!-- Separator -->
+  <div class="h-px mx-3" style="background-color: var(--nord3);"></div>
+
+  <!-- Navigation Section -->
+  <div class="flex-1 p-2 overflow-y-auto">
+    <nav class="space-y-1">
+      {#each navigationItems as item}
+        <button
+          onclick={() => onNavigate(item.page)}
+          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-[var(--nord2)] {isExpanded ? 'justify-start' : 'justify-center'}"
+          style={currentPage === item.page ? 'background-color: var(--nord2);' : ''}
+          title={isExpanded ? '' : item.label}
+        >
+          <item.icon size={20} style={currentPage === item.page ? 'color: var(--nord8);' : ''} />
+          {#if isExpanded}
+            <span class="text-sm truncate" style={currentPage === item.page ? 'color: var(--nord8);' : ''}>{item.label}</span>
+          {/if}
+        </button>
+      {/each}
+    </nav>
 
     <!-- Favorites Section -->
-    <div class="flex-1 p-4">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="opacity-60 tracking-wider text-xs uppercase">Favorites</h3>
-        <Star size={12} class="opacity-40" />
-      </div>
-      <nav class="space-y-0.5">
-        {#each settings.favorites as toolId}
-          {@const Icon = getToolIcon(toolId)}
-          {@const page = getToolPage(toolId)}
-          {@const label = getToolLabel(toolId)}
-          <button
-            onclick={() => onNavigate(page)}
-            class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md transition-colors hover:bg-[var(--nord2)] text-left text-sm"
-            style={currentPage === page ? 'background-color: var(--nord2);' : ''}
-          >
-            <Icon size={16} />
-            <span>{label}</span>
-          </button>
-        {/each}
-        {#if settings.favorites.length === 0}
-          <p class="text-xs opacity-40 px-2.5 py-2">
-            No favorites yet. Add from Settings.
-          </p>
+    {#if settings.favorites.length > 0}
+      <div class="mt-4">
+        {#if isExpanded}
+          <div class="flex items-center gap-2 px-3 mb-2">
+            <Star size={12} class="opacity-40" />
+            <span class="text-[10px] opacity-40 uppercase tracking-wider">Favorites</span>
+          </div>
+        {:else}
+          <div class="h-px mx-2 my-2" style="background-color: var(--nord3);"></div>
         {/if}
-      </nav>
-    </div>
-  </aside>
-{/if}
+        <nav class="space-y-1">
+          {#each settings.favorites as toolId}
+            {@const Icon = getToolIcon(toolId)}
+            {@const page = getToolPage(toolId)}
+            {@const label = getToolLabel(toolId)}
+            <button
+              onclick={() => onNavigate(page)}
+              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-[var(--nord2)] {isExpanded ? 'justify-start' : 'justify-center'}"
+              style={currentPage === page ? 'background-color: var(--nord2);' : ''}
+              title={isExpanded ? '' : label}
+            >
+              <Icon size={20} style={currentPage === page ? 'color: var(--nord8);' : ''} />
+              {#if isExpanded}
+                <span class="text-sm truncate" style={currentPage === page ? 'color: var(--nord8);' : ''}>{label}</span>
+              {/if}
+            </button>
+          {/each}
+        </nav>
+      </div>
+    {/if}
+  </div>
+
+  <!-- Settings at Bottom -->
+  <div class="p-2 border-t" style="border-color: var(--nord3);">
+    <button
+      onclick={() => onNavigate('settings')}
+      class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-[var(--nord2)] {isExpanded ? 'justify-start' : 'justify-center'}"
+      style={currentPage === 'settings' ? 'background-color: var(--nord2);' : ''}
+      title={isExpanded ? '' : 'Settings'}
+    >
+      <Settings size={20} style={currentPage === 'settings' ? 'color: var(--nord8);' : ''} />
+      {#if isExpanded}
+        <span class="text-sm" style={currentPage === 'settings' ? 'color: var(--nord8);' : ''}>Settings</span>
+      {/if}
+    </button>
+  </div>
+
+  <!-- Floating Toggle Button -->
+  <button
+    onclick={onToggle}
+    class="absolute top-1/2 -translate-y-1/2 -right-4 w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-105 z-10 shadow-md"
+    style="background-color: var(--nord2); border: 1px solid var(--nord3);"
+    title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+  >
+    {#if isExpanded}
+      <ChevronsLeft size={16} />
+    {:else}
+      <ChevronsRight size={16} />
+    {/if}
+  </button>
+</aside>
