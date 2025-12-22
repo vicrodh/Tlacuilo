@@ -156,45 +156,29 @@ fn ocr_run(
 
 #[tauri::command]
 fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Result<String, String> {
-  if inputs.len() < 2 {
-    return Err("Provide at least two PDF paths to merge.".into());
-  }
+    if inputs.len() < 2 {
+        return Err("Provide at least two PDF paths to merge.".into());
+    }
 
-  let output_path = output.unwrap_or_else(|| {
-    let cache_dir = app
-      .path()
-      .app_cache_dir()
-      .unwrap_or_else(|_| std::env::temp_dir());
-    cache_dir.join("tlacuilo-merge.pdf").to_string_lossy().to_string()
-  });
+    let output_path = output.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir.join("tlacuilo-merge.pdf").to_string_lossy().to_string()
+    });
 
-  let python_bin = resolve_python_bin();
-  let resolved = resolve_backend_script(&app)
-    .ok_or_else(|| "Backend script not found (backend/pdf_pages.py)".to_string())?;
-  let (script_path, _tried) = resolved;
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
 
-  let output = Command::new(&python_bin)
-    .arg(&script_path)
-    .arg("merge")
-    .arg("--output")
-    .arg(&output_path)
-    .arg("--inputs")
-    .args(inputs.clone())
-    .output()
-    .map_err(|e| format!("Failed to spawn python ({python_bin}): {e}"))?;
+    let mut args = vec!["merge", "--output", &output_path, "--inputs"];
+    let input_refs: Vec<&str> = inputs.iter().map(|s| s.as_str()).collect();
+    args.extend(input_refs);
 
-  if !output.status.success() {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    return Err(format!(
-      "Python merge failed (code {:?}). stdout: {} stderr: {}",
-      output.status.code(),
-      stdout,
-      stderr
-    ));
-  }
+    bridge
+        .run_script("pdf_pages.py", &args)
+        .map_err(|e| e.to_string())?;
 
-  Ok(output_path)
+    Ok(output_path)
 }
 
 #[tauri::command]
@@ -218,9 +202,7 @@ fn merge_pages(
             .to_string()
     });
 
-    let python_bin = resolve_python_bin();
-    let (script_path, _) = resolve_backend_script(&app)
-        .ok_or_else(|| "Backend script not found (backend/pdf_pages.py)".to_string())?;
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
 
     // Convert pages to format: file:page file:page ...
     let page_args: Vec<String> = pages
@@ -228,26 +210,13 @@ fn merge_pages(
         .map(|(file, page)| format!("{}:{}", file, page))
         .collect();
 
-    let output = Command::new(&python_bin)
-        .arg(&script_path)
-        .arg("merge-pages")
-        .arg("--output")
-        .arg(&output_path)
-        .arg("--pages")
-        .args(&page_args)
-        .output()
-        .map_err(|e| format!("Failed to spawn python ({python_bin}): {e}"))?;
+    let mut args = vec!["merge-pages", "--output", &output_path, "--pages"];
+    let page_refs: Vec<&str> = page_args.iter().map(|s| s.as_str()).collect();
+    args.extend(page_refs);
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        return Err(format!(
-            "Python merge-pages failed (code {:?}). stdout: {} stderr: {}",
-            output.status.code(),
-            stdout,
-            stderr
-        ));
-    }
+    bridge
+        .run_script("pdf_pages.py", &args)
+        .map_err(|e| e.to_string())?;
 
     Ok(output_path)
 }
