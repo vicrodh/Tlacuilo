@@ -7,7 +7,7 @@
 
 import { getContext, setContext } from 'svelte';
 
-export type AnnotationType = 'highlight' | 'comment' | 'underline' | 'strikethrough';
+export type AnnotationType = 'highlight' | 'comment' | 'underline' | 'strikethrough' | 'freetext';
 
 export interface Point {
   x: number;

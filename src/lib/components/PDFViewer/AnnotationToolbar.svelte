@@ -6,7 +6,8 @@
     Strikethrough,
     MousePointer,
     Trash2,
-    Palette
+    Palette,
+    Type
   } from 'lucide-svelte';
   import {
     type AnnotationType,
@@ -29,6 +30,7 @@
     { type: 'comment', icon: MessageSquare, label: 'Comment' },
     { type: 'underline', icon: Underline, label: 'Underline' },
     { type: 'strikethrough', icon: Strikethrough, label: 'Strikethrough' },
+    { type: 'freetext', icon: Type, label: 'Typewriter' },
   ];
 
   function selectTool(type: AnnotationType | null) {

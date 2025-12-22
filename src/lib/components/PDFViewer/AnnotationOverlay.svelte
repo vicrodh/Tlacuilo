@@ -25,6 +25,11 @@
   let editingComment = $state<string | null>(null);
   let commentText = $state('');
 
+  // Freetext (typewriter) state
+  let editingFreetext = $state<string | null>(null);
+  let freetextValue = $state('');
+  let freetextInputRef: HTMLTextAreaElement;
+
   const annotations = $derived(store.getAnnotationsForPage(page));
 
   // Convert mouse event to NORMALIZED coordinates (0-1)
@@ -59,6 +64,25 @@
     e.preventDefault();
 
     const coords = getRelativeCoords(e);
+
+    // Freetext: click to place, no drag needed
+    if (store.activeTool === 'freetext') {
+      // Create annotation with minimal size, will expand based on text
+      const annotation = store.addAnnotation({
+        type: 'freetext',
+        page,
+        rect: { x: coords.x, y: coords.y, width: 0.15, height: 0.03 },
+        color: store.activeColor,
+        opacity: 1,
+        text: '',
+      });
+      editingFreetext = annotation.id;
+      freetextValue = '';
+      // Focus input after render
+      setTimeout(() => freetextInputRef?.focus(), 0);
+      return;
+    }
+
     isDrawing = true;
     drawStart = coords;
     drawRect = { x: coords.x, y: coords.y, width: 0, height: 0 };
@@ -154,10 +178,42 @@
     commentText = '';
   }
 
+  // Freetext handlers
+  function handleFreetextSave(id: string) {
+    if (freetextValue.trim()) {
+      store.updateAnnotation(id, { text: freetextValue });
+    } else {
+      store.deleteAnnotation(id);
+    }
+    editingFreetext = null;
+    freetextValue = '';
+  }
+
+  function handleFreetextCancel(id: string) {
+    const ann = store.getAnnotationsForPage(page).find(a => a.id === id);
+    if (!ann?.text) {
+      store.deleteAnnotation(id);
+    }
+    editingFreetext = null;
+    freetextValue = '';
+  }
+
+  function handleFreetextKeydown(e: KeyboardEvent, id: string) {
+    if (e.key === 'Escape') {
+      handleFreetextCancel(id);
+    }
+    // Enter without Shift saves
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleFreetextSave(id);
+    }
+  }
+
   const cursorStyle = $derived(() => {
     if (!interactive) return 'default';
     if (!store.activeTool) return 'default';
     if (store.activeTool === 'comment') return 'cell';
+    if (store.activeTool === 'freetext') return 'text';
     return 'crosshair';
   });
 </script>
@@ -244,6 +300,31 @@
           <MessageSquare size={16} style="color: white;" />
         </foreignObject>
       </g>
+    {:else if annotation.type === 'freetext'}
+      <!-- Freetext / Typewriter annotation -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <foreignObject
+        x={pixelRect.x}
+        y={pixelRect.y}
+        width={Math.max(pixelRect.width, 100)}
+        height={Math.max(pixelRect.height, 20)}
+        class="cursor-pointer overflow-visible"
+        onclick={(e) => handleAnnotationClick(e, annotation)}
+      >
+        <div
+          xmlns="http://www.w3.org/1999/xhtml"
+          class="text-xs whitespace-pre-wrap"
+          style="
+            color: {annotation.color};
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.3;
+          "
+        >
+          {annotation.text || ''}
+        </div>
+      </foreignObject>
     {/if}
   {/each}
 
@@ -337,8 +418,46 @@
   {/if}
 {/if}
 
+<!-- Freetext edit input -->
+{#if editingFreetext}
+  {@const annotation = annotations.find(a => a.id === editingFreetext)}
+  {#if annotation}
+    {@const inputRect = toPixelRect(annotation.rect)}
+    <div
+      class="absolute z-50"
+      style="
+        left: {inputRect.x}px;
+        top: {inputRect.y}px;
+      "
+    >
+      <textarea
+        bind:this={freetextInputRef}
+        bind:value={freetextValue}
+        onkeydown={(e) => handleFreetextKeydown(e, editingFreetext!)}
+        onblur={() => handleFreetextSave(editingFreetext!)}
+        class="px-1 py-0.5 rounded text-xs resize-none outline-none"
+        style="
+          background-color: rgba(255, 255, 255, 0.95);
+          border: 1px solid {annotation.color};
+          color: {annotation.color};
+          font-family: Helvetica, Arial, sans-serif;
+          font-size: 12px;
+          line-height: 1.3;
+          min-width: 150px;
+          min-height: 24px;
+        "
+        placeholder="Type here..."
+        rows="1"
+      ></textarea>
+      <div class="text-[10px] mt-1 opacity-60" style="color: var(--nord4);">
+        Enter to save, Shift+Enter for new line, Esc to cancel
+      </div>
+    </div>
+  {/if}
+{/if}
+
 <!-- Selected annotation controls -->
-{#if store.selectedId && !editingComment}
+{#if store.selectedId && !editingComment && !editingFreetext}
   {@const selected = annotations.find(a => a.id === store.selectedId)}
   {#if selected}
     {@const selectedRect = toPixelRect(selected.rect)}
@@ -351,7 +470,7 @@
         border: 1px solid var(--nord3);
       "
     >
-      {#if selected.type === 'comment' && selected.text}
+      {#if (selected.type === 'comment' || selected.type === 'freetext') && selected.text}
         <div
           class="px-2 py-1 text-xs max-w-[200px]"
           style="color: var(--nord4);"

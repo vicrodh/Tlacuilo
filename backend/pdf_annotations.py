@@ -30,6 +30,7 @@ ANNOT_TYPE_MAP = {
     "underline": fitz.PDF_ANNOT_UNDERLINE,
     "strikethrough": fitz.PDF_ANNOT_STRIKE_OUT,
     "comment": fitz.PDF_ANNOT_TEXT,
+    "freetext": fitz.PDF_ANNOT_FREE_TEXT,
 }
 
 # Reverse map for reading
@@ -38,7 +39,7 @@ ANNOT_TYPE_REVERSE = {
     fitz.PDF_ANNOT_UNDERLINE: "underline",
     fitz.PDF_ANNOT_STRIKE_OUT: "strikethrough",
     fitz.PDF_ANNOT_TEXT: "comment",
-    fitz.PDF_ANNOT_FREE_TEXT: "comment",
+    fitz.PDF_ANNOT_FREE_TEXT: "freetext",
 }
 
 
@@ -175,6 +176,15 @@ def embed_annotations(
                     point = fitz.Point(pdf_rect.x0, pdf_rect.y0)
                     annot = page.add_text_annot(point, text or "")
                     annot.set_colors(stroke=color_rgb)
+                elif annot_type == "freetext":
+                    # FreeText annotation (typewriter - text directly on page)
+                    annot = page.add_freetext_annot(
+                        pdf_rect,
+                        text or "",
+                        fontsize=12,
+                        fontname="helv",
+                        text_color=color_rgb,
+                    )
                 elif annot_type in ("highlight", "underline", "strikethrough"):
                     # Text markup annotations need quads
                     quad = rect_to_quad(pdf_rect)
