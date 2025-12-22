@@ -92,11 +92,11 @@
         class="absolute top-full left-0 mt-1 p-2 rounded-lg shadow-lg z-50"
         style="background-color: var(--nord1); border: 1px solid var(--nord3);"
       >
-        <div class="grid grid-cols-3 gap-1">
+        <div class="grid grid-cols-3 gap-2">
           {#each HIGHLIGHT_COLORS as color}
             <button
               onclick={() => selectColor(color.value)}
-              class="w-8 h-8 rounded border-2 transition-transform hover:scale-110"
+              class="w-7 h-7 rounded border-2 transition-transform hover:scale-105"
               style="background-color: {color.value}; border-color: {store.activeColor === color.value ? 'var(--nord6)' : 'transparent'};"
               title={color.name}
             ></button>
