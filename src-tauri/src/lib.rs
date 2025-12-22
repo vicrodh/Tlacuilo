@@ -223,62 +223,43 @@ fn merge_pages(
 
 #[tauri::command]
 fn split_pdf(
-  app: AppHandle,
-  input: String,
-  output_dir: Option<String>,
-  ranges: Option<Vec<String>>,
+    app: AppHandle,
+    input: String,
+    output_dir: Option<String>,
+    ranges: Option<Vec<String>>,
 ) -> Result<Vec<String>, String> {
-  let (script_path, _) = resolve_backend_script(&app)
-    .ok_or_else(|| "Backend script not found (backend/pdf_pages.py)".to_string())?;
-  let python_bin = resolve_python_bin();
+    let out_dir = output_dir.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir.join("tlacuilo-split").to_string_lossy().to_string()
+    });
 
-  let out_dir = output_dir.unwrap_or_else(|| {
-    let cache_dir = app
-      .path()
-      .app_cache_dir()
-      .unwrap_or_else(|_| std::env::temp_dir());
-    cache_dir.join("tlacuilo-split").to_string_lossy().to_string()
-  });
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
 
-  let mut cmd = Command::new(&python_bin);
-  cmd
-    .arg(&script_path)
-    .arg("split")
-    .arg("--input")
-    .arg(&input)
-    .arg("--output-dir")
-    .arg(&out_dir);
+    let mut args: Vec<&str> = vec!["split", "--input", &input, "--output-dir", &out_dir];
 
-  // Add ranges if provided
-  if let Some(ref range_list) = ranges {
-    if !range_list.is_empty() {
-      cmd.arg("--ranges");
-      cmd.args(range_list);
+    // Add ranges if provided
+    let range_refs: Vec<String> = ranges.as_ref().map(|r| r.clone()).unwrap_or_default();
+    if !range_refs.is_empty() {
+        args.push("--ranges");
+        for r in &range_refs {
+            args.push(r);
+        }
     }
-  }
 
-  let output = cmd
-    .output()
-    .map_err(|e| format!("Failed to spawn python ({python_bin}): {e}"))?;
+    bridge
+        .run_script("pdf_pages.py", &args)
+        .map_err(|e| e.to_string())?;
 
-  if !output.status.success() {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    return Err(format!(
-      "Python split failed (code {:?}). stdout: {} stderr: {}",
-      output.status.code(),
-      stdout,
-      stderr
-    ));
-  }
-
-  // Return the output directory and the number of files created based on ranges
-  let num_files = ranges.as_ref().map(|r| r.len()).unwrap_or(0);
-  let mut result = vec![out_dir.clone()];
-  for i in 1..=num_files.max(1) {
-    result.push(format!("{}/split_{}.pdf", out_dir, i));
-  }
-  Ok(result)
+    // Return the output directory and the number of files created based on ranges
+    let num_files = ranges.as_ref().map(|r| r.len()).unwrap_or(0);
+    let mut result = vec![out_dir.clone()];
+    for i in 1..=num_files.max(1) {
+        result.push(format!("{}/split_{}.pdf", out_dir, i));
+    }
+    Ok(result)
 }
 
 #[tauri::command]
