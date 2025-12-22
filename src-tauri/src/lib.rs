@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 mod pdf_viewer;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ImageTransform {
@@ -474,6 +474,13 @@ pub fn run() {
     .menu(|app| {
       let file = SubmenuBuilder::new(app, "File")
         .item(
+          &MenuItemBuilder::new("Open")
+            .id("open")
+            .accelerator("CmdOrCtrl+O")
+            .build(app)?,
+        )
+        .separator()
+        .item(
           &MenuItemBuilder::new("Quit")
             .id("quit")
             .accelerator("CmdOrCtrl+Q")
@@ -499,6 +506,12 @@ pub fn run() {
     })
     .on_menu_event(|app, event| {
       match event.id().as_ref() {
+        "open" => {
+          // Emit event to frontend to handle file open
+          if let Some(window) = app.get_webview_window("main") {
+            let _ = window.emit("menu-open", ());
+          }
+        }
         "quit" => app.exit(0),
         _ => {}
       }

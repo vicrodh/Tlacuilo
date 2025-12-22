@@ -3,8 +3,10 @@
 </svelte:head>
 
 <script lang="ts">
-  import { Menu, Activity, ChevronUp, ChevronDown, CheckCircle, AlertCircle, AlertTriangle, Info, Trash2, FolderOpen, Settings as SettingsIcon, ChevronRight } from 'lucide-svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { Menu, Activity, ChevronUp, ChevronDown, CheckCircle, AlertCircle, AlertTriangle, Info, Trash2 } from 'lucide-svelte';
   import { open } from '@tauri-apps/plugin-dialog';
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import Sidebar from './lib/components/Sidebar.svelte';
   import Dashboard from './lib/views/Dashboard.svelte';
   import MergePDF from './lib/views/MergePDF.svelte';
@@ -19,9 +21,19 @@
 
   let sidebarOpen = $state(true);
   let currentPage = $state('home');
-  let fileMenuOpen = $state(false);
 
   const status = getStatus();
+
+  let unlistenMenuOpen: UnlistenFn | null = null;
+
+  onMount(async () => {
+    // Listen for File > Open from native menu
+    unlistenMenuOpen = await listen('menu-open', handleMenuOpen);
+  });
+
+  onDestroy(() => {
+    unlistenMenuOpen?.();
+  });
 
   function navigate(page: string) {
     currentPage = page;
@@ -31,16 +43,7 @@
     sidebarOpen = !sidebarOpen;
   }
 
-  function toggleFileMenu() {
-    fileMenuOpen = !fileMenuOpen;
-  }
-
-  function closeFileMenu() {
-    fileMenuOpen = false;
-  }
-
-  async function handleOpenFromMenu() {
-    closeFileMenu();
+  async function handleMenuOpen() {
     try {
       const selected = await open({
         multiple: false,
@@ -53,11 +56,6 @@
     } catch (err) {
       console.error('[App] File dialog error:', err);
     }
-  }
-
-  function handleSettingsFromMenu() {
-    closeFileMenu();
-    navigate('settings');
   }
 
   const currentDate = new Date().toLocaleDateString();
@@ -104,45 +102,6 @@
       >
         <Menu size={20} />
       </button>
-
-      <!-- File Menu -->
-      <div class="relative">
-        <button
-          onclick={toggleFileMenu}
-          class="px-3 py-1.5 rounded-md hover:bg-[var(--nord2)] transition-colors text-sm flex items-center gap-1"
-        >
-          File
-          <ChevronDown size={14} class="opacity-60" />
-        </button>
-        {#if fileMenuOpen}
-          <div
-            class="absolute top-full left-0 mt-1 py-1 rounded-lg shadow-xl z-50 min-w-[160px]"
-            style="background-color: var(--nord2); border: 1px solid var(--nord3);"
-          >
-            <button
-              onclick={handleOpenFromMenu}
-              class="w-full flex items-center gap-3 px-4 py-2 text-sm text-left hover:bg-[var(--nord3)] transition-colors"
-            >
-              <FolderOpen size={16} class="opacity-80" />
-              Open
-            </button>
-            <div class="h-px mx-2 my-1" style="background-color: var(--nord3);"></div>
-            <button
-              onclick={handleSettingsFromMenu}
-              class="w-full flex items-center gap-3 px-4 py-2 text-sm text-left hover:bg-[var(--nord3)] transition-colors"
-            >
-              <SettingsIcon size={16} class="opacity-80" />
-              Settings
-            </button>
-          </div>
-          <!-- Backdrop to close menu on outside click -->
-          <button
-            class="fixed inset-0 z-40"
-            onclick={closeFileMenu}
-            aria-label="Close menu"
-          ></button>
-        {/if}
-      </div>
 
       <div class="flex items-center gap-3">
         <div
