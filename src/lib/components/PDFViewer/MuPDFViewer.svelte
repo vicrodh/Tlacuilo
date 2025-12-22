@@ -16,6 +16,7 @@
   import { createAnnotationsStore } from '$lib/stores/annotations.svelte';
   import AnnotationToolbar from './AnnotationToolbar.svelte';
   import AnnotationOverlay from './AnnotationOverlay.svelte';
+  import AnnotationsPanel from './AnnotationsPanel.svelte';
 
   interface Props {
     filePath: string;
@@ -83,9 +84,10 @@
   // Page elements for scroll tracking
   let pageElements: Map<number, HTMLDivElement> = new Map();
 
-  // Rendered pages for continuous view
-  let renderedPages = $state<RenderedPage[]>([]);
-  let isLoadingPages = $state(false);
+  // Virtual scrolling: only load visible pages + buffer
+  let loadedPages = $state<Map<number, RenderedPage>>(new Map());
+  let loadingPages = $state<Set<number>>(new Set());
+  const PAGE_BUFFER = 2; // Pages to load above/below viewport
 
   // Prevent scroll handler from updating currentPage during programmatic scroll
   let isScrollingToPage = $state(false);
@@ -105,16 +107,21 @@
 
       console.log('[MuPDFViewer] PDF loaded:', pdfInfo.num_pages, 'pages');
 
-      // Load all pages for continuous view
-      await loadAllPages();
-
-      // Load thumbnails in background
-      loadThumbnails();
+      // Clear any previously loaded pages
+      loadedPages = new Map();
+      loadingPages = new Set();
 
       isLoading = false;
 
-      // Scroll to initial page after render
+      // Load thumbnails in background (limit for large docs)
+      if (totalPages <= 100) {
+        loadThumbnails();
+      }
+
+      // Wait for DOM to render placeholders, then load visible pages
       await tick();
+      loadVisiblePages();
+
       if (initialPage > 1) {
         scrollToPage(initialPage);
       }
@@ -125,59 +132,94 @@
     }
   }
 
-  // Load all pages for continuous view
-  async function loadAllPages() {
-    if (!pdfInfo || isLoadingPages) return;
+  // Calculate page dimensions at current zoom
+  function getPageDimensions(pageIndex: number): { width: number; height: number } {
+    if (!pdfInfo || !pdfInfo.page_sizes[pageIndex]) {
+      return { width: 612, height: 792 }; // Default letter size
+    }
+    const size = pdfInfo.page_sizes[pageIndex];
+    // Convert from points to pixels at 150 DPI base, scaled by zoom
+    const scale = (150 / 72) * zoom;
+    return {
+      width: Math.round(size.width * scale),
+      height: Math.round(size.height * scale),
+    };
+  }
 
-    isLoadingPages = true;
-    renderedPages = [];
+  // Load a single page
+  async function loadPage(pageNum: number): Promise<void> {
+    if (loadedPages.has(pageNum) || loadingPages.has(pageNum)) return;
+
+    loadingPages.add(pageNum);
+    loadingPages = new Set(loadingPages);
 
     try {
       const dpi = Math.round(150 * zoom);
-      for (let i = 1; i <= totalPages; i++) {
-        const rendered = await invoke<RenderedPage>('pdf_render_page', {
-          path: filePath,
-          page: i,
-          dpi: dpi,
-          maxWidth: null,
-          maxHeight: null,
-        });
-        renderedPages = [...renderedPages, rendered];
-      }
+      const rendered = await invoke<RenderedPage>('pdf_render_page', {
+        path: filePath,
+        page: pageNum,
+        dpi: dpi,
+        maxWidth: null,
+        maxHeight: null,
+      });
+
+      loadedPages.set(pageNum, rendered);
+      loadedPages = new Map(loadedPages);
     } catch (err) {
-      console.error('[MuPDFViewer] Failed to load pages:', err);
+      console.error(`[MuPDFViewer] Failed to load page ${pageNum}:`, err);
     } finally {
-      isLoadingPages = false;
+      loadingPages.delete(pageNum);
+      loadingPages = new Set(loadingPages);
     }
   }
 
-  // Re-render all pages when zoom changes
-  async function reRenderPages() {
-    if (!pdfInfo || isLoadingPages) return;
+  // Determine which pages are visible and load them
+  function loadVisiblePages() {
+    if (!canvasContainer || !pdfInfo) return;
 
-    isLoadingPages = true;
+    const containerRect = canvasContainer.getBoundingClientRect();
+    const scrollTop = canvasContainer.scrollTop;
+    const viewportTop = scrollTop;
+    const viewportBottom = scrollTop + containerRect.height;
 
-    try {
-      const dpi = Math.round(150 * zoom);
-      const newPages: RenderedPage[] = [];
+    // Calculate which pages are visible based on cumulative heights
+    let cumulativeHeight = 0;
+    const gap = 16; // Gap between pages (gap-4 = 1rem = 16px)
+    const pagesToLoad: number[] = [];
 
-      for (let i = 1; i <= totalPages; i++) {
-        const rendered = await invoke<RenderedPage>('pdf_render_page', {
-          path: filePath,
-          page: i,
-          dpi: dpi,
-          maxWidth: null,
-          maxHeight: null,
-        });
-        newPages.push(rendered);
+    for (let i = 0; i < totalPages; i++) {
+      const pageNum = i + 1;
+      const dims = getPageDimensions(i);
+      const pageTop = cumulativeHeight;
+      const pageBottom = pageTop + dims.height;
+
+      // Check if page is in viewport or within buffer
+      const inViewport = pageBottom >= viewportTop && pageTop <= viewportBottom;
+      const inBuffer = pageBottom >= viewportTop - (dims.height * PAGE_BUFFER) &&
+                       pageTop <= viewportBottom + (dims.height * PAGE_BUFFER);
+
+      if (inBuffer) {
+        pagesToLoad.push(pageNum);
       }
 
-      renderedPages = newPages;
-    } catch (err) {
-      console.error('[MuPDFViewer] Failed to re-render pages:', err);
-    } finally {
-      isLoadingPages = false;
+      cumulativeHeight = pageBottom + gap;
     }
+
+    // Load visible pages (don't await, let them load in parallel)
+    for (const pageNum of pagesToLoad) {
+      loadPage(pageNum);
+    }
+  }
+
+  // Re-render visible pages when zoom changes
+  async function reRenderPages() {
+    if (!pdfInfo) return;
+
+    // Clear loaded pages and reload visible ones
+    loadedPages = new Map();
+    loadingPages = new Set();
+    await tick();
+    loadVisiblePages();
   }
 
   // Load thumbnails for sidebar
@@ -332,7 +374,7 @@
     }
   }
 
-  // Scroll tracking - update currentPage based on visible page
+  // Scroll tracking - update currentPage based on visible page and load visible pages
   function handleScroll() {
     if (!canvasContainer || isScrollingToPage) return;
 
@@ -357,6 +399,9 @@
       currentPage = closestPage;
       pageInputValue = String(closestPage);
     }
+
+    // Load visible pages on scroll (debounced naturally by browser)
+    loadVisiblePages();
   }
 
   // Panning support
@@ -708,7 +753,7 @@
     {/if}
 
     <!-- Main canvas - Continuous scroll view -->
-    <div class="flex-1 overflow-hidden">
+    <div class="flex-1 overflow-hidden flex">
       {#if isLoading}
         <div class="h-full flex items-center justify-center">
           <div class="flex flex-col items-center gap-4">
@@ -733,7 +778,7 @@
       {:else}
         <div
           bind:this={canvasContainer}
-          class="h-full overflow-auto p-4"
+          class="flex-1 h-full overflow-y-auto overflow-x-hidden p-4"
           style="background-color: var(--nord0); cursor: {isAnnotationMode ? 'default' : (isPanning ? 'grabbing' : 'grab')};"
           onmousedown={handlePanStart}
           onmousemove={handlePanMove}
@@ -743,53 +788,73 @@
           aria-label="PDF viewer"
         >
           <div class="flex flex-col items-center gap-4">
-            {#if isLoadingPages && renderedPages.length === 0}
-              <div class="flex flex-col items-center gap-4 py-8">
-                <div class="w-8 h-8 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
-                <p class="text-sm opacity-60">Loading pages...</p>
-              </div>
-            {/if}
-            {#each renderedPages as page (page.page)}
+            {#each Array.from({ length: totalPages }, (_, i) => i + 1) as pageNum (pageNum)}
+              {@const dims = getPageDimensions(pageNum - 1)}
+              {@const loadedPage = loadedPages.get(pageNum)}
+              {@const isLoading = loadingPages.has(pageNum)}
               <div
                 class="relative shadow-2xl"
-                use:pageRef={page.page}
-                data-page={page.page}
+                use:pageRef={pageNum}
+                data-page={pageNum}
+                style="width: {dims.width}px; min-height: {dims.height}px;"
               >
-                <img
-                  src="data:image/png;base64,{page.data}"
-                  alt="Page {page.page}"
-                  class="block"
-                  style="background: white; transform: rotate({rotation}deg);"
-                  draggable="false"
-                />
-
-                <!-- Annotation overlay -->
-                {#if showAnnotationTools}
-                  <AnnotationOverlay
-                    store={annotationsStore}
-                    page={page.page}
-                    pageWidth={page.width}
-                    pageHeight={page.height}
-                    scale={1}
+                {#if loadedPage}
+                  <!-- Loaded page -->
+                  <img
+                    src="data:image/png;base64,{loadedPage.data}"
+                    alt="Page {pageNum}"
+                    class="block"
+                    style="background: white; transform: rotate({rotation}deg);"
+                    draggable="false"
                   />
+
+                  <!-- Annotation overlay -->
+                  {#if showAnnotationTools}
+                    <AnnotationOverlay
+                      store={annotationsStore}
+                      page={pageNum}
+                      pageWidth={loadedPage.width}
+                      pageHeight={loadedPage.height}
+                      scale={1}
+                    />
+                  {/if}
+                {:else}
+                  <!-- Placeholder -->
+                  <div
+                    class="flex items-center justify-center"
+                    style="width: {dims.width}px; height: {dims.height}px; background-color: var(--nord2);"
+                  >
+                    {#if isLoading}
+                      <div class="w-6 h-6 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
+                    {:else}
+                      <span class="text-sm opacity-40">Page {pageNum}</span>
+                    {/if}
+                  </div>
                 {/if}
 
                 <div
                   class="absolute bottom-2 right-2 px-2 py-1 rounded text-xs pointer-events-none"
                   style="background-color: var(--nord0); color: var(--nord4);"
                 >
-                  {page.page}
+                  {pageNum}
                 </div>
               </div>
             {/each}
-            {#if isLoadingPages && renderedPages.length > 0}
-              <div class="flex items-center gap-2 py-4">
-                <div class="w-4 h-4 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
-                <span class="text-xs opacity-60">Loading more...</span>
-              </div>
-            {/if}
           </div>
         </div>
+
+        <!-- Annotations Panel (right sidebar) -->
+        {#if showAnnotationTools}
+          <div
+            class="w-56 border-l flex-shrink-0"
+            style="border-color: var(--nord3);"
+          >
+            <AnnotationsPanel
+              store={annotationsStore}
+              onNavigateToPage={goToPage}
+            />
+          </div>
+        {/if}
       {/if}
     </div>
   </div>
