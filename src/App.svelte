@@ -13,6 +13,7 @@
   import SplitPDF from './lib/views/SplitPDF.svelte';
   import RotatePDF from './lib/views/RotatePDF.svelte';
   import CompressPDF from './lib/views/CompressPDF.svelte';
+  import OCRPDF from './lib/views/OCRPDF.svelte';
   import ConvertToPDF from './lib/views/ConvertToPDF.svelte';
   import ConvertFromPDF from './lib/views/ConvertFromPDF.svelte';
   import ViewerPage from './lib/views/ViewerPage.svelte';
@@ -111,6 +112,8 @@
         <RotatePDF />
       {:else if currentPage === 'compress'}
         <CompressPDF />
+      {:else if currentPage === 'ocr'}
+        <OCRPDF />
       {:else if currentPage === 'convert'}
         <ConvertToPDF />
       {:else if currentPage === 'export'}

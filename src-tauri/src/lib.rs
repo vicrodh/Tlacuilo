@@ -4,6 +4,7 @@ use std::process::Command;
 use serde::{Deserialize, Serialize};
 
 mod pdf_compress;
+mod pdf_ocr;
 mod pdf_viewer;
 mod python_bridge;
 
@@ -107,6 +108,45 @@ fn compress_pdf(
 #[tauri::command]
 fn estimate_compression(input: String) -> Result<pdf_compress::EstimationResult, String> {
     pdf_compress::estimate_compression(&input)
+}
+
+// ============================================================================
+// OCR Commands
+// ============================================================================
+
+/// Check OCR dependencies
+#[tauri::command]
+fn ocr_check_dependencies(app: AppHandle) -> Result<pdf_ocr::OcrDependencies, String> {
+    pdf_ocr::check_dependencies(&app)
+}
+
+/// Analyze PDF for OCR needs
+#[tauri::command]
+fn ocr_analyze_pdf(app: AppHandle, input: String) -> Result<pdf_ocr::OcrAnalysis, String> {
+    pdf_ocr::analyze_pdf(&app, &input)
+}
+
+/// Run OCR on a PDF
+#[tauri::command]
+fn ocr_run(
+    app: AppHandle,
+    input: String,
+    output: Option<String>,
+    options: Option<pdf_ocr::OcrOptions>,
+) -> Result<pdf_ocr::OcrResult, String> {
+    let output_path = output.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir
+            .join("tlacuilo-ocr.pdf")
+            .to_string_lossy()
+            .to_string()
+    });
+
+    let opts = options.unwrap_or_default();
+    pdf_ocr::run_ocr(&app, &input, &output_path, opts)
 }
 
 // ============================================================================
@@ -633,6 +673,10 @@ pub fn run() {
       // PDF compression (MuPDF)
       compress_pdf,
       estimate_compression,
+      // OCR (Python/OCRmyPDF)
+      ocr_check_dependencies,
+      ocr_analyze_pdf,
+      ocr_run,
       // PDF operations (Legacy Python)
       merge_pdfs,
       merge_pages,
