@@ -11,7 +11,11 @@
     MoveHorizontal,
     MoveVertical,
     Maximize,
+    PenTool,
   } from 'lucide-svelte';
+  import { createAnnotationsStore } from '$lib/stores/annotations.svelte';
+  import AnnotationToolbar from './AnnotationToolbar.svelte';
+  import AnnotationOverlay from './AnnotationOverlay.svelte';
 
   interface Props {
     filePath: string;
@@ -58,6 +62,10 @@
   let isLoading = $state(true);
   let error = $state<string | null>(null);
   let fileName = $state('');
+
+  // Annotations
+  const annotationsStore = createAnnotationsStore();
+  let showAnnotationTools = $state(false);
 
   // Sidebar state
   let sidebarCollapsed = $state(false);
@@ -456,7 +464,7 @@
       class="flex items-center justify-between px-3 py-2 border-b"
       style="background-color: var(--nord1); border-color: var(--nord3);"
     >
-      <!-- Left: Rotate -->
+      <!-- Left: Rotate & Annotate -->
       <div class="flex items-center gap-1">
         <button
           onclick={rotate}
@@ -464,6 +472,18 @@
           title="Rotate 90deg"
         >
           <RotateCw size={16} />
+        </button>
+
+        <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
+
+        <button
+          onclick={() => showAnnotationTools = !showAnnotationTools}
+          class="p-2 rounded-lg transition-colors"
+          class:bg-[var(--nord8)]={showAnnotationTools}
+          style="color: {showAnnotationTools ? 'var(--nord0)' : 'var(--nord4)'};"
+          title="Annotation tools"
+        >
+          <PenTool size={16} />
         </button>
       </div>
 
@@ -584,6 +604,16 @@
         {/if}
       </div>
     </div>
+
+    <!-- Annotation Toolbar -->
+    {#if showAnnotationTools}
+      <div
+        class="flex items-center justify-center px-3 py-2 border-b"
+        style="background-color: var(--nord1); border-color: var(--nord3);"
+      >
+        <AnnotationToolbar store={annotationsStore} />
+      </div>
+    {/if}
   {/if}
 
   <div class="flex-1 flex overflow-hidden">
@@ -726,8 +756,20 @@
                   style="background: white; transform: rotate({rotation}deg);"
                   draggable="false"
                 />
+
+                <!-- Annotation overlay -->
+                {#if showAnnotationTools}
+                  <AnnotationOverlay
+                    store={annotationsStore}
+                    page={page.page}
+                    pageWidth={page.width}
+                    pageHeight={page.height}
+                    scale={1}
+                  />
+                {/if}
+
                 <div
-                  class="absolute bottom-2 right-2 px-2 py-1 rounded text-xs"
+                  class="absolute bottom-2 right-2 px-2 py-1 rounded text-xs pointer-events-none"
                   style="background-color: var(--nord0); color: var(--nord4);"
                 >
                   {page.page}
