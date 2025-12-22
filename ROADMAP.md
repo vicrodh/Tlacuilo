@@ -98,3 +98,13 @@
 - Minimum one commit per feature
 - Multiple commits for complex tasks
 - Checkpoint commits before major refactors
+
+---
+
+## Backlog
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| Interactive Help system | Medium | Detect distro, show real package commands (pacman/apt/dnf) |
+| "Open with Tlacuilo" system registration | Low | Register as PDF handler in desktop |
+| Splash screen with loading indicator | Low | Show during app initialization |
