@@ -149,7 +149,7 @@ fn ocr_run(
 }
 
 // ============================================================================
-// PDF Operations Commands (Legacy Python-based)
+// PDF Operations Commands (PythonBridge)
 // ============================================================================
 
 #[tauri::command]
@@ -541,7 +541,7 @@ pub fn run() {
       ocr_check_dependencies,
       ocr_analyze_pdf,
       ocr_run,
-      // PDF operations (Legacy Python)
+      // PDF operations (PythonBridge)
       merge_pdfs,
       merge_pages,
       split_pdf,
