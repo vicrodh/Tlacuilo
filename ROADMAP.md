@@ -23,8 +23,8 @@
 ## Phase B: Python Integration
 
 ### Prerequisites
-- [ ] Build `python_bridge.rs` module for subprocess management
-- [ ] Implement dependency checking and virtual environment support
+- [x] Build `python_bridge.rs` module for subprocess management
+- [x] Implement dependency checking and virtual environment support
 
 | Tool | Status | Technology | Notes |
 |------|--------|------------|-------|
@@ -67,6 +67,19 @@
 | Image Insertion | ⬜ Pending | |
 | Form Fields | ⬜ Pending | |
 | Digital Signatures | ⬜ Pending | |
+
+---
+
+## Phase F: Code Consolidation & Refactoring
+
+> **Goal**: Eliminate duplicated code patterns and consolidate similar implementations.
+
+| Task | Status | Description |
+|------|--------|-------------|
+| Migrate PDF ops to python_bridge | ⬜ Pending | Refactor merge_pdfs, split_pdf, rotate_pdf to use PythonBridge |
+| Unify error handling | ⬜ Pending | Standardize error types across all Tauri commands |
+| Extract common UI patterns | ⬜ Pending | Create reusable Svelte components for file selection, progress, etc. |
+| Consolidate i18n | ⬜ Pending | Ensure all user-facing strings use translation system |
 
 ---
 
