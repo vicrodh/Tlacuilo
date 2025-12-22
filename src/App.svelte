@@ -115,7 +115,7 @@
       {:else if currentPage === 'ocr'}
         <OCRPDF />
       {:else if currentPage === 'convert'}
-        <ConvertToPDF />
+        <ConvertToPDF onOpenInViewer={(path) => { setPendingOpenFile(path); navigate('viewer'); }} />
       {:else if currentPage === 'export'}
         <ConvertFromPDF />
       {:else if currentPage === 'viewer'}

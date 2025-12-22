@@ -168,11 +168,16 @@ def images_to_pdf(
                 page_width = img_width + 2 * margin_pt
                 page_height = img_height + 2 * margin_pt
             else:
+                # Get per-image orientation from transform, fallback to global
+                img_orientation = orientation
+                if transform and transform.get("orientation"):
+                    img_orientation = transform.get("orientation")
+
                 # Determine orientation
-                if orientation == "auto":
+                if img_orientation == "auto":
                     # Match image orientation
                     is_landscape = img_width > img_height
-                elif orientation == "landscape":
+                elif img_orientation == "landscape":
                     is_landscape = True
                 else:  # portrait
                     is_landscape = False

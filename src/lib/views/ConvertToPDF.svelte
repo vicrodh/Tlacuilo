@@ -3,10 +3,16 @@
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
   import { listen } from '@tauri-apps/api/event';
-  import { open, save } from '@tauri-apps/plugin-dialog';
+  import { open, save, confirm } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
   import { log, logSuccess, logError, registerFile, unregisterModule } from '$lib/stores/status.svelte';
+
+  interface Props {
+    onOpenInViewer?: (path: string) => void;
+  }
+
+  let { onOpenInViewer }: Props = $props();
 
   const MODULE = 'Convert';
 
@@ -23,6 +29,7 @@
     rotation: 0 | 90 | 180 | 270;
     flipH: boolean;
     flipV: boolean;
+    orientation: 'auto' | 'portrait' | 'landscape';
   }
 
   // Chunked base64 conversion for large files
@@ -82,6 +89,7 @@
         rotation: 0,
         flipH: false,
         flipV: false,
+        orientation: 'auto',
       };
 
       files = [...files, newFile];
@@ -160,6 +168,18 @@
     );
   }
 
+  function cycleOrientation(fileId: string) {
+    const orientations: ('auto' | 'portrait' | 'landscape')[] = ['auto', 'portrait', 'landscape'];
+    files = files.map((f) => {
+      if (f.id === fileId) {
+        const currentIdx = orientations.indexOf(f.orientation);
+        const nextOrientation = orientations[(currentIdx + 1) % orientations.length];
+        return { ...f, orientation: nextOrientation };
+      }
+      return f;
+    });
+  }
+
   function handleFilesDnd(e: CustomEvent<{ items: ImageFile[] }>) {
     files = e.detail.items;
   }
@@ -187,6 +207,7 @@
         rotation: f.rotation,
         flipH: f.flipH,
         flipV: f.flipV,
+        orientation: f.orientation,
       }));
 
       const result = await invoke<string>('images_to_pdf', {
@@ -199,10 +220,23 @@
           rotation: d.rotation,
           flip_h: d.flipH,
           flip_v: d.flipV,
+          orientation: d.orientation,
         })),
       });
 
       logSuccess(`Created PDF: ${result}`, MODULE);
+
+      // Ask user if they want to open the created PDF
+      const openFile = await confirm('Would you like to open the PDF in the viewer?', {
+        title: 'Conversion Complete',
+        kind: 'info',
+        okLabel: 'Open',
+        cancelLabel: 'Close',
+      });
+
+      if (openFile && onOpenInViewer) {
+        onOpenInViewer(result);
+      }
     } catch (err) {
       console.error('Conversion error:', err);
       logError(`Conversion failed: ${err}`, MODULE);
@@ -370,36 +404,6 @@
                   {/if}
                 </div>
 
-                <!-- Transform Controls (bottom) -->
-                <div
-                  class="absolute bottom-0 left-0 right-0 flex justify-center gap-1 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                  style="background: linear-gradient(transparent, rgba(0,0,0,0.6));"
-                >
-                  <button
-                    onclick={(e) => { e.stopPropagation(); rotateImage(file.id); }}
-                    class="p-1 rounded hover:bg-[var(--nord3)] transition-colors"
-                    title="Rotate 90°"
-                  >
-                    <RotateCw size={12} style="color: var(--nord6);" />
-                  </button>
-                  <button
-                    onclick={(e) => { e.stopPropagation(); flipImageH(file.id); }}
-                    class="p-1 rounded hover:bg-[var(--nord3)] transition-colors"
-                    style="background-color: {file.flipH ? 'var(--nord10)' : 'transparent'};"
-                    title="Flip Horizontal"
-                  >
-                    <FlipHorizontal size={12} style="color: var(--nord6);" />
-                  </button>
-                  <button
-                    onclick={(e) => { e.stopPropagation(); flipImageV(file.id); }}
-                    class="p-1 rounded hover:bg-[var(--nord3)] transition-colors"
-                    style="background-color: {file.flipV ? 'var(--nord10)' : 'transparent'};"
-                    title="Flip Vertical"
-                  >
-                    <FlipVertical size={12} style="color: var(--nord6);" />
-                  </button>
-                </div>
-
                 <!-- Remove Button -->
                 <button
                   onclick={() => removeFile(file.id)}
@@ -410,9 +414,48 @@
                   <X size={14} style="color: var(--nord6);" />
                 </button>
 
+                <!-- Transform Controls -->
+                <div
+                  class="flex justify-center gap-1 py-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity rounded"
+                  style="background-color: var(--nord2);"
+                >
+                  <button
+                    onclick={(e) => { e.stopPropagation(); rotateImage(file.id); }}
+                    class="p-1.5 rounded hover:bg-[var(--nord3)] transition-colors"
+                    title="Rotate 90°"
+                  >
+                    <RotateCw size={14} style="color: var(--nord4);" />
+                  </button>
+                  <button
+                    onclick={(e) => { e.stopPropagation(); flipImageH(file.id); }}
+                    class="p-1.5 rounded hover:bg-[var(--nord3)] transition-colors"
+                    style="background-color: {file.flipH ? 'var(--nord10)' : 'transparent'};"
+                    title="Flip Horizontal"
+                  >
+                    <FlipHorizontal size={14} style="color: var(--nord4);" />
+                  </button>
+                  <button
+                    onclick={(e) => { e.stopPropagation(); flipImageV(file.id); }}
+                    class="p-1.5 rounded hover:bg-[var(--nord3)] transition-colors"
+                    style="background-color: {file.flipV ? 'var(--nord10)' : 'transparent'};"
+                    title="Flip Vertical"
+                  >
+                    <FlipVertical size={14} style="color: var(--nord4);" />
+                  </button>
+                  <button
+                    onclick={(e) => { e.stopPropagation(); cycleOrientation(file.id); }}
+                    class="px-1.5 py-1 rounded hover:bg-[var(--nord3)] transition-all text-[10px] font-bold min-w-[20px] orientation-btn"
+                    style="color: var(--nord4); background-color: {file.orientation !== 'auto' ? 'var(--nord10)' : 'transparent'};"
+                    title="Page orientation (click to cycle)"
+                  >
+                    <span class="orientation-short">{file.orientation === 'auto' ? 'A' : file.orientation === 'portrait' ? 'P' : 'L'}</span>
+                    <span class="orientation-full">{file.orientation === 'auto' ? 'Auto' : file.orientation === 'portrait' ? 'Portrait' : 'Landscape'}</span>
+                  </button>
+                </div>
+
                 <!-- Filename -->
                 <p
-                  class="text-xs text-center mt-2 truncate px-1"
+                  class="text-xs text-center mt-1 truncate px-1"
                   title={file.name}
                 >
                   {file.name}
@@ -494,3 +537,19 @@
     </button>
   </div>
 </div>
+
+<style>
+  /* Orientation button hover effect */
+  .orientation-btn .orientation-full {
+    display: none;
+  }
+  .orientation-btn .orientation-short {
+    display: inline;
+  }
+  .orientation-btn:hover .orientation-full {
+    display: inline;
+  }
+  .orientation-btn:hover .orientation-short {
+    display: none;
+  }
+</style>

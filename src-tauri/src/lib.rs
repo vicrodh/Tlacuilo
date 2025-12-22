@@ -1,6 +1,3 @@
-use std::path::PathBuf;
-use std::process::Command;
-
 use serde::{Deserialize, Serialize};
 
 mod annotations;
@@ -15,9 +12,10 @@ use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ImageTransform {
-  rotation: Option<i32>,
-  flip_h: Option<bool>,
-  flip_v: Option<bool>,
+    rotation: Option<i32>,
+    flip_h: Option<bool>,
+    flip_v: Option<bool>,
+    orientation: Option<String>, // "auto", "portrait", "landscape"
 }
 
 // ============================================================================
@@ -304,214 +302,133 @@ fn rotate_pdf(
 
 #[tauri::command]
 fn images_to_pdf(
-  app: AppHandle,
-  images: Vec<String>,
-  output: Option<String>,
-  page_size: Option<String>,
-  orientation: Option<String>,
-  margin: Option<f64>,
-  transforms: Option<Vec<ImageTransform>>,
+    app: AppHandle,
+    images: Vec<String>,
+    output: Option<String>,
+    page_size: Option<String>,
+    orientation: Option<String>,
+    margin: Option<f64>,
+    transforms: Option<Vec<ImageTransform>>,
 ) -> Result<String, String> {
-  if images.is_empty() {
-    return Err("Provide at least one image path.".into());
-  }
+    if images.is_empty() {
+        return Err("Provide at least one image path.".into());
+    }
 
-  let output_path = output.unwrap_or_else(|| {
-    let cache_dir = app
-      .path()
-      .app_cache_dir()
-      .unwrap_or_else(|_| std::env::temp_dir());
-    cache_dir.join("tlacuilo-images.pdf").to_string_lossy().to_string()
-  });
+    let output_path = output.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir.join("tlacuilo-images.pdf").to_string_lossy().to_string()
+    });
 
-  let python_bin = resolve_python_bin();
-  let (script_path, _) = resolve_backend_script_by_name(&app, "pdf_convert.py")
-    .ok_or_else(|| "Backend script not found (backend/pdf_convert.py)".to_string())?;
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
 
-  let mut cmd = Command::new(&python_bin);
-  cmd
-    .arg(&script_path)
-    .arg("images-to-pdf")
-    .arg("--output")
-    .arg(&output_path)
-    .arg("--inputs")
-    .args(&images);
+    let mut args: Vec<String> = vec![
+        "images-to-pdf".to_string(),
+        "--output".to_string(),
+        output_path.clone(),
+        "--inputs".to_string(),
+    ];
+    args.extend(images);
 
-  if let Some(size) = page_size {
-    cmd.arg("--page-size").arg(size);
-  }
-  if let Some(orient) = orientation {
-    cmd.arg("--orientation").arg(orient);
-  }
-  if let Some(m) = margin {
-    cmd.arg("--margin").arg(m.to_string());
-  }
+    if let Some(size) = page_size {
+        args.push("--page-size".to_string());
+        args.push(size);
+    }
+    if let Some(orient) = orientation {
+        args.push("--orientation".to_string());
+        args.push(orient);
+    }
+    if let Some(m) = margin {
+        args.push("--margin".to_string());
+        args.push(m.to_string());
+    }
 
-  // Pass transforms as JSON string if provided
-  if let Some(ref t) = transforms {
-    let transforms_json = serde_json::to_string(t)
-      .map_err(|e| format!("Failed to serialize transforms: {e}"))?;
-    cmd.arg("--transforms").arg(transforms_json);
-  }
+    // Pass transforms as JSON string if provided
+    if let Some(ref t) = transforms {
+        let transforms_json = serde_json::to_string(t)
+            .map_err(|e| format!("Failed to serialize transforms: {e}"))?;
+        args.push("--transforms".to_string());
+        args.push(transforms_json);
+    }
 
-  let output = cmd
-    .output()
-    .map_err(|e| format!("Failed to spawn python ({python_bin}): {e}"))?;
+    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    bridge
+        .run_script("pdf_convert.py", &args_refs)
+        .map_err(|e| e.to_string())?;
 
-  if !output.status.success() {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    return Err(format!(
-      "Python images-to-pdf failed (code {:?}). stdout: {} stderr: {}",
-      output.status.code(),
-      stdout,
-      stderr
-    ));
-  }
-
-  Ok(output_path)
+    Ok(output_path)
 }
 
 #[tauri::command]
 fn pdf_to_images(
-  app: AppHandle,
-  input: String,
-  output_dir: Option<String>,
-  format: Option<String>,
-  dpi: Option<i32>,
-  pages: Option<String>,
+    app: AppHandle,
+    input: String,
+    output_dir: Option<String>,
+    format: Option<String>,
+    dpi: Option<i32>,
+    pages: Option<String>,
 ) -> Result<Vec<String>, String> {
-  let out_dir = output_dir.unwrap_or_else(|| {
-    let cache_dir = app
-      .path()
-      .app_cache_dir()
-      .unwrap_or_else(|_| std::env::temp_dir());
-    cache_dir.join("tlacuilo-images").to_string_lossy().to_string()
-  });
+    let out_dir = output_dir.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir
+            .join("tlacuilo-images")
+            .to_string_lossy()
+            .to_string()
+    });
 
-  let python_bin = resolve_python_bin();
-  let (script_path, _) = resolve_backend_script_by_name(&app, "pdf_convert.py")
-    .ok_or_else(|| "Backend script not found (backend/pdf_convert.py)".to_string())?;
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
 
-  let mut cmd = Command::new(&python_bin);
-  cmd
-    .arg(&script_path)
-    .arg("pdf-to-images")
-    .arg("--input")
-    .arg(&input)
-    .arg("--output-dir")
-    .arg(&out_dir);
+    let mut args: Vec<String> = vec![
+        "pdf-to-images".to_string(),
+        "--input".to_string(),
+        input,
+        "--output-dir".to_string(),
+        out_dir.clone(),
+    ];
 
-  if let Some(fmt) = format {
-    cmd.arg("--format").arg(fmt);
-  }
-  if let Some(d) = dpi {
-    cmd.arg("--dpi").arg(d.to_string());
-  }
-  if let Some(p) = pages {
-    cmd.arg("--pages").arg(p);
-  }
-
-  let output = cmd
-    .output()
-    .map_err(|e| format!("Failed to spawn python ({python_bin}): {e}"))?;
-
-  if !output.status.success() {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    return Err(format!(
-      "Python pdf-to-images failed (code {:?}). stdout: {} stderr: {}",
-      output.status.code(),
-      stdout,
-      stderr
-    ));
-  }
-
-  // Parse output to get list of created files
-  let stdout = String::from_utf8_lossy(&output.stdout);
-  let files: Vec<String> = stdout
-    .lines()
-    .filter(|l| l.trim().starts_with(&out_dir) || l.trim().ends_with(".png") || l.trim().ends_with(".jpg"))
-    .map(|l| l.trim().to_string())
-    .collect();
-
-  if files.is_empty() {
-    // Return the output directory at minimum
-    Ok(vec![out_dir])
-  } else {
-    Ok(files)
-  }
-}
-
-/// Locate a backend script in dev and bundled modes.
-fn resolve_backend_script(app: &AppHandle) -> Option<(PathBuf, Vec<PathBuf>)> {
-  resolve_backend_script_by_name(app, "pdf_pages.py")
-}
-
-/// Locate a specific backend script by name.
-fn resolve_backend_script_by_name(app: &AppHandle, script_name: &str) -> Option<(PathBuf, Vec<PathBuf>)> {
-  let mut tried: Vec<PathBuf> = Vec::new();
-  let script_path = format!("backend/{}", script_name);
-
-  if let Ok(p) = std::env::var("APP_BACKEND_SCRIPT") {
-    let candidate = PathBuf::from(&p);
-    tried.push(candidate.clone());
-    if candidate.exists() {
-      return Some((candidate, tried));
+    if let Some(fmt) = format {
+        args.push("--format".to_string());
+        args.push(fmt);
     }
-  }
-
-  // Try relative to executable: /tlacuilo/src-tauri/target/debug/tlacuilo -> pop 4 -> /tlacuilo/backend/
-  if let Ok(mut exe) = std::env::current_exe() {
-    for _ in 0..4 {
-      exe.pop();
+    if let Some(d) = dpi {
+        args.push("--dpi".to_string());
+        args.push(d.to_string());
     }
-    let candidate = exe.join(&script_path);
-    tried.push(candidate.clone());
-    if candidate.exists() {
-      return Some((candidate, tried));
+    if let Some(p) = pages {
+        args.push("--pages".to_string());
+        args.push(p);
     }
-  }
 
-  // Try using app path resolve (resource or current dir).
-  if let Ok(candidate) = app
-    .path()
-    .resolve(&script_path, tauri::path::BaseDirectory::Resource)
-  {
-    tried.push(candidate.clone());
-    if candidate.exists() {
-      return Some((candidate, tried));
+    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let output = bridge
+        .run_script("pdf_convert.py", &args_refs)
+        .map_err(|e| e.to_string())?;
+
+    // Parse output to get list of created files
+    let files: Vec<String> = output
+        .stdout
+        .lines()
+        .filter(|l| {
+            l.trim().starts_with(&out_dir)
+                || l.trim().ends_with(".png")
+                || l.trim().ends_with(".jpg")
+                || l.trim().ends_with(".webp")
+                || l.trim().ends_with(".tiff")
+        })
+        .map(|l| l.trim().to_string())
+        .collect();
+
+    if files.is_empty() {
+        // Return the output directory at minimum
+        Ok(vec![out_dir])
+    } else {
+        Ok(files)
     }
-  }
-
-  let cwd_candidate = PathBuf::from(&script_path);
-  tried.push(cwd_candidate.clone());
-  if cwd_candidate.exists() {
-    return Some((cwd_candidate, tried));
-  }
-
-  None
-}
-
-/// Determine which Python interpreter to use.
-/// Priority:
-/// 1) APP_PYTHON_BIN env var
-/// 2) backend/venv/bin/python3 relative to workspace root (common dev setup)
-/// 3) python3.12
-/// 4) python3
-fn resolve_python_bin() -> String {
-  if let Ok(p) = std::env::var("APP_PYTHON_BIN") {
-    return p;
-  }
-  let mut root = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
-  for _ in 0..4 {
-    root.pop();
-  }
-  let venv = root.join("backend/venv/bin/python3");
-  if venv.exists() {
-    return venv.to_string_lossy().to_string();
-  }
-  "python3.12".to_string()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
