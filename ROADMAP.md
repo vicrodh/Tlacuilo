@@ -50,8 +50,10 @@
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Text Highlights | ⬜ Pending | |
-| Comments/Notes | ⬜ Pending | |
+| Text Highlights | ✅ Done | Yellow, green, blue, pink, orange, purple |
+| Comments/Notes | ✅ Done | Sticky note style with text |
+| Underline | ✅ Done | |
+| Strikethrough | ✅ Done | |
 | Freehand Drawing | ⬜ Pending | |
 | Stamps | ⬜ Pending | |
 
