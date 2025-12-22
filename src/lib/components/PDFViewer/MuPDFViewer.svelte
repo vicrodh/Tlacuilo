@@ -71,6 +71,8 @@
   let showAnnotationTools = $state(false);
   let annotationsDirty = $state(false);
   let isSavingAnnotations = $state(false);
+  let annotationsInitialized = $state(false);
+  let lastAnnotationCount = $state(0);
 
   // Load annotations from sidecar file
   async function loadAnnotations() {
@@ -84,10 +86,14 @@
           converted[Number(key)] = value as any[];
         }
         annotationsStore.importAnnotations(converted);
-        annotationsDirty = false;
       }
+      // Mark as initialized and not dirty after load
+      lastAnnotationCount = annotationsStore.getAllAnnotations().length;
+      annotationsInitialized = true;
+      annotationsDirty = false;
     } catch (err) {
       console.error('[MuPDFViewer] Failed to load annotations:', err);
+      annotationsInitialized = true;
     }
   }
 
@@ -100,6 +106,7 @@
       const data = annotationsStore.exportAnnotations();
       const json = JSON.stringify(data);
       await invoke('annotations_save', { pdfPath: filePath, annotationsJson: json });
+      lastAnnotationCount = annotationsStore.getAllAnnotations().length;
       annotationsDirty = false;
     } catch (err) {
       console.error('[MuPDFViewer] Failed to save annotations:', err);
@@ -108,12 +115,13 @@
     }
   }
 
-  // Track annotation changes
+  // Track annotation changes - only after initialization
   $effect(() => {
-    // Subscribe to annotation changes
-    const count = annotationsStore.getAllAnnotations().length;
-    // Mark as dirty when annotations change (skip initial load)
-    if (count > 0 || annotationsDirty) {
+    if (!annotationsInitialized) return;
+
+    const currentCount = annotationsStore.getAllAnnotations().length;
+    // Mark dirty if count changed after initialization
+    if (currentCount !== lastAnnotationCount) {
       annotationsDirty = true;
     }
   });
