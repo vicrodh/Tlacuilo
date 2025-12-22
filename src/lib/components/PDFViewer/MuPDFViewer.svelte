@@ -124,6 +124,19 @@
   // Annotation menu state
   let showAnnotationMenu = $state(false);
   let isExporting = $state(false);
+  let menuButtonRef: HTMLButtonElement;
+  let menuPosition = $state({ top: 0, left: 0 });
+
+  function toggleAnnotationMenu() {
+    if (!showAnnotationMenu && menuButtonRef) {
+      const rect = menuButtonRef.getBoundingClientRect();
+      menuPosition = {
+        top: rect.bottom + 4,
+        left: rect.right - 180, // menu width is 180px
+      };
+    }
+    showAnnotationMenu = !showAnnotationMenu;
+  }
 
   // Convert Date objects to ISO strings for JSON serialization
   function serializeAnnotations() {
@@ -149,17 +162,11 @@
     showAnnotationMenu = false;
     try {
       const json = serializeAnnotations();
-      // Save to temp file first, then replace original
-      const tempPath = filePath + '.tmp';
+      // PyMuPDF reads the file into memory, so we can write directly to the same path
       const result = await invoke<{ output_path: string; total: number; errors: string[] }>(
         'annotations_embed_in_pdf',
-        { input: filePath, annotationsJson: json, output: tempPath }
+        { input: filePath, annotationsJson: json, output: filePath }
       );
-
-      // Move temp file to original location
-      const { rename, remove } = await import('@tauri-apps/plugin-fs');
-      await remove(filePath);
-      await rename(tempPath, filePath);
 
       if (result.errors.length > 0) {
         console.warn('[MuPDFViewer] Some annotations failed:', result.errors);
@@ -777,7 +784,10 @@
   function handleClickOutside(e: MouseEvent) {
     if (showAnnotationMenu) {
       const target = e.target as HTMLElement;
-      if (!target.closest('.relative')) {
+      // Check if click is inside the menu button or the fixed menu
+      const isMenuButton = menuButtonRef?.contains(target);
+      const isInsideMenu = target.closest('[style*="z-index: 99999"]');
+      if (!isMenuButton && !isInsideMenu) {
         showAnnotationMenu = false;
       }
     }
@@ -861,67 +871,20 @@
         {/if}
 
         <!-- Annotation export/import menu -->
-        <div class="relative">
-          <button
-            onclick={() => showAnnotationMenu = !showAnnotationMenu}
-            class="p-2 rounded-lg transition-colors hover:bg-[var(--nord2)]"
-            class:bg-[var(--nord2)]={showAnnotationMenu}
-            title="Annotation options"
-            disabled={isExporting}
-          >
-            {#if isExporting}
-              <div class="w-4 h-4 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
-            {:else}
-              <MoreVertical size={16} />
-            {/if}
-          </button>
-
-          {#if showAnnotationMenu}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div
-              class="absolute top-full right-0 mt-1 py-1 rounded-lg shadow-lg min-w-[180px]"
-              style="background-color: var(--nord1); border: 1px solid var(--nord3); z-index: 9999;"
-              onclick={(e) => e.stopPropagation()}
-            >
-              <button
-                onclick={saveAnnotationsToPdf}
-                class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
-              >
-                <Save size={14} />
-                Save to PDF
-              </button>
-              <button
-                onclick={saveAnnotationsToPdfAs}
-                class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
-              >
-                <Download size={14} />
-                Save to PDF as...
-              </button>
-              <button
-                onclick={loadAnnotationsFromPdf}
-                class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
-              >
-                <Upload size={14} />
-                Load from PDF
-              </button>
-              <div class="my-1 border-t" style="border-color: var(--nord3);"></div>
-              <button
-                onclick={exportToXfdf}
-                class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
-              >
-                <FileDown size={14} />
-                Export XFDF
-              </button>
-              <button
-                onclick={importFromXfdf}
-                class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
-              >
-                <FileUp size={14} />
-                Import XFDF
-              </button>
-            </div>
+        <button
+          bind:this={menuButtonRef}
+          onclick={toggleAnnotationMenu}
+          class="p-2 rounded-lg transition-colors hover:bg-[var(--nord2)]"
+          class:bg-[var(--nord2)]={showAnnotationMenu}
+          title="Annotation options"
+          disabled={isExporting}
+        >
+          {#if isExporting}
+            <div class="w-4 h-4 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
+          {:else}
+            <MoreVertical size={16} />
           {/if}
-        </div>
+        </button>
       </div>
 
       <!-- Center: Navigation -->
@@ -1258,3 +1221,56 @@
     </div>
   </div>
 </div>
+
+<!-- Fixed position annotation menu (portal) -->
+{#if showAnnotationMenu}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="fixed py-1 rounded-lg shadow-lg min-w-[180px]"
+    style="
+      top: {menuPosition.top}px;
+      left: {menuPosition.left}px;
+      background-color: var(--nord1);
+      border: 1px solid var(--nord3);
+      z-index: 99999;
+    "
+    onclick={(e) => e.stopPropagation()}
+  >
+    <button
+      onclick={saveAnnotationsToPdf}
+      class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
+    >
+      <Save size={14} />
+      Save to PDF
+    </button>
+    <button
+      onclick={saveAnnotationsToPdfAs}
+      class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
+    >
+      <Download size={14} />
+      Save to PDF as...
+    </button>
+    <button
+      onclick={loadAnnotationsFromPdf}
+      class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
+    >
+      <Upload size={14} />
+      Load from PDF
+    </button>
+    <div class="my-1 border-t" style="border-color: var(--nord3);"></div>
+    <button
+      onclick={exportToXfdf}
+      class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
+    >
+      <FileDown size={14} />
+      Export XFDF
+    </button>
+    <button
+      onclick={importFromXfdf}
+      class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
+    >
+      <FileUp size={14} />
+      Import XFDF
+    </button>
+  </div>
+{/if}
