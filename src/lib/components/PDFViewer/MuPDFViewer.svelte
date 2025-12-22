@@ -12,6 +12,7 @@
     MoveVertical,
     Maximize,
     PenTool,
+    Save,
   } from 'lucide-svelte';
   import { createAnnotationsStore } from '$lib/stores/annotations.svelte';
   import AnnotationToolbar from './AnnotationToolbar.svelte';
@@ -67,6 +68,54 @@
   // Annotations
   const annotationsStore = createAnnotationsStore();
   let showAnnotationTools = $state(false);
+  let annotationsDirty = $state(false);
+  let isSavingAnnotations = $state(false);
+
+  // Load annotations from sidecar file
+  async function loadAnnotations() {
+    try {
+      const result = await invoke<string | null>('annotations_load', { pdfPath: filePath });
+      if (result) {
+        const data = JSON.parse(result);
+        // Convert string keys to numbers
+        const converted: Record<number, any[]> = {};
+        for (const [key, value] of Object.entries(data)) {
+          converted[Number(key)] = value as any[];
+        }
+        annotationsStore.importAnnotations(converted);
+        annotationsDirty = false;
+      }
+    } catch (err) {
+      console.error('[MuPDFViewer] Failed to load annotations:', err);
+    }
+  }
+
+  // Save annotations to sidecar file
+  async function saveAnnotations() {
+    if (isSavingAnnotations) return;
+
+    isSavingAnnotations = true;
+    try {
+      const data = annotationsStore.exportAnnotations();
+      const json = JSON.stringify(data);
+      await invoke('annotations_save', { pdfPath: filePath, annotationsJson: json });
+      annotationsDirty = false;
+    } catch (err) {
+      console.error('[MuPDFViewer] Failed to save annotations:', err);
+    } finally {
+      isSavingAnnotations = false;
+    }
+  }
+
+  // Track annotation changes
+  $effect(() => {
+    // Subscribe to annotation changes
+    const count = annotationsStore.getAllAnnotations().length;
+    // Mark as dirty when annotations change (skip initial load)
+    if (count > 0 || annotationsDirty) {
+      annotationsDirty = true;
+    }
+  });
 
   // Sidebar state
   let sidebarCollapsed = $state(false);
@@ -121,6 +170,9 @@
       // Wait for DOM to render placeholders, then load visible pages
       await tick();
       loadVisiblePages();
+
+      // Load saved annotations
+      await loadAnnotations();
 
       if (initialPage > 1) {
         scrollToPage(initialPage);
@@ -536,6 +588,22 @@
         >
           <PenTool size={16} />
         </button>
+
+        {#if annotationsDirty}
+          <button
+            onclick={saveAnnotations}
+            disabled={isSavingAnnotations}
+            class="p-2 rounded-lg transition-colors hover:bg-[var(--nord2)] relative"
+            class:animate-pulse={isSavingAnnotations}
+            title="Save annotations"
+          >
+            <Save size={16} />
+            <div
+              class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full"
+              style="background-color: var(--nord13);"
+            ></div>
+          </button>
+        {/if}
       </div>
 
       <!-- Center: Navigation -->

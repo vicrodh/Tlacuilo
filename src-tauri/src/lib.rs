@@ -3,6 +3,7 @@ use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
+mod annotations;
 mod pdf_compress;
 mod pdf_ocr;
 mod pdf_viewer;
@@ -689,7 +690,11 @@ pub fn run() {
       pdf_viewer::pdf_render_page,
       pdf_viewer::pdf_render_thumbnail,
       pdf_viewer::pdf_render_thumbnails,
-      pdf_viewer::pdf_close
+      pdf_viewer::pdf_close,
+      // Annotations
+      annotations::annotations_save,
+      annotations::annotations_load,
+      annotations::annotations_delete
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
