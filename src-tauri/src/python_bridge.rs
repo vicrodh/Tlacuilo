@@ -44,6 +44,16 @@ pub enum PythonErrorKind {
 
 impl std::fmt::Display for PythonError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(ref stderr) = self.stderr {
+            if !stderr.is_empty() {
+                return write!(f, "{}: {} (stderr: {})", self.kind_str(), self.message, stderr);
+            }
+        }
+        if let Some(ref stdout) = self.stdout {
+            if !stdout.is_empty() {
+                return write!(f, "{}: {} (stdout: {})", self.kind_str(), self.message, stdout);
+            }
+        }
         write!(f, "{}: {}", self.kind_str(), self.message)
     }
 }

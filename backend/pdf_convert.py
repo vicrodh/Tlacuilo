@@ -123,33 +123,40 @@ def images_to_pdf(
             transform = transforms[idx] if transforms and idx < len(transforms) else None
             actual_img_path = img_path
 
-            # Apply transforms using PIL if needed
-            if transform and (transform.get("rotation") or transform.get("flip_h") or transform.get("flip_v")):
+            # Check if we need PIL processing:
+            # 1. Transforms are needed (rotation, flip)
+            # 2. File is webp (PyMuPDF can't open webp directly)
+            suffix = img_path.suffix if hasattr(img_path, 'suffix') else Path(str(img_path)).suffix
+            is_webp = suffix.lower() == '.webp'
+            needs_transform = transform and (transform.get("rotation") or transform.get("flip_h") or transform.get("flip_v"))
+
+            if needs_transform or is_webp:
                 from PIL import Image
                 import tempfile
 
                 pil_img = Image.open(str(img_path))
 
-                # Apply rotation
-                rotation = transform.get("rotation", 0)
-                if rotation:
-                    # PIL rotates counter-clockwise, we want clockwise
-                    pil_img = pil_img.rotate(-rotation, expand=True)
+                # Apply rotation if needed
+                if needs_transform:
+                    rotation = transform.get("rotation", 0)
+                    if rotation:
+                        # PIL rotates counter-clockwise, we want clockwise
+                        pil_img = pil_img.rotate(-rotation, expand=True)
 
-                # Apply flips
-                if transform.get("flip_h"):
-                    pil_img = pil_img.transpose(Image.FLIP_LEFT_RIGHT)
-                if transform.get("flip_v"):
-                    pil_img = pil_img.transpose(Image.FLIP_TOP_BOTTOM)
+                    # Apply flips
+                    if transform.get("flip_h"):
+                        pil_img = pil_img.transpose(Image.FLIP_LEFT_RIGHT)
+                    if transform.get("flip_v"):
+                        pil_img = pil_img.transpose(Image.FLIP_TOP_BOTTOM)
 
-                # Save to temp file
-                suffix = img_path.suffix if hasattr(img_path, 'suffix') else Path(str(img_path)).suffix
-                temp_fd, temp_path = tempfile.mkstemp(suffix=suffix)
+                # Save to temp file - always use PNG for webp since PyMuPDF doesn't support webp
+                out_suffix = '.png' if is_webp else suffix
+                temp_fd, temp_path = tempfile.mkstemp(suffix=out_suffix)
                 temp_path = Path(temp_path)
                 temp_files.append(temp_path)
 
                 # Convert RGBA to RGB for JPEG
-                if pil_img.mode == 'RGBA' and suffix.lower() in ['.jpg', '.jpeg']:
+                if pil_img.mode == 'RGBA' and out_suffix.lower() in ['.jpg', '.jpeg']:
                     pil_img = pil_img.convert('RGB')
 
                 pil_img.save(str(temp_path))
@@ -238,7 +245,7 @@ def images_to_pdf(
 
         return output_path
 
-    except fitz.FitzError as e:
+    except Exception as e:
         # Cleanup temp files on error too
         for temp_file in temp_files:
             try:
@@ -335,7 +342,7 @@ def pdf_to_images(
         doc.close()
         return output_paths
 
-    except fitz.FitzError as e:
+    except Exception as e:
         raise ConversionError("pdf", format, str(e)) from e
 
 
