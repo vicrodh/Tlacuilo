@@ -621,6 +621,13 @@ pub fn run() {
         )
         .separator()
         .item(
+          &MenuItemBuilder::new("Save Annotations")
+            .id("save")
+            .accelerator("CmdOrCtrl+S")
+            .build(app)?,
+        )
+        .separator()
+        .item(
           &MenuItemBuilder::new("Quit")
             .id("quit")
             .accelerator("CmdOrCtrl+Q")
@@ -650,6 +657,12 @@ pub fn run() {
           // Emit event to frontend to handle file open
           if let Some(window) = app.get_webview_window("main") {
             let _ = window.emit("menu-open", ());
+          }
+        }
+        "save" => {
+          // Emit event to frontend to save annotations
+          if let Some(window) = app.get_webview_window("main") {
+            let _ = window.emit("menu-save", ());
           }
         }
         "quit" => app.exit(0),

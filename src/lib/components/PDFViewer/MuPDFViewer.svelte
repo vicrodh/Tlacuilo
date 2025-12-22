@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import {
     ChevronLeft,
     ChevronRight,
@@ -538,15 +539,26 @@
   // Zoom presets
   const zoomPresets = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 
-  onMount(() => {
+  // Menu event listener
+  let unlistenSave: UnlistenFn | null = null;
+
+  onMount(async () => {
     loadPDF();
     window.addEventListener('keydown', handleKeydown);
     document.addEventListener('mouseup', handlePanEnd);
+
+    // Listen for menu save event (Ctrl+S)
+    unlistenSave = await listen('menu-save', () => {
+      if (annotationsDirty) {
+        saveAnnotations();
+      }
+    });
   });
 
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
     document.removeEventListener('mouseup', handlePanEnd);
+    unlistenSave?.();
   });
 
   // Reload when file path changes
