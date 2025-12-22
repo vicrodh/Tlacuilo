@@ -14,7 +14,13 @@
     Maximize,
     PenTool,
     Save,
+    Download,
+    Upload,
+    FileDown,
+    FileUp,
+    MoreVertical,
   } from 'lucide-svelte';
+  import { save, open } from '@tauri-apps/plugin-dialog';
   import { createAnnotationsStore } from '$lib/stores/annotations.svelte';
   import AnnotationToolbar from './AnnotationToolbar.svelte';
   import AnnotationOverlay from './AnnotationOverlay.svelte';
@@ -112,6 +118,149 @@
       console.error('[MuPDFViewer] Failed to save annotations:', err);
     } finally {
       isSavingAnnotations = false;
+    }
+  }
+
+  // Annotation menu state
+  let showAnnotationMenu = $state(false);
+  let isExporting = $state(false);
+
+  // Convert Date objects to ISO strings for JSON serialization
+  function serializeAnnotations() {
+    const data = annotationsStore.exportAnnotations() as Record<number, any[]>;
+    const serialized: Record<number, any[]> = {};
+    for (const [page, anns] of Object.entries(data)) {
+      serialized[Number(page)] = anns.map((a: any) => ({
+        ...a,
+        createdAt: a.createdAt instanceof Date ? a.createdAt.toISOString() : a.createdAt,
+        modifiedAt: a.modifiedAt instanceof Date ? a.modifiedAt.toISOString() : a.modifiedAt,
+      }));
+    }
+    return JSON.stringify(serialized);
+  }
+
+  // Embed annotations into PDF
+  async function embedAnnotationsToPdf() {
+    const outputPath = await save({
+      title: 'Save PDF with Annotations',
+      defaultPath: filePath.replace('.pdf', '-annotated.pdf'),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (!outputPath) return;
+
+    isExporting = true;
+    showAnnotationMenu = false;
+    try {
+      const json = serializeAnnotations();
+      const result = await invoke<{ output_path: string; total: number; errors: string[] }>(
+        'annotations_embed_in_pdf',
+        { input: filePath, annotationsJson: json, output: outputPath }
+      );
+      if (result.errors.length > 0) {
+        console.warn('[MuPDFViewer] Some annotations failed:', result.errors);
+      }
+      alert(`Saved ${result.total} annotations to PDF`);
+    } catch (err) {
+      console.error('[MuPDFViewer] Failed to embed annotations:', err);
+      alert(`Failed to save annotations to PDF: ${err}`);
+    } finally {
+      isExporting = false;
+    }
+  }
+
+  // Load annotations from PDF
+  async function loadAnnotationsFromPdf() {
+    showAnnotationMenu = false;
+    try {
+      const json = await invoke<string>('annotations_read_from_pdf', { input: filePath });
+      const data = JSON.parse(json);
+      if (Object.keys(data).length === 0) {
+        alert('No annotations found in PDF');
+        return;
+      }
+      // Convert string keys to numbers
+      const converted: Record<number, any[]> = {};
+      for (const [key, value] of Object.entries(data)) {
+        converted[Number(key)] = value as any[];
+      }
+      annotationsStore.importAnnotations(converted);
+      annotationsDirty = true;
+      alert(`Loaded ${Object.values(data).flat().length} annotations from PDF`);
+    } catch (err) {
+      console.error('[MuPDFViewer] Failed to load annotations from PDF:', err);
+      alert(`Failed to load annotations from PDF: ${err}`);
+    }
+  }
+
+  // Export to XFDF
+  async function exportToXfdf() {
+    // First embed to a temp PDF, then export XFDF
+    const outputPath = await save({
+      title: 'Export Annotations as XFDF',
+      defaultPath: filePath.replace('.pdf', '.xfdf'),
+      filters: [{ name: 'XFDF', extensions: ['xfdf'] }],
+    });
+    if (!outputPath) return;
+
+    isExporting = true;
+    showAnnotationMenu = false;
+    try {
+      // Create temp PDF with annotations
+      const tempPath = filePath.replace('.pdf', '-temp-annot.pdf');
+      const json = serializeAnnotations();
+      await invoke('annotations_embed_in_pdf', {
+        input: filePath,
+        annotationsJson: json,
+        output: tempPath,
+      });
+
+      // Export XFDF from temp PDF
+      const result = await invoke<{ output_path: string; exported: number }>(
+        'annotations_export_xfdf',
+        { input: tempPath, output: outputPath }
+      );
+      alert(`Exported ${result.exported} annotations to XFDF`);
+    } catch (err) {
+      console.error('[MuPDFViewer] Failed to export XFDF:', err);
+      alert(`Failed to export XFDF: ${err}`);
+    } finally {
+      isExporting = false;
+    }
+  }
+
+  // Import from XFDF
+  async function importFromXfdf() {
+    const xfdfPath = await open({
+      title: 'Import Annotations from XFDF',
+      filters: [{ name: 'XFDF', extensions: ['xfdf'] }],
+    });
+    if (!xfdfPath || Array.isArray(xfdfPath)) return;
+
+    showAnnotationMenu = false;
+    try {
+      // Import XFDF to temp PDF
+      const tempPath = filePath.replace('.pdf', '-temp-xfdf.pdf');
+      await invoke('annotations_import_xfdf', {
+        input: filePath,
+        xfdf: xfdfPath,
+        output: tempPath,
+      });
+
+      // Read annotations from temp PDF
+      const json = await invoke<string>('annotations_read_from_pdf', { input: tempPath });
+      const data = JSON.parse(json);
+
+      // Convert and import
+      const converted: Record<number, any[]> = {};
+      for (const [key, value] of Object.entries(data)) {
+        converted[Number(key)] = value as any[];
+      }
+      annotationsStore.importAnnotations(converted);
+      annotationsDirty = true;
+      alert(`Imported ${Object.values(data).flat().length} annotations from XFDF`);
+    } catch (err) {
+      console.error('[MuPDFViewer] Failed to import XFDF:', err);
+      alert(`Failed to import XFDF: ${err}`);
     }
   }
 
@@ -583,10 +732,21 @@
   // Menu event listener
   let unlistenSave: UnlistenFn | null = null;
 
+  // Close annotation menu when clicking outside
+  function handleClickOutside(e: MouseEvent) {
+    if (showAnnotationMenu) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.relative')) {
+        showAnnotationMenu = false;
+      }
+    }
+  }
+
   onMount(async () => {
     loadPDF();
     window.addEventListener('keydown', handleKeydown);
     document.addEventListener('mouseup', handlePanEnd);
+    document.addEventListener('click', handleClickOutside);
 
     // Listen for menu save event (Ctrl+S)
     unlistenSave = await listen('menu-save', () => {
@@ -599,6 +759,7 @@
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
     document.removeEventListener('mouseup', handlePanEnd);
+    document.removeEventListener('click', handleClickOutside);
     unlistenSave?.();
   });
 
@@ -657,6 +818,60 @@
             ></div>
           </button>
         {/if}
+
+        <!-- Annotation export/import menu -->
+        <div class="relative">
+          <button
+            onclick={() => showAnnotationMenu = !showAnnotationMenu}
+            class="p-2 rounded-lg transition-colors hover:bg-[var(--nord2)]"
+            class:bg-[var(--nord2)]={showAnnotationMenu}
+            title="Annotation options"
+            disabled={isExporting}
+          >
+            {#if isExporting}
+              <div class="w-4 h-4 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
+            {:else}
+              <MoreVertical size={16} />
+            {/if}
+          </button>
+
+          {#if showAnnotationMenu}
+            <div
+              class="absolute top-full right-0 mt-1 py-1 rounded-lg shadow-lg z-50 min-w-[180px]"
+              style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+            >
+              <button
+                onclick={embedAnnotationsToPdf}
+                class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
+              >
+                <Download size={14} />
+                Save to PDF
+              </button>
+              <button
+                onclick={loadAnnotationsFromPdf}
+                class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
+              >
+                <Upload size={14} />
+                Load from PDF
+              </button>
+              <div class="my-1 border-t" style="border-color: var(--nord3);"></div>
+              <button
+                onclick={exportToXfdf}
+                class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
+              >
+                <FileDown size={14} />
+                Export XFDF
+              </button>
+              <button
+                onclick={importFromXfdf}
+                class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
+              >
+                <FileUp size={14} />
+                Import XFDF
+              </button>
+            </div>
+          {/if}
+        </div>
       </div>
 
       <!-- Center: Navigation -->
