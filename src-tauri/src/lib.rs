@@ -4,6 +4,9 @@ use std::process::Command;
 use serde::{Deserialize, Serialize};
 
 mod pdf_viewer;
+mod python_bridge;
+
+use python_bridge::PythonBridge;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -13,6 +16,63 @@ struct ImageTransform {
   flip_h: Option<bool>,
   flip_v: Option<bool>,
 }
+
+// ============================================================================
+// Python Bridge Commands
+// ============================================================================
+
+/// Check if Python is available and return version info
+#[tauri::command]
+fn python_check(app: AppHandle) -> Result<PythonStatus, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let version = bridge.python_version().map_err(|e| e.to_string())?;
+    let path = bridge.python_path().to_string_lossy().to_string();
+
+    Ok(PythonStatus {
+        available: true,
+        version,
+        path,
+    })
+}
+
+#[derive(Debug, Serialize)]
+struct PythonStatus {
+    available: bool,
+    version: String,
+    path: String,
+}
+
+/// Check if specific Python packages are installed
+#[tauri::command]
+fn python_check_packages(app: AppHandle, packages: Vec<String>) -> Result<PackageCheckResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let pkg_refs: Vec<&str> = packages.iter().map(|s| s.as_str()).collect();
+    let missing = bridge.check_packages(&pkg_refs).map_err(|e| e.to_string())?;
+
+    Ok(PackageCheckResult {
+        all_installed: missing.is_empty(),
+        missing,
+    })
+}
+
+#[derive(Debug, Serialize)]
+struct PackageCheckResult {
+    all_installed: bool,
+    missing: Vec<String>,
+}
+
+/// Install a Python package
+#[tauri::command]
+fn python_install_package(app: AppHandle, package: String) -> Result<(), String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+    bridge.install_package(&package).map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// PDF Operations Commands
+// ============================================================================
 
 #[tauri::command]
 fn merge_pdfs(app: AppHandle, inputs: Vec<String>, output: Option<String>) -> Result<String, String> {
@@ -527,12 +587,18 @@ pub fn run() {
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
+      // Python bridge
+      python_check,
+      python_check_packages,
+      python_install_package,
+      // PDF operations
       merge_pdfs,
       merge_pages,
       split_pdf,
       rotate_pdf,
       images_to_pdf,
       pdf_to_images,
+      // PDF viewer
       pdf_viewer::pdf_open,
       pdf_viewer::pdf_render_page,
       pdf_viewer::pdf_render_thumbnail,
