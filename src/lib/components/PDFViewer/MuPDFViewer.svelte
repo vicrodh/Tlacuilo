@@ -171,10 +171,8 @@
 
       isLoading = false;
 
-      // Load thumbnails in background (limit for large docs)
-      if (totalPages <= 100) {
-        loadThumbnails();
-      }
+      // Load thumbnails in background
+      loadThumbnails();
 
       // Wait for DOM to render placeholders, then load visible pages
       await tick();
@@ -283,22 +281,30 @@
     loadVisiblePages();
   }
 
-  // Load thumbnails for sidebar
+  // Load thumbnails for sidebar (in batches for large documents)
+  const THUMBNAIL_BATCH_SIZE = 50;
+
   async function loadThumbnails() {
     if (!pdfInfo || isLoadingThumbnails) return;
 
     isLoadingThumbnails = true;
+    thumbnails = [];
 
     try {
-      const pages = Array.from({ length: pdfInfo.num_pages }, (_, i) => i + 1);
+      // Load in batches of 50 pages
+      for (let start = 0; start < pdfInfo.num_pages; start += THUMBNAIL_BATCH_SIZE) {
+        const end = Math.min(start + THUMBNAIL_BATCH_SIZE, pdfInfo.num_pages);
+        const pages = Array.from({ length: end - start }, (_, i) => start + i + 1);
 
-      const rendered = await invoke<RenderedPage[]>('pdf_render_thumbnails', {
-        path: filePath,
-        pages: pages,
-        maxSize: 150,
-      });
+        const rendered = await invoke<RenderedPage[]>('pdf_render_thumbnails', {
+          path: filePath,
+          pages: pages,
+          maxSize: 150,
+        });
 
-      thumbnails = rendered;
+        thumbnails = [...thumbnails, ...rendered];
+      }
+
       console.log('[MuPDFViewer] Loaded', thumbnails.length, 'thumbnails');
     } catch (err) {
       console.error('[MuPDFViewer] Failed to load thumbnails:', err);
