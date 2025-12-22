@@ -37,6 +37,10 @@
   function handleMouseDown(e: MouseEvent) {
     if (!store.activeTool || e.button !== 0) return;
 
+    // Prevent event from bubbling to container (stops panning/scrolling)
+    e.stopPropagation();
+    e.preventDefault();
+
     const coords = getRelativeCoords(e);
     isDrawing = true;
     drawStart = coords;
@@ -45,6 +49,9 @@
 
   function handleMouseMove(e: MouseEvent) {
     if (!isDrawing || !drawStart) return;
+
+    // Prevent event from bubbling during drawing
+    e.stopPropagation();
 
     const coords = getRelativeCoords(e);
     const x = Math.min(drawStart.x, coords.x);
@@ -62,6 +69,9 @@
       drawRect = null;
       return;
     }
+
+    // Prevent event from bubbling
+    e.stopPropagation();
 
     // Only create annotation if it has meaningful size
     if (drawRect.width > 5 && drawRect.height > 5) {

@@ -364,7 +364,13 @@
   let panStart = $state<{ x: number; y: number } | null>(null);
   let scrollStart = $state<{ x: number; y: number } | null>(null);
 
+  // Check if annotation mode is active (tool selected and toolbar visible)
+  const isAnnotationMode = $derived(showAnnotationTools && annotationsStore.activeTool !== null);
+
   function handlePanStart(e: MouseEvent) {
+    // Don't start panning if annotation tool is active
+    if (isAnnotationMode) return;
+
     if (e.button === 1 || e.button === 0) {
       isPanning = true;
       panStart = { x: e.clientX, y: e.clientY };
@@ -728,7 +734,7 @@
         <div
           bind:this={canvasContainer}
           class="h-full overflow-auto p-4"
-          style="background-color: var(--nord0); cursor: {isPanning ? 'grabbing' : 'grab'};"
+          style="background-color: var(--nord0); cursor: {isAnnotationMode ? 'default' : (isPanning ? 'grabbing' : 'grab')};"
           onmousedown={handlePanStart}
           onmousemove={handlePanMove}
           onscroll={handleScroll}
