@@ -149,6 +149,153 @@ fn ocr_run(
 }
 
 // ============================================================================
+// Annotation Embedding Commands (PythonBridge)
+// ============================================================================
+
+/// Embed annotations from JSON into a PDF file
+#[tauri::command]
+fn annotations_embed_in_pdf(
+    app: AppHandle,
+    input: String,
+    annotations_json: String,
+    output: Option<String>,
+) -> Result<AnnotationEmbedResult, String> {
+    let output_path = output.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir
+            .join("tlacuilo-annotated.pdf")
+            .to_string_lossy()
+            .to_string()
+    });
+
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec![
+        "embed",
+        "--input", &input,
+        "--annotations", &annotations_json,
+        "--output", &output_path,
+    ];
+
+    let result = bridge
+        .run_script("pdf_annotations.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    // Parse the JSON output
+    let stats: serde_json::Value = serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))?;
+
+    Ok(AnnotationEmbedResult {
+        output_path,
+        total: stats["total"].as_u64().unwrap_or(0) as u32,
+        errors: stats["errors"]
+            .as_array()
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default(),
+    })
+}
+
+#[derive(Debug, Serialize)]
+struct AnnotationEmbedResult {
+    output_path: String,
+    total: u32,
+    errors: Vec<String>,
+}
+
+/// Read annotations from a PDF file and return as JSON
+#[tauri::command]
+fn annotations_read_from_pdf(app: AppHandle, input: String) -> Result<String, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec!["read", "--input", &input];
+
+    let result = bridge
+        .run_script("pdf_annotations.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    // Return the JSON directly
+    Ok(result.stdout.trim().to_string())
+}
+
+/// Export annotations from PDF to XFDF format
+#[tauri::command]
+fn annotations_export_xfdf(
+    app: AppHandle,
+    input: String,
+    output: String,
+) -> Result<XfdfExportResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec!["export-xfdf", "--input", &input, "--output", &output];
+
+    let result = bridge
+        .run_script("pdf_annotations.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    let stats: serde_json::Value = serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))?;
+
+    Ok(XfdfExportResult {
+        output_path: output,
+        exported: stats["exported"].as_u64().unwrap_or(0) as u32,
+    })
+}
+
+#[derive(Debug, Serialize)]
+struct XfdfExportResult {
+    output_path: String,
+    exported: u32,
+}
+
+/// Import annotations from XFDF into a PDF
+#[tauri::command]
+fn annotations_import_xfdf(
+    app: AppHandle,
+    input: String,
+    xfdf: String,
+    output: Option<String>,
+) -> Result<AnnotationEmbedResult, String> {
+    let output_path = output.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir
+            .join("tlacuilo-xfdf-imported.pdf")
+            .to_string_lossy()
+            .to_string()
+    });
+
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec![
+        "import-xfdf",
+        "--input", &input,
+        "--xfdf", &xfdf,
+        "--output", &output_path,
+    ];
+
+    let result = bridge
+        .run_script("pdf_annotations.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    let stats: serde_json::Value = serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))?;
+
+    Ok(AnnotationEmbedResult {
+        output_path,
+        total: stats["total"].as_u64().unwrap_or(0) as u32,
+        errors: stats["errors"]
+            .as_array()
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default(),
+    })
+}
+
+// ============================================================================
 // PDF Operations Commands (PythonBridge)
 // ============================================================================
 
@@ -554,10 +701,15 @@ pub fn run() {
       pdf_viewer::pdf_render_thumbnail,
       pdf_viewer::pdf_render_thumbnails,
       pdf_viewer::pdf_close,
-      // Annotations
+      // Annotations (JSON file-based)
       annotations::annotations_save,
       annotations::annotations_load,
-      annotations::annotations_delete
+      annotations::annotations_delete,
+      // Annotations (PDF embedded)
+      annotations_embed_in_pdf,
+      annotations_read_from_pdf,
+      annotations_export_xfdf,
+      annotations_import_xfdf
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
