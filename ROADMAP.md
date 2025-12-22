@@ -54,8 +54,12 @@
 | Comments/Notes | ✅ Done | Sticky note style with text |
 | Underline | ✅ Done | |
 | Strikethrough | ✅ Done | |
+| Annotations Panel | ✅ Done | Right sidebar showing all annotations |
+| Save/Load Annotations | ✅ Done | Sidecar JSON file (.filename.pdf.annotations.json) |
+| Virtual Scrolling | ✅ Done | Only loads visible pages + buffer for large docs |
 | Freehand Drawing | ⬜ Pending | |
 | Stamps | ⬜ Pending | |
+| Embed in PDF | ⬜ Pending | Save annotations directly into PDF file |
 
 ---
 
@@ -108,5 +112,7 @@
 | Item | Priority | Notes |
 |------|----------|-------|
 | Interactive Help system | Medium | Detect distro, show real package commands (pacman/apt/dnf) |
+| GPU acceleration | Medium | WebGL or wgpu for faster rendering |
+| Performance benchmarking | Low | CPU/memory/GPU diagnostics panel |
 | "Open with Tlacuilo" system registration | Low | Register as PDF handler in desktop |
 | Splash screen with loading indicator | Low | Show during app initialization |
