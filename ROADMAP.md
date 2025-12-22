@@ -16,7 +16,7 @@
 | Merge | ✅ Done | MuPDF/Rust | |
 | Split | ✅ Done | MuPDF/Rust | |
 | Rotate | ✅ Done | MuPDF/Rust | |
-| Compress | ⬜ Pending | MuPDF/Rust | Next to implement |
+| Compress | ✅ Done | MuPDF/Rust | 3 compression levels |
 
 ---
 
