@@ -28,7 +28,7 @@
 
 | Tool | Status | Technology | Notes |
 |------|--------|------------|-------|
-| OCR | ⬜ Pending | OCRmyPDF (Python) | High value feature |
+| OCR | ✅ Done | OCRmyPDF (Python) | Requires tesseract-data-* |
 | Images → PDF | ⬜ Pending | MuPDF or Python | |
 | PDF → Images | ⬜ Pending | MuPDF | |
 

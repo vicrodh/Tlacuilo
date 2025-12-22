@@ -9,6 +9,9 @@ reportlab>=4.2.5
 # Image processing
 pillow>=11.0.0
 
+# OCR
+ocrmypdf>=16.0.0
+
 # Markdown to PDF conversion
 weasyprint>=62.0
 markdown>=3.6
