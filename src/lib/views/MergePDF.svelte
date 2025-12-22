@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { Upload, FolderOpen, Trash2, X, ChevronUp, ChevronDown, Plus, FileText } from 'lucide-svelte';
+  import { Upload, FolderOpen, Trash2, X, Plus, FileText } from 'lucide-svelte';
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
   import { listen } from '@tauri-apps/api/event';
-  import { open, save } from '@tauri-apps/plugin-dialog';
+  import { open, save, confirm } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
   import {
@@ -13,9 +13,14 @@
     type PageData
   } from '$lib/utils/pdfjs';
   import { log, logSuccess, logError, registerFile, unregisterFile, unregisterModule } from '$lib/stores/status.svelte';
-  import { PDFViewer } from '$lib/components/PDFViewer';
 
   const MODULE = 'Merge';
+
+  interface Props {
+    onOpenInViewer?: (path: string) => void;
+  }
+
+  let { onOpenInViewer }: Props = $props();
 
   interface PDFFile {
     id: string;
@@ -32,8 +37,6 @@
   let viewMode = $state<'file' | 'page'>('file');
   let activeTab = $state<string>('');
   let destinationPages = $state<PageData[]>([]);
-  let mergedPDFPath = $state<string | null>(null);
-  let isTopSectionCollapsed = $state(false);
   let unlistenDrop: (() => void) | null = null;
 
   const flipDurationMs = 200;
@@ -186,10 +189,6 @@
     destinationPages = destinationPages.filter((p) => p.id !== pageId);
   }
 
-  function clearMergedPreview() {
-    mergedPDFPath = null;
-  }
-
   async function handleMerge() {
     if (workingFiles.length === 0) return;
 
@@ -221,8 +220,19 @@
         result = await invoke<string>('merge_pdfs', { inputs, output: outputPath });
       }
 
-      mergedPDFPath = result;
       logSuccess(`Merge complete! Saved to ${outputPath}`, MODULE);
+
+      // Ask user if they want to open the merged file
+      const openFile = await confirm('Would you like to open the merged PDF in the viewer?', {
+        title: 'Merge Complete',
+        kind: 'info',
+        okLabel: 'Open',
+        cancelLabel: 'Close',
+      });
+
+      if (openFile && onOpenInViewer) {
+        onOpenInViewer(result);
+      }
     } catch (err) {
       console.error('Merge error:', err);
       logError(`Merge failed: ${err}`, MODULE);
@@ -243,22 +253,12 @@
 <div class="flex-1 flex overflow-hidden">
   <!-- Left Column - 85% (Content Area) -->
   <div class="flex-1 flex flex-col overflow-hidden">
-    <!-- Top Section - File/Page View -->
-    {#if !isTopSectionCollapsed}
-      <div
-        class="border-b flex flex-col relative"
-        style="height: {viewMode === 'file' ? '280px' : '520px'}; background-color: var(--nord1); border-color: var(--nord3);"
-      >
-        <!-- Collapse Button -->
-        <button
-          onclick={() => (isTopSectionCollapsed = true)}
-          class="absolute top-2 right-2 p-1 rounded hover:bg-[var(--nord2)] transition-colors z-10"
-          title="Collapse section"
-        >
-          <ChevronUp size={16} />
-        </button>
-
-        <!-- Tabs - Only in Page View -->
+    <!-- File/Page View Section -->
+    <div
+      class="flex-1 flex flex-col"
+      style="background-color: var(--nord1);"
+    >
+      <!-- Tabs - Only in Page View -->
         {#if viewMode === 'page' && workingFiles.length > 0}
           <div
             class="flex gap-1 px-4 pt-2 border-b overflow-x-auto flex-shrink-0"
@@ -472,47 +472,7 @@
           {/if}
         </div>
       </div>
-    {:else}
-      <!-- Collapsed State -->
-      <div
-        class="border-b flex items-center justify-between px-4 py-2"
-        style="background-color: var(--nord1); border-color: var(--nord3);"
-      >
-        <span class="text-sm opacity-60">
-          {viewMode === 'file' ? 'File View' : 'Page View'} - {workingFiles.length} file(s)
-          {#if viewMode === 'page'}, {destinationPages.length} pages selected{/if}
-        </span>
-        <button
-          onclick={() => (isTopSectionCollapsed = false)}
-          class="p-1 rounded hover:bg-[var(--nord2)] transition-colors"
-          title="Expand section"
-        >
-          <ChevronDown size={16} />
-        </button>
-      </div>
-    {/if}
-
-    <!-- Bottom Section - PDF Viewer -->
-    <div class="flex-1 overflow-hidden">
-      {#if mergedPDFPath}
-        <PDFViewer
-          filePath={mergedPDFPath}
-          showToolbar={true}
-          showSidebar={true}
-          showDetachButton={false}
-          onClose={clearMergedPreview}
-        />
-      {:else}
-        <!-- Empty State -->
-        <div
-          class="h-full flex flex-col items-center justify-center rounded-lg m-4"
-          style="background-color: var(--nord2);"
-        >
-          <p class="opacity-60">PDF preview will appear here after merge</p>
-        </div>
-      {/if}
     </div>
-  </div>
 
   <!-- Right Column - 15% (Simple File List) -->
   <div

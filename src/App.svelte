@@ -105,7 +105,7 @@
       {#if currentPage === 'home'}
         <Dashboard onNavigate={navigate} />
       {:else if currentPage === 'merge'}
-        <MergePDF />
+        <MergePDF onOpenInViewer={(path) => { setPendingOpenFile(path); navigate('viewer'); }} />
       {:else if currentPage === 'split'}
         <SplitPDF />
       {:else if currentPage === 'rotate'}
