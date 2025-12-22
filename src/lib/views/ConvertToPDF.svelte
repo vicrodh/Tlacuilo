@@ -43,6 +43,48 @@
     return btoa(binary);
   }
 
+  // Create a small thumbnail from base64 image data
+  const THUMBNAIL_MAX_SIZE = 200;
+
+  function createThumbnail(base64DataUrl: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => {
+        // Calculate scaled dimensions
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > THUMBNAIL_MAX_SIZE) {
+            height = Math.round((height * THUMBNAIL_MAX_SIZE) / width);
+            width = THUMBNAIL_MAX_SIZE;
+          }
+        } else {
+          if (height > THUMBNAIL_MAX_SIZE) {
+            width = Math.round((width * THUMBNAIL_MAX_SIZE) / height);
+            height = THUMBNAIL_MAX_SIZE;
+          }
+        }
+
+        // Draw to canvas at reduced size
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Could not get canvas context'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Export as smaller JPEG (good compression for thumbnails)
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = base64DataUrl;
+    });
+  }
+
   // State
   let files = $state<ImageFile[]>([]);
   let isConverting = $state(false);
@@ -111,7 +153,10 @@
                        'image/png';
 
       const base64 = arrayBufferToBase64(contents);
-      const thumbnail = `data:${mimeType};base64,${base64}`;
+      const fullDataUrl = `data:${mimeType};base64,${base64}`;
+
+      // Create a small thumbnail (200px max) to improve drag-n-drop performance
+      const thumbnail = await createThumbnail(fullDataUrl);
 
       files = files.map((f) =>
         f.id === fileId ? { ...f, thumbnail, isLoading: false } : f
