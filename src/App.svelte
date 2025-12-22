@@ -109,7 +109,7 @@
       {:else if currentPage === 'split'}
         <SplitPDF />
       {:else if currentPage === 'rotate'}
-        <RotatePDF />
+        <RotatePDF onOpenInViewer={(path) => { setPendingOpenFile(path); navigate('viewer'); }} />
       {:else if currentPage === 'compress'}
         <CompressPDF />
       {:else if currentPage === 'ocr'}

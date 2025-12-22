@@ -6,30 +6,27 @@
     FileText,
     RotateCw,
     Layers,
-    Grid3x3,
-    ChevronLeft,
-    ChevronRight,
-    ZoomIn,
-    ZoomOut,
-    Columns,
-    RectangleVertical,
-    RectangleHorizontal,
-    LayoutGrid
+    Grid3x3
   } from 'lucide-svelte';
   import { listen } from '@tauri-apps/api/event';
-  import { open, save } from '@tauri-apps/plugin-dialog';
+  import { open, save, confirm } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
   import {
     getPageCount,
     loadPdfPages,
-    renderPageForViewer,
     clearPdfCache,
     type PageData
   } from '$lib/utils/pdfjs';
   import PageSelector from '$lib/components/PageSelector.svelte';
   import PagePreviewModal from '$lib/components/PagePreviewModal.svelte';
   import { log, logSuccess, logError, registerFile, unregisterModule } from '$lib/stores/status.svelte';
+
+  interface Props {
+    onOpenInViewer?: (path: string) => void;
+  }
+
+  let { onOpenInViewer }: Props = $props();
 
   const MODULE = 'Rotate';
 
@@ -50,28 +47,16 @@
   let rotationDegrees = $state<number>(90);
   let groupDegrees = $state<number[]>([]);
   let pageRotations = $state<Map<number, number>>(new Map());
-  let previewEnabled = $state(false);
   let selectedPages = $state<Set<number>>(new Set());
   let groups = $state<number[][]>([]);
   let isRotating = $state(false);
   let unlistenDrop: (() => void) | null = null;
-  let resultPath = $state<string | null>(null);
-
-  // Result viewer state
-  let viewerImages = $state<{ page: number; image: string }[]>([]);
-  let viewerTotalPages = $state(0);
-  let viewerCurrentPage = $state(1);
-  let isLoadingViewer = $state(false);
-  let viewerZoom = $state(100);
-  let viewerLayout = $state<'single' | 'double' | 'grid'>('single');
-  let fitMode = $state<'auto' | 'width' | 'height'>('auto');
-  let resultThumbnails = $state<{ page: number; image: string }[]>([]);
-  let isLoadingThumbs = $state(false);
-  let pageInputValue = $state('1');
-  const ZOOM_LEVELS = [50, 75, 100, 125, 150, 200, 300];
 
   // Preview modal state
   let previewPage = $state<PageData | null>(null);
+
+  // Preview is always enabled in pages mode
+  const previewEnabled = $derived(rotationMode === 'pages' || rotationMode === 'all');
 
   onMount(async () => {
     unlistenDrop = await listen<string[]>('tauri://file-drop', async (e) => {
@@ -115,8 +100,6 @@
     groups = [];
     groupDegrees = [];
     pageRotations = new Map();
-    previewEnabled = false;
-    resultPath = null;
 
     try {
       const pageCount = await getPageCount(path);
@@ -153,8 +136,6 @@
       groups = [];
       groupDegrees = [];
       pageRotations = new Map();
-      resultPath = null;
-      previewEnabled = false;
     }
   }
 
@@ -194,95 +175,8 @@
     return rotationDegrees;
   }
 
-  function pagesForLayout(base: number): number[] {
-    if (viewerLayout === 'single') return [base];
-    if (viewerLayout === 'double') return [base, Math.min(base + 1, viewerTotalPages)].filter((p, idx, arr) => arr.indexOf(p) === idx);
-    // grid: up to 4 pages
-    const pages: number[] = [];
-    for (let i = 0; i < 4; i++) {
-      const p = base + i;
-      if (p <= viewerTotalPages) pages.push(p);
-    }
-    return pages;
-  }
-
-  async function loadResultViewer(pdfPath: string) {
-    isLoadingViewer = true;
-    viewerTotalPages = await getPageCount(pdfPath);
-    viewerCurrentPage = 1;
-    pageInputValue = '1';
-    const pages = pagesForLayout(1);
-    viewerImages = [];
-    for (const p of pages) {
-      const img = await renderPageForViewer(pdfPath, p, 800 * (viewerZoom / 100));
-      viewerImages = [...viewerImages, { page: p, image: img }];
-    }
-    void loadResultThumbnails(pdfPath);
-    isLoadingViewer = false;
-  }
-
-  async function goToViewerPage(page: number) {
-    if (!resultPath || page < 1 || page > viewerTotalPages) return;
-    isLoadingViewer = true;
-    viewerCurrentPage = page;
-    pageInputValue = String(page);
-    viewerImages = [];
-    const pages = pagesForLayout(page);
-    for (const p of pages) {
-      const img = await renderPageForViewer(resultPath, p, 800 * (viewerZoom / 100));
-      viewerImages = [...viewerImages, { page: p, image: img }];
-    }
-    isLoadingViewer = false;
-  }
-
-  function handleViewerPageInput(e: Event) {
-    const value = parseInt((e.target as HTMLInputElement).value, 10);
-    if (!isNaN(value)) {
-      goToViewerPage(value);
-    }
-  }
-
-  function changeZoom(delta: number) {
-    const idx = ZOOM_LEVELS.findIndex((z) => z >= viewerZoom);
-    const nextIdx = Math.min(Math.max(idx + delta, 0), ZOOM_LEVELS.length - 1);
-    viewerZoom = ZOOM_LEVELS[nextIdx];
-    if (resultPath) {
-      goToViewerPage(viewerCurrentPage);
-    }
-  }
-
-  async function changeLayout(layout: 'single' | 'double' | 'grid') {
-    viewerLayout = layout;
-    if (resultPath) {
-      await goToViewerPage(viewerCurrentPage);
-    }
-  }
-
-  async function loadResultThumbnails(pdfPath: string) {
-    isLoadingThumbs = true;
-    resultThumbnails = [];
-    try {
-      const total = await getPageCount(pdfPath);
-      const thumbs: { page: number; image: string }[] = [];
-      for (let i = 1; i <= total; i++) {
-        const img = await renderPageForViewer(pdfPath, i, 180);
-        thumbs.push({ page: i, image: img });
-      }
-      resultThumbnails = thumbs;
-    } catch (err) {
-      console.error('Error loading thumbnails:', err);
-    }
-    isLoadingThumbs = false;
-  }
-
-  function thumbBorder(page: number): string {
-    return page === viewerCurrentPage ? '2px solid var(--nord8)' : '1px solid var(--nord3)';
-  }
-
   async function handleRotate() {
     if (!file || file.pages.length === 0) return;
-
-    resultPath = null;
 
     // Determine rotations
     let rotationEntries: string[] = [];
@@ -328,8 +222,18 @@
       });
 
       logSuccess(`Rotation complete: ${result}`, MODULE);
-      resultPath = result;
-      await loadResultViewer(result);
+
+      // Ask user if they want to open the rotated file
+      const openFile = await confirm('Would you like to open the rotated PDF in the viewer?', {
+        title: 'Rotation Complete',
+        kind: 'info',
+        okLabel: 'Open',
+        cancelLabel: 'Close',
+      });
+
+      if (openFile && onOpenInViewer) {
+        onOpenInViewer(result);
+      }
     } catch (err) {
       console.error('Rotate error:', err);
       logError(`Rotate failed: ${err}`, MODULE);
@@ -375,156 +279,8 @@
 <div class="flex-1 flex overflow-hidden">
   <!-- Main Content Area -->
   <div class="flex-1 flex flex-col overflow-hidden">
-    {#if resultPath}
-      <!-- Result viewer -->
-      <div
-        class="flex items-center gap-3 px-4 py-2 border-b"
-        style="background-color: var(--nord1); border-color: var(--nord3);"
-      >
-        <button
-          class="px-3 py-1.5 rounded text-xs hover:bg-[var(--nord2)] transition-colors"
-          style="border: 1px solid var(--nord3);"
-          onclick={() => { resultPath = null; previewEnabled = false; }}
-        >
-          Back to rotate
-        </button>
-        <span class="text-xs opacity-60 truncate">Previewing: {resultPath}</span>
-        <div class="flex items-center gap-2 ml-auto">
-          <button
-            class="p-2 rounded hover:bg-[var(--nord2)]"
-            onclick={() => goToViewerPage(viewerCurrentPage - 1)}
-            disabled={viewerCurrentPage <= 1 || isLoadingViewer}
-          >
-            <ChevronLeft size={14} />
-          </button>
-          <div class="flex items-center gap-1 text-xs">
-            <input
-              class="w-12 px-2 py-1 rounded border text-center"
-              style="background-color: var(--nord0); border-color: var(--nord3);"
-              value={pageInputValue}
-              oninput={handleViewerPageInput}
-            />
-            <span class="opacity-60">/ {viewerTotalPages}</span>
-          </div>
-          <button
-            class="p-2 rounded hover:bg-[var(--nord2)]"
-            onclick={() => goToViewerPage(viewerCurrentPage + 1)}
-            disabled={viewerCurrentPage >= viewerTotalPages || isLoadingViewer}
-          >
-            <ChevronRight size={14} />
-          </button>
-
-          <div class="flex items-center gap-1 ml-4">
-            <button
-              class="p-2 rounded hover:bg-[var(--nord2)]"
-              onclick={() => changeZoom(-1)}
-              disabled={isLoadingViewer}
-            >
-              <ZoomOut size={14} />
-            </button>
-            <span class="text-xs w-10 text-center">{viewerZoom}%</span>
-            <button
-              class="p-2 rounded hover:bg-[var(--nord2)]"
-              onclick={() => changeZoom(1)}
-              disabled={isLoadingViewer}
-            >
-              <ZoomIn size={14} />
-            </button>
-          </div>
-
-          <div class="flex items-center gap-1 ml-2">
-            <span class="text-xs opacity-60">Fit</span>
-            <div class="flex items-center gap-1">
-              <button
-                class="p-1 rounded border"
-                style="border-color: var(--nord3); background-color: {fitMode === 'auto' ? 'var(--nord8)' : 'var(--nord2)'};"
-                onclick={() => fitMode = 'auto'}
-                title="Auto"
-              >
-                <RectangleHorizontal size={14} />
-              </button>
-              <button
-                class="p-1 rounded border"
-                style="border-color: var(--nord3); background-color: {fitMode === 'width' ? 'var(--nord8)' : 'var(--nord2)'};"
-                onclick={() => fitMode = 'width'}
-                title="Fit width"
-              >
-                <RectangleHorizontal size={14} />
-              </button>
-              <button
-                class="p-1 rounded border"
-                style="border-color: var(--nord3); background-color: {fitMode === 'height' ? 'var(--nord8)' : 'var(--nord2)'};"
-                onclick={() => fitMode = 'height'}
-                title="Fit height"
-              >
-                <RectangleVertical size={14} />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="flex-1 overflow-auto p-4">
-        <div class="h-full flex gap-4">
-          <div
-            class="flex-1 rounded-lg flex items-center justify-center"
-            style="background-color: var(--nord1);"
-          >
-            {#if isLoadingViewer}
-              <div class="w-10 h-10 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
-            {:else if viewerImages.length > 0}
-              <div class="w-full h-full flex flex-wrap items-start justify-center gap-4 overflow-auto p-4">
-                {#each viewerImages as item (item.page)}
-                  <div class="flex flex-col items-center gap-1">
-                    <img
-                      src={item.image}
-                      alt={`Page ${item.page}`}
-                      class="max-h-[85vh] max-w-full object-contain"
-                      style={`width: ${viewerLayout === 'grid' ? '320px' : 'auto'}; ${fitMode === 'width' ? 'width: 100%; height: auto;' : ''}${fitMode === 'height' ? 'height: 80vh; width: auto;' : ''}`}
-                    />
-                    <span class="text-xs opacity-60">Page {item.page}</span>
-                  </div>
-                {/each}
-              </div>
-            {:else}
-              <p class="opacity-60 text-sm">No preview available</p>
-            {/if}
-          </div>
-
-          <div
-            class="w-52 rounded-lg border p-3 flex flex-col gap-2"
-            style="background-color: var(--nord1); border-color: var(--nord3);"
-          >
-            <div class="flex items-center justify-between text-xs">
-              <span class="opacity-60">Thumbnails</span>
-              {#if isLoadingThumbs}
-                <span class="opacity-60">Loading...</span>
-              {/if}
-            </div>
-            <div class="flex-1 overflow-auto space-y-2">
-              {#if resultThumbnails.length === 0 && !isLoadingThumbs}
-                <p class="text-xs opacity-50">No thumbnails</p>
-              {:else}
-                {#each resultThumbnails as thumb (thumb.page)}
-                  <button
-                    class="w-full text-left rounded p-1 transition-colors"
-                    style={`border: ${thumbBorder(thumb.page)}; background-color: ${thumb.page === viewerCurrentPage ? 'var(--nord2)' : 'transparent'};`}
-                    onclick={() => goToViewerPage(thumb.page)}
-                  >
-                    <div class="w-full aspect-[3/4] overflow-hidden flex items-center justify-center" style="background-color: var(--nord0);">
-                      <img src={thumb.image} alt={`Page ${thumb.page}`} class="w-full object-contain" />
-                    </div>
-                    <div class="text-[11px] opacity-70 mt-1">Page {thumb.page}</div>
-                  </button>
-                {/each}
-              {/if}
-            </div>
-          </div>
-        </div>
-      </div>
-    {:else}
-      <!-- Rotate Mode Toolbar -->
-      {#if file && file.pages.length > 0}
+    <!-- Rotate Mode Toolbar -->
+    {#if file && file.pages.length > 0}
         <div
           class="flex items-center gap-4 px-4 py-2 border-b"
           style="background-color: var(--nord1); border-color: var(--nord3);"
@@ -572,54 +328,16 @@
             id="rotation-select"
             class="text-xs px-2 py-1 rounded border"
             style="background-color: var(--nord2); border-color: var(--nord3);"
-              bind:value={rotationDegrees}
-              onchange={onRotationChange}
-            >
-              {#each DEGREE_OPTIONS as deg}
-                <option value={deg}>{deg}°</option>
-              {/each}
-            </select>
-            <button
-              class="px-2 py-1 rounded text-xs border transition-colors"
-              style="border-color: var(--nord3); background-color: {previewEnabled ? 'var(--nord8)' : 'var(--nord2)'}; color: {previewEnabled ? 'var(--nord0)' : 'var(--nord4)'};"
-              onclick={() => previewEnabled = !previewEnabled}
-              title="Preview shows rotations on thumbnails only"
-            >
-              {previewEnabled ? 'Preview on' : 'Preview off'}
-            </button>
-            <div class="flex items-center gap-1 ml-2">
-              <span class="text-xs opacity-60">Layout</span>
-              <div class="flex items-center gap-1">
-                <button
-                  class="p-1 rounded border"
-                  style="border-color: var(--nord3); background-color: {viewerLayout === 'single' ? 'var(--nord8)' : 'var(--nord2)'};"
-                  onclick={() => changeLayout('single')}
-                  title="Single page"
-                >
-                  <RectangleVertical size={14} />
-                </button>
-                <button
-                  class="p-1 rounded border"
-                  style="border-color: var(--nord3); background-color: {viewerLayout === 'double' ? 'var(--nord8)' : 'var(--nord2)'};"
-                  onclick={() => changeLayout('double')}
-                  title="Two-up"
-                >
-                  <Columns size={14} />
-                </button>
-                <button
-                  class="p-1 rounded border"
-                  style="border-color: var(--nord3); background-color: {viewerLayout === 'grid' ? 'var(--nord8)' : 'var(--nord2)'};"
-                  onclick={() => changeLayout('grid')}
-                  title="2x2 grid"
-                >
-                  <LayoutGrid size={14} />
-                </button>
-              </div>
-            </div>
-          </div>
-
+            bind:value={rotationDegrees}
+            onchange={onRotationChange}
+          >
+            {#each DEGREE_OPTIONS as deg}
+              <option value={deg}>{deg}°</option>
+            {/each}
+          </select>
           <span class="text-xs opacity-60">{rotationSummary()}</span>
         </div>
+      </div>
 
         {#if rotationMode === 'groups' && groups.length > 0}
           <div
@@ -701,7 +419,6 @@
           {/if}
         </div>
       {/if}
-    {/if}
   </div>
 
   <!-- Right Sidebar -->

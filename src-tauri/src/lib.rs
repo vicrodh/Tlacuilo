@@ -264,59 +264,42 @@ fn split_pdf(
 
 #[tauri::command]
 fn rotate_pdf(
-  app: AppHandle,
-  input: String,
-  degrees: i32,
-  output: Option<String>,
-  rotations: Option<Vec<String>>,
+    app: AppHandle,
+    input: String,
+    degrees: i32,
+    output: Option<String>,
+    rotations: Option<Vec<String>>,
 ) -> Result<String, String> {
-  let (script_path, _) = resolve_backend_script(&app)
-    .ok_or_else(|| "Backend script not found (backend/pdf_pages.py)".to_string())?;
-  let python_bin = resolve_python_bin();
-  let out_path = output.unwrap_or_else(|| {
-    let cache_dir = app
-      .path()
-      .app_cache_dir()
-      .unwrap_or_else(|_| std::env::temp_dir());
-    cache_dir.join("tlacuilo-rotated.pdf").to_string_lossy().to_string()
-  });
+    let out_path = output.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir.join("tlacuilo-rotated.pdf").to_string_lossy().to_string()
+    });
 
-  let mut cmd = Command::new(&python_bin);
-  cmd
-    .arg(&script_path)
-    .arg("rotate")
-    .arg("--input")
-    .arg(&input)
-    .arg("--output")
-    .arg(&out_path);
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
 
-  if let Some(rotation_list) = rotations {
-    if !rotation_list.is_empty() {
-      cmd.arg("--rotation");
-      cmd.args(rotation_list);
+    let degrees_str = degrees.to_string();
+    let mut args: Vec<&str> = vec!["rotate", "--input", &input, "--output", &out_path];
+
+    // Clone rotations to extend lifetime
+    let rotation_refs: Vec<String> = rotations.unwrap_or_default();
+    if !rotation_refs.is_empty() {
+        args.push("--rotation");
+        for r in &rotation_refs {
+            args.push(r);
+        }
     } else {
-      cmd.arg("--degrees").arg(degrees.to_string());
+        args.push("--degrees");
+        args.push(&degrees_str);
     }
-  } else {
-    cmd.arg("--degrees").arg(degrees.to_string());
-  }
 
-  let output = cmd
-    .output()
-    .map_err(|e| format!("Failed to spawn python ({python_bin}): {e}"))?;
+    bridge
+        .run_script("pdf_pages.py", &args)
+        .map_err(|e| e.to_string())?;
 
-  if !output.status.success() {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    return Err(format!(
-      "Python rotate failed (code {:?}). stdout: {} stderr: {}",
-      output.status.code(),
-      stdout,
-      stderr
-    ));
-  }
-
-  Ok(out_path)
+    Ok(out_path)
 }
 
 #[tauri::command]
