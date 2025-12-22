@@ -126,7 +126,8 @@ export async function renderPage(
     viewport: scaledViewport,
   }).promise;
 
-  return canvas.toDataURL('image/png');
+  // Use JPEG with 0.7 quality for smaller thumbnails
+  return canvas.toDataURL('image/jpeg', 0.7);
 }
 
 /**

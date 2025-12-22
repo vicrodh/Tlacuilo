@@ -7,6 +7,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
   import { log, logSuccess, logError, registerFile, unregisterModule } from '$lib/stores/status.svelte';
+  import { loadImageThumbnail } from '$lib/utils/thumbnails';
 
   interface Props {
     onOpenInViewer?: (path: string) => void;
@@ -30,59 +31,6 @@
     flipH: boolean;
     flipV: boolean;
     orientation: 'auto' | 'portrait' | 'landscape';
-  }
-
-  // Chunked base64 conversion for large files
-  function arrayBufferToBase64(buffer: Uint8Array): string {
-    let binary = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < buffer.length; i += chunkSize) {
-      const chunk = buffer.subarray(i, Math.min(i + chunkSize, buffer.length));
-      binary += String.fromCharCode.apply(null, Array.from(chunk));
-    }
-    return btoa(binary);
-  }
-
-  // Create a small thumbnail from base64 image data
-  const THUMBNAIL_MAX_SIZE = 200;
-
-  function createThumbnail(base64DataUrl: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const img = new window.Image();
-      img.onload = () => {
-        // Calculate scaled dimensions
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > THUMBNAIL_MAX_SIZE) {
-            height = Math.round((height * THUMBNAIL_MAX_SIZE) / width);
-            width = THUMBNAIL_MAX_SIZE;
-          }
-        } else {
-          if (height > THUMBNAIL_MAX_SIZE) {
-            width = Math.round((width * THUMBNAIL_MAX_SIZE) / height);
-            height = THUMBNAIL_MAX_SIZE;
-          }
-        }
-
-        // Draw to canvas at reduced size
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Could not get canvas context'));
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // Export as smaller JPEG (good compression for thumbnails)
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
-      };
-      img.onerror = () => reject(new Error('Failed to load image'));
-      img.src = base64DataUrl;
-    });
   }
 
   // State
@@ -141,22 +89,7 @@
 
   async function loadThumbnail(fileId: string, path: string, name: string) {
     try {
-      // Use Tauri's fs to read the file and create a data URL
-      const { readFile } = await import('@tauri-apps/plugin-fs');
-      const contents = await readFile(path);
-      const ext = path.split('.').pop()?.toLowerCase() || 'png';
-      const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
-                       ext === 'png' ? 'image/png' :
-                       ext === 'webp' ? 'image/webp' :
-                       ext === 'gif' ? 'image/gif' :
-                       ext === 'bmp' ? 'image/bmp' :
-                       'image/png';
-
-      const base64 = arrayBufferToBase64(contents);
-      const fullDataUrl = `data:${mimeType};base64,${base64}`;
-
-      // Create a small thumbnail (200px max) to improve drag-n-drop performance
-      const thumbnail = await createThumbnail(fullDataUrl);
+      const thumbnail = await loadImageThumbnail(path);
 
       files = files.map((f) =>
         f.id === fileId ? { ...f, thumbnail, isLoading: false } : f
