@@ -127,7 +127,7 @@
 </script>
 
 <aside
-  class="relative flex flex-col h-full transition-all duration-200"
+  class="flex flex-col h-full transition-all duration-200"
   style="background-color: var(--nord1); width: {isExpanded ? '200px' : '64px'};"
 >
   <!-- App Branding -->
@@ -206,8 +206,23 @@
     {/if}
   </div>
 
-  <!-- Settings at Bottom -->
-  <div class="p-2 border-t" style="border-color: var(--nord3);">
+  <!-- Bottom Section: Toggle + Settings -->
+  <div class="p-2 border-t space-y-1" style="border-color: var(--nord3);">
+    <!-- Collapse/Expand Toggle -->
+    <button
+      onclick={onToggle}
+      class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-[var(--nord2)] {isExpanded ? 'justify-start' : 'justify-center'}"
+      title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+    >
+      {#if isExpanded}
+        <ChevronsLeft size={20} />
+        <span class="text-sm">Collapse</span>
+      {:else}
+        <ChevronsRight size={20} />
+      {/if}
+    </button>
+
+    <!-- Settings -->
     <button
       onclick={() => onNavigate('settings')}
       class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-[var(--nord2)] {isExpanded ? 'justify-start' : 'justify-center'}"
@@ -220,18 +235,4 @@
       {/if}
     </button>
   </div>
-
-  <!-- Floating Toggle Button -->
-  <button
-    onclick={onToggle}
-    class="absolute top-1/2 -translate-y-1/2 -right-4 w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-105 z-10 shadow-md"
-    style="background-color: var(--nord2); border: 1px solid var(--nord3);"
-    title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-  >
-    {#if isExpanded}
-      <ChevronsLeft size={16} />
-    {:else}
-      <ChevronsRight size={16} />
-    {/if}
-  </button>
 </aside>
