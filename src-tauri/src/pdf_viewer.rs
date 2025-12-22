@@ -84,8 +84,10 @@ pub fn pdf_render_page(
     dpi: Option<u32>,
     max_width: Option<u32>,
     max_height: Option<u32>,
+    hide_annotations: Option<bool>,
 ) -> Result<RenderedPage, String> {
     let dpi = dpi.unwrap_or(150);
+    let show_annots = !hide_annotations.unwrap_or(false);
 
     let document = Document::open(&path)
         .map_err(|e| format!("Failed to load PDF: {:?}", e))?;
@@ -128,9 +130,10 @@ pub fn pdf_render_page(
     // Create transformation matrix for scaling
     let matrix = Matrix::new_scale(scale, scale);
 
-    // Render the page to a pixmap (RGB with alpha, show annotations)
+    // Render the page to a pixmap (RGB with alpha)
+    // show_annots controls whether PDF annotations are rendered
     let pixmap = pdf_page
-        .to_pixmap(&matrix, &Colorspace::device_rgb(), true, true)
+        .to_pixmap(&matrix, &Colorspace::device_rgb(), true, show_annots)
         .map_err(|e| format!("Failed to render page: {:?}", e))?;
 
     // Get actual rendered dimensions
@@ -163,7 +166,7 @@ pub fn pdf_render_thumbnail(
     max_size: Option<u32>,
 ) -> Result<RenderedPage, String> {
     let max_size = max_size.unwrap_or(200);
-    pdf_render_page(path, page, Some(72), Some(max_size), Some(max_size))
+    pdf_render_page(path, page, Some(72), Some(max_size), Some(max_size), None)
 }
 
 /// Batch render multiple thumbnails

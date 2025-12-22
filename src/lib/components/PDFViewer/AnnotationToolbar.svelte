@@ -88,16 +88,37 @@
     </button>
 
     {#if showColorPicker}
+      <!-- 6 colors in 3x2 grid: 3*32px + 2*8px gaps = 112px + 24px padding = 136px -->
       <div
-        class="absolute top-full left-0 mt-1 p-2 rounded-lg shadow-lg z-50"
-        style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+        class="absolute top-full left-1/2 mt-1 rounded-lg shadow-lg"
+        style="
+          background-color: var(--nord1);
+          border: 1px solid var(--nord3);
+          z-index: 99999;
+          transform: translateX(-50%);
+          padding: 12px;
+          width: 136px;
+          box-sizing: border-box;
+        "
       >
-        <div class="grid grid-cols-3 gap-2">
+        <div
+          style="
+            display: grid;
+            grid-template-columns: repeat(3, 32px);
+            gap: 8px;
+            justify-content: center;
+          "
+        >
           {#each HIGHLIGHT_COLORS as color}
             <button
               onclick={() => selectColor(color.value)}
-              class="w-7 h-7 rounded border-2 transition-transform hover:scale-105"
-              style="background-color: {color.value}; border-color: {store.activeColor === color.value ? 'var(--nord6)' : 'transparent'};"
+              class="rounded border-2 transition-transform hover:scale-110"
+              style="
+                width: 32px;
+                height: 32px;
+                background-color: {color.value};
+                border-color: {store.activeColor === color.value ? 'var(--nord6)' : 'transparent'};
+              "
               title={color.name}
             ></button>
           {/each}

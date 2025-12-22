@@ -129,7 +129,18 @@ def embed_annotations(
     doc = fitz.open(str(input_path))
     annotations = json.loads(annotations_json)
 
-    stats = {"total": 0, "by_type": {}, "errors": []}
+    stats = {"total": 0, "by_type": {}, "errors": [], "removed": 0}
+
+    # First, remove all existing annotations of supported types to avoid duplicates
+    supported_types = set(ANNOT_TYPE_MAP.values())
+    for page in doc:
+        annots_to_delete = []
+        for annot in page.annots():
+            if annot.type[0] in supported_types:
+                annots_to_delete.append(annot)
+        for annot in annots_to_delete:
+            page.delete_annot(annot)
+            stats["removed"] += 1
 
     for page_num_str, page_annots in annotations.items():
         page_num = int(page_num_str)
@@ -193,8 +204,16 @@ def embed_annotations(
             except Exception as e:
                 stats["errors"].append(f"Failed to add annotation: {e}")
 
-    # Save with incremental update if possible
-    doc.save(str(output_path), garbage=4, deflate=True)
+    # Save: use incremental save when saving to same file
+    input_resolved = Path(input_path).resolve()
+    output_resolved = Path(output_path).resolve()
+
+    if input_resolved == output_resolved:
+        # Same file: must use incremental save
+        doc.save(str(output_path), incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+    else:
+        # Different file: can optimize
+        doc.save(str(output_path), garbage=4, deflate=True)
     doc.close()
 
     return stats
@@ -459,7 +478,16 @@ def import_xfdf(
         except Exception as e:
             stats["errors"].append(f"Failed to import annotation: {e}")
 
-    doc.save(str(output_path), garbage=4, deflate=True)
+    # Save: use incremental save when saving to same file
+    input_resolved = Path(input_path).resolve()
+    output_resolved = Path(output_path).resolve()
+
+    if input_resolved == output_resolved:
+        # Same file: must use incremental save
+        doc.save(str(output_path), incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+    else:
+        # Different file: can optimize
+        doc.save(str(output_path), garbage=4, deflate=True)
     doc.close()
 
     return stats

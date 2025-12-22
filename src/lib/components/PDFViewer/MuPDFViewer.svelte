@@ -19,6 +19,8 @@
     FileDown,
     FileUp,
     MoreVertical,
+    Eye,
+    EyeOff,
   } from 'lucide-svelte';
   import { save, open } from '@tauri-apps/plugin-dialog';
   import { createAnnotationsStore } from '$lib/stores/annotations.svelte';
@@ -75,30 +77,35 @@
   // Annotations
   const annotationsStore = createAnnotationsStore();
   let showAnnotationTools = $state(false);
+  let showAnnotationOverlay = $state(true); // Toggle visibility of overlay
   let annotationsDirty = $state(false);
   let isSavingAnnotations = $state(false);
   let annotationsInitialized = $state(false);
   let lastAnnotationCount = $state(0);
 
-  // Load annotations from sidecar file
+  // Load annotations from PDF (industry standard - reads native PDF annotations)
   async function loadAnnotations() {
     try {
-      const result = await invoke<string | null>('annotations_load', { pdfPath: filePath });
-      if (result) {
-        const data = JSON.parse(result);
+      // Read annotations directly from PDF (not from sidecar JSON)
+      const json = await invoke<string>('annotations_read_from_pdf', { input: filePath });
+      const data = JSON.parse(json);
+
+      if (Object.keys(data).length > 0) {
         // Convert string keys to numbers
         const converted: Record<number, any[]> = {};
         for (const [key, value] of Object.entries(data)) {
           converted[Number(key)] = value as any[];
         }
         annotationsStore.importAnnotations(converted);
+        console.log(`[MuPDFViewer] Loaded ${Object.values(data).flat().length} annotations from PDF`);
       }
+
       // Mark as initialized and not dirty after load
       lastAnnotationCount = annotationsStore.getAllAnnotations().length;
       annotationsInitialized = true;
       annotationsDirty = false;
     } catch (err) {
-      console.error('[MuPDFViewer] Failed to load annotations:', err);
+      console.error('[MuPDFViewer] Failed to load annotations from PDF:', err);
       annotationsInitialized = true;
     }
   }
@@ -154,7 +161,9 @@
 
   // Embed annotations into PDF (overwrite same file)
   async function saveAnnotationsToPdf() {
-    if (!confirm('Save annotations to PDF? This will overwrite the current file.')) {
+    const annotationCount = annotationsStore.getAllAnnotations().length;
+
+    if (!confirm(`Save ${annotationCount} annotation${annotationCount !== 1 ? 's' : ''} to PDF?\n\nThis will overwrite the current file.`)) {
       return;
     }
 
@@ -170,6 +179,7 @@
 
       if (result.errors.length > 0) {
         console.warn('[MuPDFViewer] Some annotations failed:', result.errors);
+        alert(`Saved ${result.total} annotations. ${result.errors.length} failed.`);
       }
 
       // Clear dirty flag since annotations are now in PDF
@@ -177,8 +187,6 @@
 
       // Reload the PDF to show embedded annotations
       await loadPDF();
-
-      alert(`Saved ${result.total} annotations to PDF`);
     } catch (err) {
       console.error('[MuPDFViewer] Failed to save annotations to PDF:', err);
       alert(`Failed to save annotations to PDF: ${err}`);
@@ -206,8 +214,9 @@
       );
       if (result.errors.length > 0) {
         console.warn('[MuPDFViewer] Some annotations failed:', result.errors);
+        alert(`Saved ${result.total} annotations. ${result.errors.length} failed.`);
       }
-      alert(`Saved ${result.total} annotations to PDF`);
+      // No success alert needed - file was saved
     } catch (err) {
       console.error('[MuPDFViewer] Failed to embed annotations:', err);
       alert(`Failed to save annotations to PDF: ${err}`);
@@ -216,27 +225,36 @@
     }
   }
 
-  // Load annotations from PDF
-  async function loadAnnotationsFromPdf() {
+  // Reload annotations from PDF (discard local changes)
+  async function reloadAnnotationsFromPdf() {
     showAnnotationMenu = false;
-    try {
-      const json = await invoke<string>('annotations_read_from_pdf', { input: filePath });
-      const data = JSON.parse(json);
-      if (Object.keys(data).length === 0) {
-        alert('No annotations found in PDF');
+
+    if (annotationsDirty) {
+      if (!confirm('Discard unsaved changes and reload annotations from PDF?')) {
         return;
       }
-      // Convert string keys to numbers
-      const converted: Record<number, any[]> = {};
-      for (const [key, value] of Object.entries(data)) {
-        converted[Number(key)] = value as any[];
+    }
+
+    try {
+      // Clear current annotations
+      annotationsStore.clearAnnotations();
+
+      const json = await invoke<string>('annotations_read_from_pdf', { input: filePath });
+      const data = JSON.parse(json);
+
+      if (Object.keys(data).length > 0) {
+        const converted: Record<number, any[]> = {};
+        for (const [key, value] of Object.entries(data)) {
+          converted[Number(key)] = value as any[];
+        }
+        annotationsStore.importAnnotations(converted);
       }
-      annotationsStore.importAnnotations(converted);
-      annotationsDirty = true;
-      alert(`Loaded ${Object.values(data).flat().length} annotations from PDF`);
+
+      lastAnnotationCount = annotationsStore.getAllAnnotations().length;
+      annotationsDirty = false;
     } catch (err) {
-      console.error('[MuPDFViewer] Failed to load annotations from PDF:', err);
-      alert(`Failed to load annotations from PDF: ${err}`);
+      console.error('[MuPDFViewer] Failed to reload annotations from PDF:', err);
+      alert(`Failed to reload annotations from PDF: ${err}`);
     }
   }
 
@@ -423,6 +441,7 @@
         dpi: dpi,
         maxWidth: null,
         maxHeight: null,
+        hideAnnotations: true, // Always hide PDF annotations - our overlay renders them
       });
 
       loadedPages.set(pageNum, rendered);
@@ -802,7 +821,7 @@
     // Listen for menu save event (Ctrl+S)
     unlistenSave = await listen('menu-save', () => {
       if (annotationsDirty) {
-        saveAnnotations();
+        saveAnnotationsToPdf();
       }
     });
   });
@@ -856,11 +875,11 @@
 
         {#if annotationsDirty}
           <button
-            onclick={saveAnnotations}
-            disabled={isSavingAnnotations}
+            onclick={saveAnnotationsToPdf}
+            disabled={isExporting}
             class="p-2 rounded-lg transition-colors hover:bg-[var(--nord2)] relative"
-            class:animate-pulse={isSavingAnnotations}
-            title="Save annotations"
+            class:animate-pulse={isExporting}
+            title="Save annotations to PDF"
           >
             <Save size={16} />
             <div
@@ -869,6 +888,19 @@
             ></div>
           </button>
         {/if}
+
+        <!-- Toggle annotation overlay visibility -->
+        <button
+          onclick={() => showAnnotationOverlay = !showAnnotationOverlay}
+          class="p-2 rounded-lg transition-colors hover:bg-[var(--nord2)]"
+          title={showAnnotationOverlay ? "Hide annotation overlay" : "Show annotation overlay"}
+        >
+          {#if showAnnotationOverlay}
+            <Eye size={16} />
+          {:else}
+            <EyeOff size={16} class="opacity-50" />
+          {/if}
+        </button>
 
         <!-- Annotation export/import menu -->
         <button
@@ -1155,14 +1187,15 @@
                     draggable="false"
                   />
 
-                  <!-- Annotation overlay -->
-                  {#if showAnnotationTools}
+                  <!-- Annotation overlay (always render since PDF hides native annotations) -->
+                  {#if showAnnotationOverlay}
                     <AnnotationOverlay
                       store={annotationsStore}
                       page={pageNum}
                       pageWidth={loadedPage.width}
                       pageHeight={loadedPage.height}
                       scale={1}
+                      interactive={showAnnotationTools}
                     />
                   {/if}
                 {:else}
@@ -1251,11 +1284,11 @@
       Save to PDF as...
     </button>
     <button
-      onclick={loadAnnotationsFromPdf}
+      onclick={reloadAnnotationsFromPdf}
       class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
     >
       <Upload size={14} />
-      Load from PDF
+      Reload from PDF
     </button>
     <div class="my-1 border-t" style="border-color: var(--nord3);"></div>
     <button

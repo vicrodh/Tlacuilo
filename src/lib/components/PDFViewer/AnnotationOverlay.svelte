@@ -13,9 +13,10 @@
     pageWidth: number;
     pageHeight: number;
     scale?: number;
+    interactive?: boolean; // Whether to enable drawing/selection
   }
 
-  let { store, page, pageWidth, pageHeight, scale = 1 }: Props = $props();
+  let { store, page, pageWidth, pageHeight, scale = 1, interactive = true }: Props = $props();
 
   let overlayElement: SVGSVGElement;
   let isDrawing = $state(false);
@@ -154,6 +155,7 @@
   }
 
   const cursorStyle = $derived(() => {
+    if (!interactive) return 'default';
     if (!store.activeTool) return 'default';
     if (store.activeTool === 'comment') return 'cell';
     return 'crosshair';
@@ -163,14 +165,16 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <svg
   bind:this={overlayElement}
-  class="absolute inset-0 pointer-events-auto"
+  class="absolute inset-0"
+  class:pointer-events-auto={interactive}
+  class:pointer-events-none={!interactive}
   style="cursor: {cursorStyle()};"
   width={pageWidth * scale}
   height={pageHeight * scale}
-  onmousedown={handleMouseDown}
-  onmousemove={handleMouseMove}
-  onmouseup={handleMouseUp}
-  onmouseleave={() => { isDrawing = false; drawRect = null; }}
+  onmousedown={interactive ? handleMouseDown : undefined}
+  onmousemove={interactive ? handleMouseMove : undefined}
+  onmouseup={interactive ? handleMouseUp : undefined}
+  onmouseleave={interactive ? () => { isDrawing = false; drawRect = null; } : undefined}
 >
   <!-- Rendered annotations -->
   {#each annotations as annotation (annotation.id)}
