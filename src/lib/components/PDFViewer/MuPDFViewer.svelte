@@ -128,8 +128,12 @@
 
   // Sidebar state
   let sidebarCollapsed = $state(false);
-  let thumbnails = $state<RenderedPage[]>([]);
-  let isLoadingThumbnails = $state(false);
+  let thumbnailsContainer: HTMLDivElement;
+
+  // Virtual thumbnails: only load visible ones
+  let loadedThumbnails = $state<Map<number, RenderedPage>>(new Map());
+  let loadingThumbnails = $state<Set<number>>(new Set());
+  const THUMBNAIL_BUFFER = 5; // Load 5 above/below visible
 
   // Zoom mode: 'manual', 'fit-width', 'fit-height', 'fit-page'
   type ZoomMode = 'manual' | 'fit-width' | 'fit-height' | 'fit-page';
@@ -171,12 +175,14 @@
 
       isLoading = false;
 
-      // Load thumbnails in background
-      loadThumbnails();
+      // Clear thumbnails for new document
+      loadedThumbnails = new Map();
+      loadingThumbnails = new Set();
 
-      // Wait for DOM to render placeholders, then load visible pages
+      // Wait for DOM to render, then load visible content
       await tick();
       loadVisiblePages();
+      loadVisibleThumbnails();
 
       // Load saved annotations
       await loadAnnotations();
@@ -281,36 +287,57 @@
     loadVisiblePages();
   }
 
-  // Load thumbnails for sidebar (in batches for large documents)
-  const THUMBNAIL_BATCH_SIZE = 50;
+  // Load a single thumbnail
+  async function loadThumbnail(pageNum: number): Promise<void> {
+    if (loadedThumbnails.has(pageNum) || loadingThumbnails.has(pageNum)) return;
 
-  async function loadThumbnails() {
-    if (!pdfInfo || isLoadingThumbnails) return;
-
-    isLoadingThumbnails = true;
-    thumbnails = [];
+    loadingThumbnails.add(pageNum);
+    loadingThumbnails = new Set(loadingThumbnails);
 
     try {
-      // Load in batches of 50 pages
-      for (let start = 0; start < pdfInfo.num_pages; start += THUMBNAIL_BATCH_SIZE) {
-        const end = Math.min(start + THUMBNAIL_BATCH_SIZE, pdfInfo.num_pages);
-        const pages = Array.from({ length: end - start }, (_, i) => start + i + 1);
+      const rendered = await invoke<RenderedPage[]>('pdf_render_thumbnails', {
+        path: filePath,
+        pages: [pageNum],
+        maxSize: 150,
+      });
 
-        const rendered = await invoke<RenderedPage[]>('pdf_render_thumbnails', {
-          path: filePath,
-          pages: pages,
-          maxSize: 150,
-        });
-
-        thumbnails = [...thumbnails, ...rendered];
+      if (rendered.length > 0) {
+        loadedThumbnails.set(pageNum, rendered[0]);
+        loadedThumbnails = new Map(loadedThumbnails);
       }
-
-      console.log('[MuPDFViewer] Loaded', thumbnails.length, 'thumbnails');
     } catch (err) {
-      console.error('[MuPDFViewer] Failed to load thumbnails:', err);
+      console.error(`[MuPDFViewer] Failed to load thumbnail ${pageNum}:`, err);
     } finally {
-      isLoadingThumbnails = false;
+      loadingThumbnails.delete(pageNum);
+      loadingThumbnails = new Set(loadingThumbnails);
     }
+  }
+
+  // Load visible thumbnails based on sidebar scroll position
+  function loadVisibleThumbnails() {
+    if (!thumbnailsContainer || !pdfInfo || sidebarCollapsed) return;
+
+    const containerRect = thumbnailsContainer.getBoundingClientRect();
+    const scrollTop = thumbnailsContainer.scrollTop;
+    const containerHeight = containerRect.height;
+
+    // Estimate thumbnail height (aspect ratio 3:4, ~100px width + spacing)
+    const thumbHeight = 140;
+
+    const firstVisible = Math.floor(scrollTop / thumbHeight);
+    const lastVisible = Math.ceil((scrollTop + containerHeight) / thumbHeight);
+
+    const startPage = Math.max(1, firstVisible - THUMBNAIL_BUFFER);
+    const endPage = Math.min(totalPages, lastVisible + THUMBNAIL_BUFFER + 1);
+
+    for (let page = startPage; page <= endPage; page++) {
+      loadThumbnail(page);
+    }
+  }
+
+  // Handle sidebar scroll
+  function handleThumbnailScroll() {
+    loadVisibleThumbnails();
   }
 
   // Scroll to a specific page
@@ -782,54 +809,52 @@
           </button>
         </div>
 
-        <div class="flex-1 overflow-y-auto p-2 space-y-2">
-          {#if isLoadingThumbnails && thumbnails.length === 0}
-            {#each Array(Math.min(totalPages, 5)) as _, i}
-              <div class="w-full">
-                <div
-                  class="aspect-[3/4] rounded flex items-center justify-center"
-                  style="background-color: var(--nord2); border: 2px solid var(--nord3);"
-                >
-                  <div class="w-4 h-4 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
-                </div>
-                <p class="mt-1 text-xs text-center opacity-40">{i + 1}</p>
-              </div>
-            {/each}
-          {:else}
-            {#each thumbnails as thumb (thumb.page)}
-              <button
-                onclick={() => goToPage(thumb.page)}
-                class="w-full relative group"
+        <div
+          bind:this={thumbnailsContainer}
+          class="flex-1 overflow-y-auto p-2 space-y-2"
+          onscroll={handleThumbnailScroll}
+        >
+          {#each Array.from({ length: totalPages }, (_, i) => i + 1) as pageNum (pageNum)}
+            {@const thumb = loadedThumbnails.get(pageNum)}
+            {@const isLoading = loadingThumbnails.has(pageNum)}
+            <button
+              onclick={() => goToPage(pageNum)}
+              class="w-full relative group"
+            >
+              <div
+                class="relative rounded overflow-hidden transition-all"
+                style="border: 2px solid {currentPage === pageNum ? 'var(--nord8)' : 'var(--nord3)'};"
               >
-                <div
-                  class="relative rounded overflow-hidden transition-all"
-                  style="border: 2px solid {currentPage === thumb.page ? 'var(--nord8)' : 'var(--nord3)'};"
-                >
-                  <div class="aspect-[3/4] flex items-center justify-center bg-white">
+                <div class="aspect-[3/4] flex items-center justify-center bg-white">
+                  {#if thumb}
                     <img
                       src="data:image/png;base64,{thumb.data}"
-                      alt="Page {thumb.page}"
+                      alt="Page {pageNum}"
                       class="max-w-full max-h-full object-contain"
                     />
-                  </div>
-
-                  {#if currentPage === thumb.page}
-                    <div
-                      class="absolute bottom-0 left-0 right-0 h-0.5"
-                      style="background-color: var(--nord8);"
-                    ></div>
+                  {:else if isLoading}
+                    <div class="w-4 h-4 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
+                  {:else}
+                    <span class="text-xs opacity-30">{pageNum}</span>
                   {/if}
                 </div>
 
-                <p
-                  class="mt-1 text-xs text-center"
-                  style="color: {currentPage === thumb.page ? 'var(--nord8)' : 'var(--nord4)'};"
-                >
-                  {thumb.page}
-                </p>
-              </button>
-            {/each}
-          {/if}
+                {#if currentPage === pageNum}
+                  <div
+                    class="absolute bottom-0 left-0 right-0 h-0.5"
+                    style="background-color: var(--nord8);"
+                  ></div>
+                {/if}
+              </div>
+
+              <p
+                class="mt-1 text-xs text-center"
+                style="color: {currentPage === pageNum ? 'var(--nord8)' : 'var(--nord4)'};"
+              >
+                {pageNum}
+              </p>
+            </button>
+          {/each}
         </div>
       </div>
     {/if}
