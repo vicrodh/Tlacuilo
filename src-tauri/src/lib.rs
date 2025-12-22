@@ -3,6 +3,7 @@ use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
+mod pdf_compress;
 mod pdf_viewer;
 mod python_bridge;
 
@@ -71,7 +72,45 @@ fn python_install_package(app: AppHandle, package: String) -> Result<(), String>
 }
 
 // ============================================================================
-// PDF Operations Commands
+// PDF Compression Commands
+// ============================================================================
+
+/// Compress a PDF file
+#[tauri::command]
+fn compress_pdf(
+    app: AppHandle,
+    input: String,
+    output: Option<String>,
+    level: Option<String>,
+) -> Result<pdf_compress::CompressionResult, String> {
+    let output_path = output.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir
+            .join("tlacuilo-compressed.pdf")
+            .to_string_lossy()
+            .to_string()
+    });
+
+    let compression_level = match level.as_deref() {
+        Some("low") => pdf_compress::CompressionLevel::Low,
+        Some("high") => pdf_compress::CompressionLevel::High,
+        _ => pdf_compress::CompressionLevel::Medium,
+    };
+
+    pdf_compress::compress_pdf(&input, &output_path, compression_level)
+}
+
+/// Estimate compression potential for a PDF
+#[tauri::command]
+fn estimate_compression(input: String) -> Result<pdf_compress::EstimationResult, String> {
+    pdf_compress::estimate_compression(&input)
+}
+
+// ============================================================================
+// PDF Operations Commands (Legacy Python-based)
 // ============================================================================
 
 #[tauri::command]
@@ -591,7 +630,10 @@ pub fn run() {
       python_check,
       python_check_packages,
       python_install_package,
-      // PDF operations
+      // PDF compression (MuPDF)
+      compress_pdf,
+      estimate_compression,
+      // PDF operations (Legacy Python)
       merge_pdfs,
       merge_pages,
       split_pdf,

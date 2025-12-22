@@ -12,6 +12,7 @@
   import MergePDF from './lib/views/MergePDF.svelte';
   import SplitPDF from './lib/views/SplitPDF.svelte';
   import RotatePDF from './lib/views/RotatePDF.svelte';
+  import CompressPDF from './lib/views/CompressPDF.svelte';
   import ConvertToPDF from './lib/views/ConvertToPDF.svelte';
   import ConvertFromPDF from './lib/views/ConvertFromPDF.svelte';
   import ViewerPage from './lib/views/ViewerPage.svelte';
@@ -108,6 +109,8 @@
         <SplitPDF />
       {:else if currentPage === 'rotate'}
         <RotatePDF />
+      {:else if currentPage === 'compress'}
+        <CompressPDF />
       {:else if currentPage === 'convert'}
         <ConvertToPDF />
       {:else if currentPage === 'export'}
