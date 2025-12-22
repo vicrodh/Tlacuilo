@@ -26,11 +26,27 @@
 
   const annotations = $derived(store.getAnnotationsForPage(page));
 
+  // Convert mouse event to NORMALIZED coordinates (0-1)
+  // This ensures annotations are zoom-independent
   function getRelativeCoords(e: MouseEvent): { x: number; y: number } {
     const rect = overlayElement.getBoundingClientRect();
+    // Get pixel position relative to overlay
+    const pixelX = (e.clientX - rect.left) / scale;
+    const pixelY = (e.clientY - rect.top) / scale;
+    // Convert to normalized (0-1) coordinates
     return {
-      x: (e.clientX - rect.left) / scale,
-      y: (e.clientY - rect.top) / scale,
+      x: pixelX / pageWidth,
+      y: pixelY / pageHeight,
+    };
+  }
+
+  // Convert normalized rect to pixel rect for display
+  function toPixelRect(rect: Rect): Rect {
+    return {
+      x: rect.x * pageWidth * scale,
+      y: rect.y * pageHeight * scale,
+      width: rect.width * pageWidth * scale,
+      height: rect.height * pageHeight * scale,
     };
   }
 
@@ -73,8 +89,9 @@
     // Prevent event from bubbling
     e.stopPropagation();
 
-    // Only create annotation if it has meaningful size
-    if (drawRect.width > 5 && drawRect.height > 5) {
+    // Only create annotation if it has meaningful size (threshold in normalized space)
+    // 0.005 = 0.5% of page dimension, roughly 3-4 pixels at typical zoom
+    if (drawRect.width > 0.005 && drawRect.height > 0.005) {
       if (store.activeTool === 'comment') {
         // For comments, show input dialog
         const annotation = store.addAnnotation({
@@ -136,24 +153,6 @@
     commentText = '';
   }
 
-  function getAnnotationStyle(annotation: Annotation): string {
-    const { rect, color, opacity } = annotation;
-    const base = `left: ${rect.x * scale}px; top: ${rect.y * scale}px; width: ${rect.width * scale}px; height: ${rect.height * scale}px;`;
-
-    switch (annotation.type) {
-      case 'highlight':
-        return `${base} background-color: ${color}; opacity: ${opacity};`;
-      case 'underline':
-        return `${base} border-bottom: 2px solid ${color};`;
-      case 'strikethrough':
-        return `${base} background: linear-gradient(transparent 45%, ${color} 45%, ${color} 55%, transparent 55%);`;
-      case 'comment':
-        return `left: ${rect.x * scale}px; top: ${rect.y * scale}px;`;
-      default:
-        return base;
-    }
-  }
-
   const cursorStyle = $derived(() => {
     if (!store.activeTool) return 'default';
     if (store.activeTool === 'comment') return 'cell';
@@ -175,14 +174,15 @@
 >
   <!-- Rendered annotations -->
   {#each annotations as annotation (annotation.id)}
+    {@const pixelRect = toPixelRect(annotation.rect)}
     {#if annotation.type === 'highlight'}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <rect
-        x={annotation.rect.x * scale}
-        y={annotation.rect.y * scale}
-        width={annotation.rect.width * scale}
-        height={annotation.rect.height * scale}
+        x={pixelRect.x}
+        y={pixelRect.y}
+        width={pixelRect.width}
+        height={pixelRect.height}
         fill={annotation.color}
         fill-opacity={annotation.opacity}
         class="cursor-pointer hover:opacity-80 transition-opacity"
@@ -193,10 +193,10 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <line
-        x1={annotation.rect.x * scale}
-        y1={(annotation.rect.y + annotation.rect.height) * scale}
-        x2={(annotation.rect.x + annotation.rect.width) * scale}
-        y2={(annotation.rect.y + annotation.rect.height) * scale}
+        x1={pixelRect.x}
+        y1={pixelRect.y + pixelRect.height}
+        x2={pixelRect.x + pixelRect.width}
+        y2={pixelRect.y + pixelRect.height}
         stroke={annotation.color}
         stroke-width="2"
         class="cursor-pointer"
@@ -206,10 +206,10 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <line
-        x1={annotation.rect.x * scale}
-        y1={(annotation.rect.y + annotation.rect.height / 2) * scale}
-        x2={(annotation.rect.x + annotation.rect.width) * scale}
-        y2={(annotation.rect.y + annotation.rect.height / 2) * scale}
+        x1={pixelRect.x}
+        y1={pixelRect.y + pixelRect.height / 2}
+        x2={pixelRect.x + pixelRect.width}
+        y2={pixelRect.y + pixelRect.height / 2}
         stroke={annotation.color}
         stroke-width="2"
         class="cursor-pointer"
@@ -224,16 +224,16 @@
         onclick={(e) => handleAnnotationClick(e, annotation)}
       >
         <rect
-          x={annotation.rect.x * scale}
-          y={annotation.rect.y * scale}
+          x={pixelRect.x}
+          y={pixelRect.y}
           width="24"
           height="24"
           rx="4"
           fill={annotation.color}
         />
         <foreignObject
-          x={annotation.rect.x * scale + 4}
-          y={annotation.rect.y * scale + 4}
+          x={pixelRect.x + 4}
+          y={pixelRect.y + 4}
           width="16"
           height="16"
         >
@@ -245,12 +245,13 @@
 
   <!-- Drawing preview -->
   {#if isDrawing && drawRect && store.activeTool}
+    {@const previewRect = toPixelRect(drawRect)}
     {#if store.activeTool === 'highlight'}
       <rect
-        x={drawRect.x * scale}
-        y={drawRect.y * scale}
-        width={drawRect.width * scale}
-        height={drawRect.height * scale}
+        x={previewRect.x}
+        y={previewRect.y}
+        width={previewRect.width}
+        height={previewRect.height}
         fill={store.activeColor}
         fill-opacity="0.3"
         stroke={store.activeColor}
@@ -259,30 +260,30 @@
       />
     {:else if store.activeTool === 'underline'}
       <line
-        x1={drawRect.x * scale}
-        y1={(drawRect.y + drawRect.height) * scale}
-        x2={(drawRect.x + drawRect.width) * scale}
-        y2={(drawRect.y + drawRect.height) * scale}
+        x1={previewRect.x}
+        y1={previewRect.y + previewRect.height}
+        x2={previewRect.x + previewRect.width}
+        y2={previewRect.y + previewRect.height}
         stroke={store.activeColor}
         stroke-width="2"
         stroke-dasharray="4"
       />
     {:else if store.activeTool === 'strikethrough'}
       <line
-        x1={drawRect.x * scale}
-        y1={(drawRect.y + drawRect.height / 2) * scale}
-        x2={(drawRect.x + drawRect.width) * scale}
-        y2={(drawRect.y + drawRect.height / 2) * scale}
+        x1={previewRect.x}
+        y1={previewRect.y + previewRect.height / 2}
+        x2={previewRect.x + previewRect.width}
+        y2={previewRect.y + previewRect.height / 2}
         stroke={store.activeColor}
         stroke-width="2"
         stroke-dasharray="4"
       />
     {:else if store.activeTool === 'comment'}
       <rect
-        x={drawRect.x * scale}
-        y={drawRect.y * scale}
-        width={drawRect.width * scale}
-        height={drawRect.height * scale}
+        x={previewRect.x}
+        y={previewRect.y}
+        width={previewRect.width}
+        height={previewRect.height}
         fill="none"
         stroke={store.activeColor}
         stroke-width="2"
@@ -296,11 +297,12 @@
 {#if editingComment}
   {@const annotation = annotations.find(a => a.id === editingComment)}
   {#if annotation}
+    {@const popupRect = toPixelRect(annotation.rect)}
     <div
       class="absolute z-50 p-3 rounded-lg shadow-lg"
       style="
-        left: {(annotation.rect.x + annotation.rect.width + 10) * scale}px;
-        top: {annotation.rect.y * scale}px;
+        left: {popupRect.x + popupRect.width + 10}px;
+        top: {popupRect.y}px;
         background-color: var(--nord1);
         border: 1px solid var(--nord3);
         min-width: 200px;
@@ -335,11 +337,12 @@
 {#if store.selectedId && !editingComment}
   {@const selected = annotations.find(a => a.id === store.selectedId)}
   {#if selected}
+    {@const selectedRect = toPixelRect(selected.rect)}
     <div
       class="absolute z-40 flex items-center gap-1 p-1 rounded"
       style="
-        left: {(selected.rect.x + selected.rect.width) * scale + 4}px;
-        top: {selected.rect.y * scale}px;
+        left: {selectedRect.x + selectedRect.width + 4}px;
+        top: {selectedRect.y}px;
         background-color: var(--nord1);
         border: 1px solid var(--nord3);
       "

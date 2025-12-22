@@ -139,8 +139,49 @@
     return JSON.stringify(serialized);
   }
 
-  // Embed annotations into PDF
-  async function embedAnnotationsToPdf() {
+  // Embed annotations into PDF (overwrite same file)
+  async function saveAnnotationsToPdf() {
+    if (!confirm('Save annotations to PDF? This will overwrite the current file.')) {
+      return;
+    }
+
+    isExporting = true;
+    showAnnotationMenu = false;
+    try {
+      const json = serializeAnnotations();
+      // Save to temp file first, then replace original
+      const tempPath = filePath + '.tmp';
+      const result = await invoke<{ output_path: string; total: number; errors: string[] }>(
+        'annotations_embed_in_pdf',
+        { input: filePath, annotationsJson: json, output: tempPath }
+      );
+
+      // Move temp file to original location
+      const { rename, remove } = await import('@tauri-apps/plugin-fs');
+      await remove(filePath);
+      await rename(tempPath, filePath);
+
+      if (result.errors.length > 0) {
+        console.warn('[MuPDFViewer] Some annotations failed:', result.errors);
+      }
+
+      // Clear dirty flag since annotations are now in PDF
+      annotationsDirty = false;
+
+      // Reload the PDF to show embedded annotations
+      await loadPDF();
+
+      alert(`Saved ${result.total} annotations to PDF`);
+    } catch (err) {
+      console.error('[MuPDFViewer] Failed to save annotations to PDF:', err);
+      alert(`Failed to save annotations to PDF: ${err}`);
+    } finally {
+      isExporting = false;
+    }
+  }
+
+  // Embed annotations into PDF (Save As...)
+  async function saveAnnotationsToPdfAs() {
     const outputPath = await save({
       title: 'Save PDF with Annotations',
       defaultPath: filePath.replace('.pdf', '-annotated.pdf'),
@@ -836,16 +877,25 @@
           </button>
 
           {#if showAnnotationMenu}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
-              class="absolute top-full right-0 mt-1 py-1 rounded-lg shadow-lg z-50 min-w-[180px]"
-              style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+              class="absolute top-full right-0 mt-1 py-1 rounded-lg shadow-lg min-w-[180px]"
+              style="background-color: var(--nord1); border: 1px solid var(--nord3); z-index: 9999;"
+              onclick={(e) => e.stopPropagation()}
             >
               <button
-                onclick={embedAnnotationsToPdf}
+                onclick={saveAnnotationsToPdf}
+                class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
+              >
+                <Save size={14} />
+                Save to PDF
+              </button>
+              <button
+                onclick={saveAnnotationsToPdfAs}
                 class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
               >
                 <Download size={14} />
-                Save to PDF
+                Save to PDF as...
               </button>
               <button
                 onclick={loadAnnotationsFromPdf}
