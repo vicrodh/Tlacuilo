@@ -64,25 +64,6 @@
     e.preventDefault();
 
     const coords = getRelativeCoords(e);
-
-    // Freetext: click to place, no drag needed
-    if (store.activeTool === 'freetext') {
-      // Create annotation with minimal size, will expand based on text
-      const annotation = store.addAnnotation({
-        type: 'freetext',
-        page,
-        rect: { x: coords.x, y: coords.y, width: 0.15, height: 0.03 },
-        color: store.activeColor,
-        opacity: 1,
-        text: '',
-      });
-      editingFreetext = annotation.id;
-      freetextValue = '';
-      // Focus input after render
-      setTimeout(() => freetextInputRef?.focus(), 0);
-      return;
-    }
-
     isDrawing = true;
     drawStart = coords;
     drawRect = { x: coords.x, y: coords.y, width: 0, height: 0 };
@@ -129,6 +110,22 @@
         });
         editingComment = annotation.id;
         commentText = '';
+      } else if (store.activeTool === 'freetext') {
+        // For freetext, create annotation with defined area and show input
+        // Default fontsize 12pt matches PyMuPDF default
+        const annotation = store.addAnnotation({
+          type: 'freetext',
+          page,
+          rect: drawRect,
+          color: store.activeColor,
+          opacity: 1,
+          text: '',
+          fontsize: 12,
+        });
+        editingFreetext = annotation.id;
+        freetextValue = '';
+        // Focus input after render
+        setTimeout(() => freetextInputRef?.focus(), 0);
       } else {
         store.addAnnotation({
           type: store.activeTool,
@@ -304,21 +301,22 @@
       <!-- Freetext / Typewriter annotation -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
+      {@const fontSize = (annotation.fontsize || 12) * scale}
       <foreignObject
         x={pixelRect.x}
         y={pixelRect.y}
         width={Math.max(pixelRect.width, 100)}
-        height={Math.max(pixelRect.height, 20)}
+        height={Math.max(pixelRect.height, fontSize * 1.5)}
         class="cursor-pointer overflow-visible"
         onclick={(e) => handleAnnotationClick(e, annotation)}
       >
         <div
           xmlns="http://www.w3.org/1999/xhtml"
-          class="text-xs whitespace-pre-wrap"
+          class="whitespace-pre-wrap"
           style="
             color: {annotation.color};
             font-family: Helvetica, Arial, sans-serif;
-            font-size: 12px;
+            font-size: {fontSize}px;
             line-height: 1.3;
           "
         >
@@ -374,6 +372,17 @@
         stroke-width="2"
         stroke-dasharray="4"
       />
+    {:else if store.activeTool === 'freetext'}
+      <rect
+        x={previewRect.x}
+        y={previewRect.y}
+        width={previewRect.width}
+        height={previewRect.height}
+        fill="rgba(255,255,255,0.8)"
+        stroke={store.activeColor}
+        stroke-width="1"
+        stroke-dasharray="4"
+      />
     {/if}
   {/if}
 </svg>
@@ -423,6 +432,7 @@
   {@const annotation = annotations.find(a => a.id === editingFreetext)}
   {#if annotation}
     {@const inputRect = toPixelRect(annotation.rect)}
+    {@const editFontSize = (annotation.fontsize || 12) * scale}
     <div
       class="absolute z-50"
       style="
@@ -435,19 +445,18 @@
         bind:value={freetextValue}
         onkeydown={(e) => handleFreetextKeydown(e, editingFreetext!)}
         onblur={() => handleFreetextSave(editingFreetext!)}
-        class="px-1 py-0.5 rounded text-xs resize-none outline-none"
+        class="px-1 py-0.5 rounded outline-none resize"
         style="
           background-color: rgba(255, 255, 255, 0.95);
           border: 1px solid {annotation.color};
           color: {annotation.color};
           font-family: Helvetica, Arial, sans-serif;
-          font-size: 12px;
+          font-size: {editFontSize}px;
           line-height: 1.3;
-          min-width: 150px;
-          min-height: 24px;
+          width: {Math.max(inputRect.width, 100)}px;
+          height: {Math.max(inputRect.height, editFontSize * 2)}px;
         "
         placeholder="Type here..."
-        rows="1"
       ></textarea>
       <div class="text-[10px] mt-1 opacity-60" style="color: var(--nord4);">
         Enter to save, Shift+Enter for new line, Esc to cancel

@@ -90,7 +90,7 @@
     </button>
 
     {#if showColorPicker}
-      <!-- 6 colors in 3x2 grid: 3*32px + 2*8px gaps = 112px + 24px padding = 136px -->
+      <!-- 8 colors in 4x2 grid: 4*32px + 3*8px gaps = 152px + 24px padding = 176px -->
       <div
         class="absolute top-full left-1/2 mt-1 rounded-lg shadow-lg"
         style="
@@ -99,14 +99,14 @@
           z-index: 99999;
           transform: translateX(-50%);
           padding: 12px;
-          width: 136px;
+          width: 176px;
           box-sizing: border-box;
         "
       >
         <div
           style="
             display: grid;
-            grid-template-columns: repeat(3, 32px);
+            grid-template-columns: repeat(4, 32px);
             gap: 8px;
             justify-content: center;
           "
@@ -119,7 +119,7 @@
                 width: 32px;
                 height: 32px;
                 background-color: {color.value};
-                border-color: {store.activeColor === color.value ? 'var(--nord6)' : 'transparent'};
+                border-color: {store.activeColor === color.value ? 'var(--nord6)' : (color.value === '#FFFFFF' ? 'var(--nord3)' : 'transparent')};
               "
               title={color.name}
             ></button>

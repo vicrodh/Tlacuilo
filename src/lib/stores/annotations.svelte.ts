@@ -28,7 +28,8 @@ export interface Annotation {
   rect: Rect;
   color: string;
   opacity: number;
-  text?: string; // For comments
+  text?: string; // For comments and freetext
+  fontsize?: number; // For freetext (in PDF points)
   createdAt: Date;
   modifiedAt: Date;
 }
@@ -47,7 +48,7 @@ export function createAnnotationsStore() {
     annotations: new Map(),
     selectedId: null,
     activeTool: null,
-    activeColor: '#FFEB3B', // Default yellow for highlights
+    activeColor: '#FFEB3B', // Default yellow for markup tools (typewriter switches to black)
   });
 
   function generateId(): string {
@@ -107,10 +108,27 @@ export function createAnnotationsStore() {
     state.selectedId = id;
   }
 
+  // Default colors for different tool types
+  const DEFAULT_FREETEXT_COLOR = '#000000'; // Black for typewriter
+  const DEFAULT_MARKUP_COLOR = '#FFEB3B';   // Yellow for highlight/underline/strikethrough
+
   function setActiveTool(tool: AnnotationType | null): void {
     state.activeTool = tool;
     if (tool) {
       state.selectedId = null; // Deselect when switching tools
+
+      // Auto-switch to tool-appropriate color if using the other tool's default
+      if (tool === 'freetext') {
+        // Switching to typewriter: if color is yellow (markup default), change to black
+        if (state.activeColor === DEFAULT_MARKUP_COLOR) {
+          state.activeColor = DEFAULT_FREETEXT_COLOR;
+        }
+      } else if (tool === 'highlight' || tool === 'underline' || tool === 'strikethrough') {
+        // Switching to markup tool: if color is black (freetext default), change to yellow
+        if (state.activeColor === DEFAULT_FREETEXT_COLOR) {
+          state.activeColor = DEFAULT_MARKUP_COLOR;
+        }
+      }
     }
   }
 
@@ -185,6 +203,8 @@ export function getAnnotationsContext(): AnnotationsStore {
 
 // Color presets for annotations
 export const HIGHLIGHT_COLORS = [
+  { name: 'Black', value: '#000000' },
+  { name: 'White', value: '#FFFFFF' },
   { name: 'Yellow', value: '#FFEB3B' },
   { name: 'Green', value: '#4CAF50' },
   { name: 'Blue', value: '#2196F3' },

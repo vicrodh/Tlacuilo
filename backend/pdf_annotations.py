@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
@@ -62,6 +63,60 @@ def rgb_to_hex(rgb: tuple[float, ...]) -> str:
     g = int(rgb[1] * 255)
     b = int(rgb[2] * 255)
     return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def parse_da_string(doc: fitz.Document, annot: fitz.Annot) -> dict:
+    """
+    Parse the DA (Default Appearance) string from a FreeText annotation
+    to extract text color and font size.
+
+    DA format example: "/Helv 12 Tf 0 0 0 rg"
+    - /Helv = font name
+    - 12 = font size (in points)
+    - Tf = text font operator
+    - 0 0 0 rg = RGB color (black)
+
+    Returns dict with 'color' (tuple) and 'fontsize' (float) keys.
+    """
+    result = {"color": None, "fontsize": None}
+
+    try:
+        xref = annot.xref
+        annot_obj = doc.xref_object(xref)
+
+        # Look for /DA in the annotation object
+        # Format: /DA (/Helv 12 Tf 0 0 0 rg)
+        da_match = re.search(r'/DA\s*\(([^)]+)\)', annot_obj)
+        if not da_match:
+            da_match = re.search(r'/DA\s*<([^>]+)>', annot_obj)
+
+        if da_match:
+            da_content = da_match.group(1)
+
+            # Parse font size: /FontName SIZE Tf
+            # Examples: /Helv 12 Tf, /TiRo 10.5 Tf
+            fontsize_match = re.search(r'/\w+\s+([\d.]+)\s+Tf', da_content)
+            if fontsize_match:
+                result["fontsize"] = float(fontsize_match.group(1))
+
+            # Parse RGB color (r g b rg)
+            rgb_match = re.search(r'([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+rg', da_content)
+            if rgb_match:
+                r = float(rgb_match.group(1))
+                g = float(rgb_match.group(2))
+                b = float(rgb_match.group(3))
+                result["color"] = (r, g, b)
+            else:
+                # Parse grayscale (value g)
+                gray_match = re.search(r'([\d.]+)\s+g\b', da_content)
+                if gray_match:
+                    gray = float(gray_match.group(1))
+                    result["color"] = (gray, gray, gray)
+
+    except Exception:
+        pass
+
+    return result
 
 
 def normalized_to_pdf_rect(
@@ -178,12 +233,14 @@ def embed_annotations(
                     annot.set_colors(stroke=color_rgb)
                 elif annot_type == "freetext":
                     # FreeText annotation (typewriter - text directly on page)
+                    # fill_color=None for transparent background (no yellow box)
                     annot = page.add_freetext_annot(
                         pdf_rect,
                         text or "",
                         fontsize=12,
                         fontname="helv",
                         text_color=color_rgb,
+                        fill_color=None,  # Transparent background
                     )
                 elif annot_type in ("highlight", "underline", "strikethrough"):
                     # Text markup annotations need quads
@@ -259,7 +316,21 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
                 continue
 
             our_type = ANNOT_TYPE_REVERSE[annot_type_code]
-            rect = annot.rect
+
+            # For text markup annotations, use vertices to get the actual rect
+            # because annot.rect includes visual padding that grows on each save
+            if our_type in ("highlight", "underline", "strikethrough") and annot.vertices:
+                vertices = annot.vertices
+                # Handle both tuple format [(x,y), ...] and flat format [x,y,x,y,...]
+                if vertices and isinstance(vertices[0], tuple):
+                    xs = [p[0] for p in vertices]
+                    ys = [p[1] for p in vertices]
+                else:
+                    xs = [vertices[i] for i in range(0, len(vertices), 2)]
+                    ys = [vertices[i] for i in range(1, len(vertices), 2)]
+                rect = fitz.Rect(min(xs), min(ys), max(xs), max(ys))
+            else:
+                rect = annot.rect
 
             # Get annotation info
             info = annot.info
@@ -267,10 +338,22 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
             annot_id = info.get("subject") or str(uuid4())
             text = info.get("content", "")
 
-            # Get colors
-            colors = annot.colors
-            stroke_color = colors.get("stroke") or colors.get("fill") or (1, 1, 0)
-            color_hex = rgb_to_hex(stroke_color)
+            # Get colors and fontsize - FreeText needs special handling
+            fontsize = None
+            if our_type == "freetext":
+                # Parse DA string to get text color and fontsize
+                da_info = parse_da_string(doc, annot)
+                if da_info["color"]:
+                    color_hex = rgb_to_hex(da_info["color"])
+                else:
+                    color_hex = "#000000"  # Default black for freetext
+                fontsize = da_info["fontsize"] or 12  # Default 12pt if not found
+                # For freetext, get text content from the annotation itself
+                text = annot.get_text() or info.get("content", "") or ""
+            else:
+                colors = annot.colors
+                stroke_color = colors.get("stroke") or colors.get("fill") or (1, 1, 0)
+                color_hex = rgb_to_hex(stroke_color)
 
             # Get opacity
             opacity = annot.opacity
@@ -288,7 +371,7 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
             if not modified:
                 modified = now
 
-            page_annots.append({
+            annot_data = {
                 "id": annot_id,
                 "type": our_type,
                 "page": page_num,
@@ -298,7 +381,11 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
                 "text": text,
                 "createdAt": created,
                 "modifiedAt": modified,
-            })
+            }
+            # Add fontsize for freetext annotations
+            if fontsize is not None:
+                annot_data["fontsize"] = fontsize
+            page_annots.append(annot_data)
 
         if page_annots:
             result[str(page_num)] = page_annots
