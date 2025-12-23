@@ -753,10 +753,52 @@
     scrollStart = null;
   }
 
-  // Keyboard navigation
+  // Keyboard navigation and shortcuts
   function handleKeydown(e: KeyboardEvent) {
-    if (e.target instanceof HTMLInputElement) return;
+    // Skip if typing in input
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
+    const isMod = e.ctrlKey || e.metaKey;
+
+    // Undo: Ctrl+Z
+    if (isMod && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      if (annotationsStore.canUndo()) {
+        annotationsStore.undo();
+        annotationsDirty = true;
+      }
+      return;
+    }
+
+    // Redo: Ctrl+Y or Ctrl+Shift+Z
+    if (isMod && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+      e.preventDefault();
+      if (annotationsStore.canRedo()) {
+        annotationsStore.redo();
+        annotationsDirty = true;
+      }
+      return;
+    }
+
+    // Save: Ctrl+S
+    if (isMod && e.key === 's') {
+      e.preventDefault();
+      saveAnnotations();
+      return;
+    }
+
+    // Close: Escape
+    if (e.key === 'Escape') {
+      // Deselect annotation first, or close viewer
+      if (annotationsStore.selectedId) {
+        annotationsStore.selectAnnotation(null);
+      } else if (onClose) {
+        onClose();
+      }
+      return;
+    }
+
+    // Navigation
     if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
       prevPage();
     } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {

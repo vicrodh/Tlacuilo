@@ -54,7 +54,14 @@ export interface AnnotationsState {
   pendingMarkupType: MarkupType;
 }
 
+// History action types for undo/redo
+type HistoryAction =
+  | { type: 'add'; annotation: Annotation }
+  | { type: 'delete'; annotation: Annotation }
+  | { type: 'update'; id: string; oldState: Partial<Annotation>; newState: Partial<Annotation> };
+
 const ANNOTATION_KEY = Symbol('annotations');
+const MAX_HISTORY_SIZE = 50;
 
 export function createAnnotationsStore() {
   let state = $state<AnnotationsState>({
@@ -65,11 +72,24 @@ export function createAnnotationsStore() {
     pendingMarkupType: 'highlight', // Default markup type
   });
 
+  // Undo/Redo history
+  let undoStack: HistoryAction[] = [];
+  let redoStack: HistoryAction[] = [];
+
+  function pushToHistory(action: HistoryAction) {
+    undoStack.push(action);
+    if (undoStack.length > MAX_HISTORY_SIZE) {
+      undoStack.shift();
+    }
+    // Clear redo stack when new action is performed
+    redoStack = [];
+  }
+
   function generateId(): string {
     return `ann-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  function addAnnotation(annotation: Omit<Annotation, 'id' | 'createdAt' | 'modifiedAt'>): Annotation {
+  function addAnnotation(annotation: Omit<Annotation, 'id' | 'createdAt' | 'modifiedAt'>, skipHistory = false): Annotation {
     const now = new Date();
     const newAnnotation: Annotation = {
       ...annotation,
@@ -82,13 +102,40 @@ export function createAnnotationsStore() {
     state.annotations.set(annotation.page, [...pageAnnotations, newAnnotation]);
     state.annotations = new Map(state.annotations); // Trigger reactivity
 
+    if (!skipHistory) {
+      pushToHistory({ type: 'add', annotation: newAnnotation });
+    }
+
     return newAnnotation;
   }
 
-  function updateAnnotation(id: string, updates: Partial<Omit<Annotation, 'id' | 'createdAt'>>): void {
+  // Internal: add annotation with specific ID (for redo)
+  function addAnnotationWithId(annotation: Annotation, skipHistory = false): void {
+    const pageAnnotations = state.annotations.get(annotation.page) || [];
+    state.annotations.set(annotation.page, [...pageAnnotations, annotation]);
+    state.annotations = new Map(state.annotations);
+
+    if (!skipHistory) {
+      pushToHistory({ type: 'add', annotation });
+    }
+  }
+
+  function updateAnnotation(id: string, updates: Partial<Omit<Annotation, 'id' | 'createdAt'>>, skipHistory = false): void {
     state.annotations.forEach((pageAnns, page) => {
       const idx = pageAnns.findIndex(a => a.id === id);
       if (idx !== -1) {
+        const oldAnnotation = pageAnns[idx];
+        const oldState: Partial<Annotation> = {};
+        const newState: Partial<Annotation> = {};
+
+        // Track what changed for undo
+        for (const key of Object.keys(updates) as (keyof Annotation)[]) {
+          if (key !== 'id' && key !== 'createdAt') {
+            oldState[key] = oldAnnotation[key] as any;
+            newState[key] = updates[key as keyof typeof updates] as any;
+          }
+        }
+
         pageAnns[idx] = {
           ...pageAnns[idx],
           ...updates,
@@ -96,14 +143,22 @@ export function createAnnotationsStore() {
         };
         state.annotations.set(page, [...pageAnns]);
         state.annotations = new Map(state.annotations);
+
+        if (!skipHistory && Object.keys(oldState).length > 0) {
+          pushToHistory({ type: 'update', id, oldState, newState });
+        }
       }
     });
   }
 
-  function deleteAnnotation(id: string): void {
+  function deleteAnnotation(id: string, skipHistory = false): void {
+    let deletedAnnotation: Annotation | null = null;
+
     state.annotations.forEach((pageAnns, page) => {
-      const filtered = pageAnns.filter(a => a.id !== id);
-      if (filtered.length !== pageAnns.length) {
+      const annotation = pageAnns.find(a => a.id === id);
+      if (annotation) {
+        deletedAnnotation = annotation;
+        const filtered = pageAnns.filter(a => a.id !== id);
         state.annotations.set(page, filtered);
         state.annotations = new Map(state.annotations);
       }
@@ -112,6 +167,64 @@ export function createAnnotationsStore() {
     if (state.selectedId === id) {
       state.selectedId = null;
     }
+
+    if (!skipHistory && deletedAnnotation) {
+      pushToHistory({ type: 'delete', annotation: deletedAnnotation });
+    }
+  }
+
+  function undo(): boolean {
+    const action = undoStack.pop();
+    if (!action) return false;
+
+    switch (action.type) {
+      case 'add':
+        // Undo add = delete
+        deleteAnnotation(action.annotation.id, true);
+        break;
+      case 'delete':
+        // Undo delete = add back
+        addAnnotationWithId(action.annotation, true);
+        break;
+      case 'update':
+        // Undo update = restore old state
+        updateAnnotation(action.id, action.oldState, true);
+        break;
+    }
+
+    redoStack.push(action);
+    return true;
+  }
+
+  function redo(): boolean {
+    const action = redoStack.pop();
+    if (!action) return false;
+
+    switch (action.type) {
+      case 'add':
+        // Redo add = add again
+        addAnnotationWithId(action.annotation, true);
+        break;
+      case 'delete':
+        // Redo delete = delete again
+        deleteAnnotation(action.annotation.id, true);
+        break;
+      case 'update':
+        // Redo update = apply new state
+        updateAnnotation(action.id, action.newState, true);
+        break;
+    }
+
+    undoStack.push(action);
+    return true;
+  }
+
+  function canUndo(): boolean {
+    return undoStack.length > 0;
+  }
+
+  function canRedo(): boolean {
+    return redoStack.length > 0;
   }
 
   function getAnnotationsForPage(page: number): Annotation[] {
@@ -212,6 +325,11 @@ export function createAnnotationsStore() {
     getAllAnnotations,
     exportAnnotations,
     importAnnotations,
+    // Undo/Redo
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   };
 }
 

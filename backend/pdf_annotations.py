@@ -243,8 +243,34 @@ def embed_annotations(
                         fill_color=None,  # Transparent background
                     )
                 elif annot_type in ("highlight", "underline", "strikethrough"):
-                    # Text markup annotations need quads
-                    quad = rect_to_quad(pdf_rect)
+                    # For underline/strikethrough, normalize height for consistent line thickness
+                    if annot_type in ("underline", "strikethrough"):
+                        # Standard text line height (12pt) for consistent rendering
+                        standard_height = 12.0
+                        if pdf_rect.height > standard_height * 1.5:
+                            # Normalize oversized rects to standard height
+                            if annot_type == "underline":
+                                # Keep bottom edge, adjust top
+                                normalized_rect = fitz.Rect(
+                                    pdf_rect.x0,
+                                    pdf_rect.y1 - standard_height,
+                                    pdf_rect.x1,
+                                    pdf_rect.y1,
+                                )
+                            else:  # strikethrough
+                                # Center the standard height vertically
+                                center_y = (pdf_rect.y0 + pdf_rect.y1) / 2
+                                normalized_rect = fitz.Rect(
+                                    pdf_rect.x0,
+                                    center_y - standard_height / 2,
+                                    pdf_rect.x1,
+                                    center_y + standard_height / 2,
+                                )
+                            quad = rect_to_quad(normalized_rect)
+                        else:
+                            quad = rect_to_quad(pdf_rect)
+                    else:
+                        quad = rect_to_quad(pdf_rect)
 
                     if annot_type == "highlight":
                         annot = page.add_highlight_annot(quad)
