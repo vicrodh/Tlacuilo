@@ -82,9 +82,8 @@
 
   // Handle text selection end
   function handleMouseUp() {
-    const activeTool = store.activeTool;
-    // Only capture selection for markup tools
-    if (!activeTool || !['highlight', 'underline', 'strikethrough'].includes(activeTool)) {
+    // Only capture selection in text-select mode
+    if (store.activeTool !== 'text-select') {
       return;
     }
 
@@ -94,14 +93,17 @@
     const rects = getSelectionRects(selection);
     if (rects.length === 0) return;
 
+    // Get the pending markup type (defaults to highlight)
+    const markupType = store.pendingMarkupType;
+
     // Create annotation for each line rect
     for (const rect of rects) {
       store.addAnnotation({
-        type: activeTool as AnnotationType,
+        type: markupType,
         page,
         rect,
         color: store.activeColor,
-        opacity: activeTool === 'highlight' ? 0.3 : 0.8,
+        opacity: markupType === 'highlight' ? 0.3 : 0.8,
       });
     }
 
@@ -183,10 +185,8 @@
     return merged;
   }
 
-  // Check if a markup tool is active
-  const isMarkupToolActive = $derived(
-    store.activeTool && ['highlight', 'underline', 'strikethrough'].includes(store.activeTool)
-  );
+  // Check if text-select mode is active
+  const isTextSelectMode = $derived(store.activeTool === 'text-select');
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -196,8 +196,10 @@
   style="
     width: {pageWidth * scale}px;
     height: {pageHeight * scale}px;
-    pointer-events: {isMarkupToolActive ? 'auto' : 'none'};
-    user-select: {isMarkupToolActive ? 'text' : 'none'};
+    pointer-events: {isTextSelectMode ? 'auto' : 'none'};
+    user-select: {isTextSelectMode ? 'text' : 'none'};
+    z-index: {isTextSelectMode ? 20 : 5};
+    cursor: {isTextSelectMode ? 'text' : 'default'};
   "
   onmouseup={handleMouseUp}
 >

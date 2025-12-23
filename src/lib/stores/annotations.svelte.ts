@@ -9,6 +9,17 @@ import { getContext, setContext } from 'svelte';
 
 export type AnnotationType = 'highlight' | 'comment' | 'underline' | 'strikethrough' | 'freetext';
 
+// Markup types that can be applied via text or area selection
+export type MarkupType = 'highlight' | 'underline' | 'strikethrough';
+
+// Tool modes: selection modes + standalone tools
+export type ToolMode =
+  | 'text-select'   // Select text to apply markup
+  | 'area-select'   // Draw area to apply markup
+  | 'comment'       // Place comment icons
+  | 'freetext'      // Typewriter tool
+  | null;           // No tool active (pointer mode)
+
 export interface Point {
   x: number;
   y: number;
@@ -37,8 +48,10 @@ export interface Annotation {
 export interface AnnotationsState {
   annotations: Map<number, Annotation[]>; // page -> annotations
   selectedId: string | null;
-  activeTool: AnnotationType | null;
+  activeTool: ToolMode;
   activeColor: string;
+  // Pending markup type to apply (for text-select and area-select modes)
+  pendingMarkupType: MarkupType;
 }
 
 const ANNOTATION_KEY = Symbol('annotations');
@@ -49,6 +62,7 @@ export function createAnnotationsStore() {
     selectedId: null,
     activeTool: null,
     activeColor: '#FFEB3B', // Default yellow for markup tools (typewriter switches to black)
+    pendingMarkupType: 'highlight', // Default markup type
   });
 
   function generateId(): string {
@@ -112,7 +126,7 @@ export function createAnnotationsStore() {
   const DEFAULT_FREETEXT_COLOR = '#000000'; // Black for typewriter
   const DEFAULT_MARKUP_COLOR = '#FFEB3B';   // Yellow for highlight/underline/strikethrough
 
-  function setActiveTool(tool: AnnotationType | null): void {
+  function setActiveTool(tool: ToolMode): void {
     state.activeTool = tool;
     if (tool) {
       state.selectedId = null; // Deselect when switching tools
@@ -123,12 +137,20 @@ export function createAnnotationsStore() {
         if (state.activeColor === DEFAULT_MARKUP_COLOR) {
           state.activeColor = DEFAULT_FREETEXT_COLOR;
         }
-      } else if (tool === 'highlight' || tool === 'underline' || tool === 'strikethrough') {
-        // Switching to markup tool: if color is black (freetext default), change to yellow
+      } else if (tool === 'text-select' || tool === 'area-select') {
+        // Selection modes: use markup color
         if (state.activeColor === DEFAULT_FREETEXT_COLOR) {
           state.activeColor = DEFAULT_MARKUP_COLOR;
         }
       }
+    }
+  }
+
+  function setPendingMarkupType(type: MarkupType): void {
+    state.pendingMarkupType = type;
+    // Ensure we're using markup-appropriate color
+    if (state.activeColor === DEFAULT_FREETEXT_COLOR) {
+      state.activeColor = DEFAULT_MARKUP_COLOR;
     }
   }
 
@@ -176,6 +198,7 @@ export function createAnnotationsStore() {
     get selectedId() { return state.selectedId; },
     get activeTool() { return state.activeTool; },
     get activeColor() { return state.activeColor; },
+    get pendingMarkupType() { return state.pendingMarkupType; },
 
     addAnnotation,
     updateAnnotation,
@@ -183,6 +206,7 @@ export function createAnnotationsStore() {
     getAnnotationsForPage,
     selectAnnotation,
     setActiveTool,
+    setPendingMarkupType,
     setActiveColor,
     clearAnnotations,
     getAllAnnotations,

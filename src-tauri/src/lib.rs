@@ -296,6 +296,83 @@ fn annotations_import_xfdf(
 }
 
 // ============================================================================
+// Print Commands
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+struct PrintPrepareResult {
+    output_path: String,
+}
+
+/// Prepare a PDF for printing by optionally embedding annotations
+#[tauri::command]
+fn print_prepare_pdf(
+    app: AppHandle,
+    input: String,
+    annotations_json: String,
+) -> Result<PrintPrepareResult, String> {
+    // Create a temp file for the annotated PDF
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .unwrap_or_else(|_| std::env::temp_dir());
+
+    let temp_path = cache_dir
+        .join(format!("tlacuilo-print-{}.pdf", uuid::Uuid::new_v4()))
+        .to_string_lossy()
+        .to_string();
+
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec![
+        "embed",
+        "--input", &input,
+        "--annotations", &annotations_json,
+        "--output", &temp_path,
+    ];
+
+    bridge
+        .run_script("pdf_annotations.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    Ok(PrintPrepareResult {
+        output_path: temp_path,
+    })
+}
+
+/// Open a PDF file in the system's default print dialog
+#[tauri::command]
+fn print_pdf(path: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open print dialog: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-a")
+            .arg("Preview")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open print dialog: {}", e))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open print dialog: {}", e))?;
+    }
+
+    Ok(())
+}
+
+// ============================================================================
 // PDF Operations Commands (PythonBridge)
 // ============================================================================
 
@@ -710,7 +787,10 @@ pub fn run() {
       annotations_embed_in_pdf,
       annotations_read_from_pdf,
       annotations_export_xfdf,
-      annotations_import_xfdf
+      annotations_import_xfdf,
+      // Print commands
+      print_prepare_pdf,
+      print_pdf
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

@@ -5,7 +5,8 @@
     Clock,
     Trash2,
     HardDrive,
-    ChevronRight
+    ChevronRight,
+    User
   } from 'lucide-svelte';
   import {
     getSettings,
@@ -13,9 +14,11 @@
     setShowRecentFilesInHome,
     setFavorites,
     clearRecentFiles,
+    updateAuthorField,
     LANGUAGES,
     TOOL_CATALOG,
-    type Language
+    type Language,
+    type AuthorSettings
   } from '$lib/stores/settings.svelte';
 
   const settings = getSettings();
@@ -74,13 +77,14 @@
 
   // Sections for better organization
   const sections = [
+    { id: 'author', label: 'Author Info', icon: User },
     { id: 'language', label: 'Language', icon: Globe },
     { id: 'favorites', label: 'Quick Tools', icon: Star },
     { id: 'recent', label: 'Recent Files', icon: Clock },
     { id: 'storage', label: 'Storage', icon: HardDrive },
   ];
 
-  let activeSection = $state('language');
+  let activeSection = $state('author');
 </script>
 
 <div class="flex-1 flex overflow-hidden" style="background-color: var(--nord0);">
@@ -110,7 +114,126 @@
 
   <!-- Main content -->
   <div class="flex-1 overflow-auto p-6">
-    {#if activeSection === 'language'}
+    {#if activeSection === 'author'}
+      <!-- Author Info Section -->
+      <div class="max-w-2xl">
+        <h2 class="text-lg font-medium mb-1" style="color: var(--nord6);">Author Info</h2>
+        <p class="text-sm opacity-60 mb-6">Your identity for annotations. This info is embedded in PDF annotations you create.</p>
+
+        <div class="space-y-4">
+          <!-- Name and Surname row -->
+          <div class="grid grid-cols-2 gap-4">
+            <!-- Name -->
+            <div
+              class="px-4 py-3 rounded-xl"
+              style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+            >
+              <label class="block text-xs opacity-60 mb-1">First Name</label>
+              <input
+                type="text"
+                value={settings.author.name}
+                oninput={(e) => updateAuthorField('name', e.currentTarget.value)}
+                placeholder="Enter your first name"
+                class="w-full bg-transparent outline-none text-sm"
+                style="color: var(--nord6);"
+              />
+            </div>
+
+            <!-- Surname -->
+            <div
+              class="px-4 py-3 rounded-xl"
+              style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+            >
+              <label class="block text-xs opacity-60 mb-1">Last Name</label>
+              <input
+                type="text"
+                value={settings.author.surname}
+                oninput={(e) => updateAuthorField('surname', e.currentTarget.value)}
+                placeholder="Enter your last name"
+                class="w-full bg-transparent outline-none text-sm"
+                style="color: var(--nord6);"
+              />
+            </div>
+          </div>
+
+          <!-- Username -->
+          <div
+            class="px-4 py-3 rounded-xl"
+            style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+          >
+            <label class="block text-xs opacity-60 mb-1">Username</label>
+            <input
+              type="text"
+              value={settings.author.username}
+              oninput={(e) => updateAuthorField('username', e.currentTarget.value)}
+              placeholder="Enter a username (optional)"
+              class="w-full bg-transparent outline-none text-sm"
+              style="color: var(--nord6);"
+            />
+          </div>
+
+          <!-- Email -->
+          <div
+            class="px-4 py-3 rounded-xl"
+            style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+          >
+            <label class="block text-xs opacity-60 mb-1">Email</label>
+            <input
+              type="email"
+              value={settings.author.email}
+              oninput={(e) => updateAuthorField('email', e.currentTarget.value)}
+              placeholder="Enter your email (optional)"
+              class="w-full bg-transparent outline-none text-sm"
+              style="color: var(--nord6);"
+            />
+          </div>
+
+          <!-- Anonymous Mode Toggle -->
+          <div
+            class="flex items-center justify-between px-4 py-4 rounded-xl"
+            style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+          >
+            <div>
+              <p class="text-sm font-medium">Anonymous Mode</p>
+              <p class="text-xs opacity-60">Hide your identity in annotations (shows "Anonymous" instead)</p>
+            </div>
+            <button
+              onclick={() => updateAuthorField('anonymousMode', !settings.author.anonymousMode)}
+              class="relative w-12 h-6 rounded-full transition-colors"
+              style="background-color: {settings.author.anonymousMode ? 'var(--nord14)' : 'var(--nord3)'};"
+            >
+              <div
+                class="absolute top-1 w-4 h-4 rounded-full transition-all"
+                style="background-color: var(--nord6);
+                       left: {settings.author.anonymousMode ? '28px' : '4px'};"
+              ></div>
+            </button>
+          </div>
+
+          <!-- Preview -->
+          <div
+            class="px-4 py-3 rounded-xl"
+            style="background-color: var(--nord2); border: 1px solid var(--nord3);"
+          >
+            <p class="text-xs opacity-60 mb-1">Author name in annotations:</p>
+            <p class="text-sm font-medium" style="color: var(--nord8);">
+              {#if settings.author.anonymousMode}
+                Anonymous
+              {:else if settings.author.name || settings.author.surname}
+                {`${settings.author.name} ${settings.author.surname}`.trim()}
+              {:else if settings.author.username}
+                {settings.author.username}
+              {:else if settings.author.email}
+                {settings.author.email}
+              {:else}
+                <span class="opacity-50 italic">No author info configured</span>
+              {/if}
+            </p>
+          </div>
+        </div>
+      </div>
+
+    {:else if activeSection === 'language'}
       <!-- Language Section -->
       <div class="max-w-2xl">
         <h2 class="text-lg font-medium mb-1" style="color: var(--nord6);">Language</h2>

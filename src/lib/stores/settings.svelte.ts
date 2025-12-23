@@ -34,6 +34,15 @@ export const LANGUAGES: { id: Language; label: string; native: string }[] = [
   { id: 'de', label: 'German', native: 'Deutsch' },
 ];
 
+// Author settings for annotation attribution
+export interface AuthorSettings {
+  name: string;
+  surname: string;
+  username: string;
+  email: string;
+  anonymousMode: boolean;
+}
+
 // Settings shape
 export interface AppSettings {
   favorites: string[]; // tool IDs
@@ -43,7 +52,17 @@ export interface AppSettings {
   maxRecentFiles: number;
   theme: 'dark' | 'light' | 'system';
   language: Language;
+  author: AuthorSettings;
 }
+
+// Default author settings
+const DEFAULT_AUTHOR: AuthorSettings = {
+  name: '',
+  surname: '',
+  username: '',
+  email: '',
+  anonymousMode: false,
+};
 
 // Default settings
 const DEFAULT_SETTINGS: AppSettings = {
@@ -54,6 +73,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   maxRecentFiles: 10,
   theme: 'dark',
   language: 'en',
+  author: { ...DEFAULT_AUTHOR },
 };
 
 // Complete tool catalog
@@ -120,6 +140,7 @@ async function initStore(): Promise<void> {
     const maxRecentFiles = await store.get<number>('maxRecentFiles');
     const theme = await store.get<'dark' | 'light' | 'system'>('theme');
     const language = await store.get<Language>('language');
+    const author = await store.get<AuthorSettings>('author');
 
     settings = {
       favorites: favorites ?? DEFAULT_SETTINGS.favorites,
@@ -129,6 +150,7 @@ async function initStore(): Promise<void> {
       maxRecentFiles: maxRecentFiles ?? DEFAULT_SETTINGS.maxRecentFiles,
       theme: theme ?? DEFAULT_SETTINGS.theme,
       language: language ?? DEFAULT_SETTINGS.language,
+      author: author ?? { ...DEFAULT_AUTHOR },
     };
 
     isLoaded = true;
@@ -200,6 +222,40 @@ export async function setTheme(theme: 'dark' | 'light' | 'system'): Promise<void
   await saveSetting('theme', theme);
 }
 
+// Author settings management
+export async function setAuthor(author: AuthorSettings): Promise<void> {
+  await saveSetting('author', author);
+}
+
+export async function updateAuthorField<K extends keyof AuthorSettings>(
+  field: K,
+  value: AuthorSettings[K]
+): Promise<void> {
+  const newAuthor = { ...settings.author, [field]: value };
+  await saveSetting('author', newAuthor);
+}
+
+// Get author display string for annotations
+export function getAuthorString(): string {
+  const { name, surname, username, email, anonymousMode } = settings.author;
+
+  if (anonymousMode) return 'Anonymous';
+
+  // Prefer full name
+  if (name || surname) {
+    return `${name} ${surname}`.trim();
+  }
+
+  // Fall back to username
+  if (username) return username;
+
+  // Fall back to email
+  if (email) return email;
+
+  // No author info configured
+  return '';
+}
+
 // Get settings (reactive)
 export function getSettings() {
   // Initialize on first access
@@ -215,6 +271,7 @@ export function getSettings() {
     get maxRecentFiles() { return settings.maxRecentFiles; },
     get theme() { return settings.theme; },
     get language() { return settings.language; },
+    get author() { return settings.author; },
     get isLoaded() { return isLoaded; },
   };
 }

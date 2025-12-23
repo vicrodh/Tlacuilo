@@ -1208,7 +1208,7 @@
                       pageWidth={loadedPage.width}
                       pageHeight={loadedPage.height}
                       scale={1}
-                      interactive={showAnnotationTools}
+                      interactive={showAnnotationTools && annotationsStore.activeTool !== 'text-select'}
                     />
                   {/if}
                 {:else}

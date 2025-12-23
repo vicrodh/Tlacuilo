@@ -126,13 +126,15 @@
         freetextValue = '';
         // Focus input after render
         setTimeout(() => freetextInputRef?.focus(), 0);
-      } else {
+      } else if (store.activeTool === 'area-select') {
+        // Area selection mode: use pendingMarkupType
+        const markupType = store.pendingMarkupType;
         store.addAnnotation({
-          type: store.activeTool,
+          type: markupType,
           page,
           rect: drawRect,
           color: store.activeColor,
-          opacity: store.activeTool === 'highlight' ? 0.3 : 0.8,
+          opacity: markupType === 'highlight' ? 0.3 : 0.8,
         });
       }
     }
@@ -329,7 +331,7 @@
   <!-- Drawing preview -->
   {#if isDrawing && drawRect && store.activeTool}
     {@const previewRect = toPixelRect(drawRect)}
-    {#if store.activeTool === 'highlight'}
+    {#if store.activeTool === 'area-select' && store.pendingMarkupType === 'highlight'}
       <rect
         x={previewRect.x}
         y={previewRect.y}
@@ -341,7 +343,7 @@
         stroke-width="1"
         stroke-dasharray="4"
       />
-    {:else if store.activeTool === 'underline'}
+    {:else if store.activeTool === 'area-select' && store.pendingMarkupType === 'underline'}
       <line
         x1={previewRect.x}
         y1={previewRect.y + previewRect.height}
@@ -351,7 +353,7 @@
         stroke-width="2"
         stroke-dasharray="4"
       />
-    {:else if store.activeTool === 'strikethrough'}
+    {:else if store.activeTool === 'area-select' && store.pendingMarkupType === 'strikethrough'}
       <line
         x1={previewRect.x}
         y1={previewRect.y + previewRect.height / 2}

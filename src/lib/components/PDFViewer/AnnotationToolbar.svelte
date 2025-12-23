@@ -7,11 +7,14 @@
     MousePointer,
     Trash2,
     Palette,
-    Type
+    Type,
+    TextSelect,
+    Square,
   } from 'lucide-svelte';
   import {
-    type AnnotationType,
     type AnnotationsStore,
+    type MarkupType,
+    type ToolMode,
     HIGHLIGHT_COLORS,
   } from '$lib/stores/annotations.svelte';
 
@@ -24,18 +27,20 @@
 
   let showColorPicker = $state(false);
 
-  const tools: { type: AnnotationType | null; icon: typeof Highlighter; label: string }[] = [
-    { type: null, icon: MousePointer, label: 'Select' },
+  // Markup type options for selection modes
+  const markupTypes: { type: MarkupType; icon: typeof Highlighter; label: string }[] = [
     { type: 'highlight', icon: Highlighter, label: 'Highlight' },
-    { type: 'comment', icon: MessageSquare, label: 'Comment' },
     { type: 'underline', icon: Underline, label: 'Underline' },
     { type: 'strikethrough', icon: Strikethrough, label: 'Strikethrough' },
-    { type: 'freetext', icon: Type, label: 'Typewriter' },
   ];
 
-  function selectTool(type: AnnotationType | null) {
-    store.setActiveTool(type);
+  function selectTool(tool: ToolMode) {
+    store.setActiveTool(tool);
     showColorPicker = false;
+  }
+
+  function selectMarkupType(type: MarkupType) {
+    store.setPendingMarkupType(type);
   }
 
   function selectColor(color: string) {
@@ -53,24 +58,94 @@
       onClearAll?.();
     }
   }
+
+  // Check if we're in a selection mode
+  const isSelectionMode = $derived(
+    store.activeTool === 'text-select' || store.activeTool === 'area-select'
+  );
 </script>
 
 <div
   class="flex items-center gap-1 px-2 py-1.5 rounded-lg"
   style="background-color: var(--nord2);"
 >
-  <!-- Tool buttons -->
-  {#each tools as tool}
+  <!-- Pointer (deselect tool) -->
+  <button
+    onclick={() => selectTool(null)}
+    class="p-2 rounded transition-colors"
+    class:bg-[var(--nord8)]={store.activeTool === null}
+    style="color: {store.activeTool === null ? 'var(--nord0)' : 'var(--nord4)'};"
+    title="Select"
+  >
+    <MousePointer size={16} />
+  </button>
+
+  <!-- Separator -->
+  <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
+
+  <!-- Text Select group -->
+  <div class="flex items-center">
     <button
-      onclick={() => selectTool(tool.type)}
-      class="p-2 rounded transition-colors"
-      class:bg-[var(--nord8)]={store.activeTool === tool.type}
-      style="color: {store.activeTool === tool.type ? 'var(--nord0)' : 'var(--nord4)'};"
-      title={tool.label}
+      onclick={() => selectTool('text-select')}
+      class="p-2 rounded-l transition-colors"
+      class:bg-[var(--nord8)]={store.activeTool === 'text-select'}
+      style="color: {store.activeTool === 'text-select' ? 'var(--nord0)' : 'var(--nord4)'};"
+      title="Text Selection"
     >
-      <tool.icon size={16} />
+      <TextSelect size={16} />
     </button>
-  {/each}
+    <button
+      onclick={() => selectTool('area-select')}
+      class="p-2 rounded-r transition-colors"
+      class:bg-[var(--nord8)]={store.activeTool === 'area-select'}
+      style="color: {store.activeTool === 'area-select' ? 'var(--nord0)' : 'var(--nord4)'};"
+      title="Area Selection"
+    >
+      <Square size={16} />
+    </button>
+  </div>
+
+  <!-- Markup type selector (only visible when in selection mode) -->
+  {#if isSelectionMode}
+    <div class="flex items-center gap-0.5 ml-1 px-1 py-0.5 rounded" style="background-color: var(--nord3);">
+      {#each markupTypes as markup}
+        <button
+          onclick={() => selectMarkupType(markup.type)}
+          class="p-1.5 rounded transition-colors"
+          class:bg-[var(--nord8)]={store.pendingMarkupType === markup.type}
+          style="color: {store.pendingMarkupType === markup.type ? 'var(--nord0)' : 'var(--nord4)'};"
+          title={markup.label}
+        >
+          <markup.icon size={14} />
+        </button>
+      {/each}
+    </div>
+  {/if}
+
+  <!-- Separator -->
+  <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
+
+  <!-- Comment tool -->
+  <button
+    onclick={() => selectTool('comment')}
+    class="p-2 rounded transition-colors"
+    class:bg-[var(--nord8)]={store.activeTool === 'comment'}
+    style="color: {store.activeTool === 'comment' ? 'var(--nord0)' : 'var(--nord4)'};"
+    title="Comment"
+  >
+    <MessageSquare size={16} />
+  </button>
+
+  <!-- Typewriter tool -->
+  <button
+    onclick={() => selectTool('freetext')}
+    class="p-2 rounded transition-colors"
+    class:bg-[var(--nord8)]={store.activeTool === 'freetext'}
+    style="color: {store.activeTool === 'freetext' ? 'var(--nord0)' : 'var(--nord4)'};"
+    title="Typewriter"
+  >
+    <Type size={16} />
+  </button>
 
   <!-- Separator -->
   <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
@@ -90,7 +165,6 @@
     </button>
 
     {#if showColorPicker}
-      <!-- 8 colors in 4x2 grid: 4*32px + 3*8px gaps = 152px + 24px padding = 176px -->
       <div
         class="absolute top-full left-1/2 mt-1 rounded-lg shadow-lg"
         style="
