@@ -317,6 +317,10 @@ fn print_prepare_pdf(
         .app_cache_dir()
         .unwrap_or_else(|_| std::env::temp_dir());
 
+    // Ensure the cache directory exists
+    std::fs::create_dir_all(&cache_dir)
+        .map_err(|e| format!("Failed to create cache directory: {}", e))?;
+
     let temp_path = cache_dir
         .join(format!("tlacuilo-print-{}.pdf", uuid::Uuid::new_v4()))
         .to_string_lossy()
