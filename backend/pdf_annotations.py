@@ -309,9 +309,11 @@ def embed_annotations(
                         ink_list = []
                         for path in paths:
                             points = path.get("points", [])
+                            # Use tuples (x, y) instead of fitz.Point objects
+                            # PyMuPDF's add_ink_annot expects seq of seq of float pairs
                             pdf_points = []
                             for pt in points:
-                                pdf_points.append(fitz.Point(
+                                pdf_points.append((
                                     pt["x"] * page_width,
                                     pt["y"] * page_height,
                                 ))
@@ -321,8 +323,9 @@ def embed_annotations(
                             annot = page.add_ink_annot(ink_list)
                             if annot:
                                 annot.set_colors(stroke=color_rgb)
-                                sw = annot_data.get("strokeWidth", 0.003) * page_width
-                                annot.set_border(width=sw)
+                                # Use strokeWidth from path if available, fallback to annotation level
+                                sw = paths[0].get("strokeWidth", annot_data.get("strokeWidth", 0.003))
+                                annot.set_border(width=sw * page_width)
 
                 elif annot_type == "rectangle":
                     # Rectangle/square annotation
