@@ -7,6 +7,7 @@
     type Rect,
     type InkPath,
     type LineStyle,
+    type Point,
   } from '$lib/stores/annotations.svelte';
   import { getAuthorString } from '$lib/stores/settings.svelte';
 
@@ -24,6 +25,7 @@
   let overlayElement: SVGSVGElement;
   let isDrawing = $state(false);
   let drawStart = $state<{ x: number; y: number } | null>(null);
+  let drawEnd = $state<{ x: number; y: number } | null>(null); // Track actual end position for line/arrow preview
   let drawRect = $state<Rect | null>(null);
   let editingComment = $state<string | null>(null);
   let commentText = $state('');
@@ -162,7 +164,9 @@
       // Add point to ink path
       currentInkPath = [...currentInkPath, coords];
     } else if (drawStart) {
-      // Update rect for shape tools
+      // Track actual end position for line/arrow preview
+      drawEnd = coords;
+      // Update rect for shape tools (normalized bounding box)
       const x = Math.min(drawStart.x, coords.x);
       const y = Math.min(drawStart.y, coords.y);
       const width = Math.abs(coords.x - drawStart.x);
@@ -175,6 +179,7 @@
     if (!isDrawing || !store.activeTool) {
       isDrawing = false;
       drawStart = null;
+      drawEnd = null;
       drawRect = null;
       currentInkPath = [];
       return;
@@ -182,6 +187,9 @@
 
     // Prevent event from bubbling
     e.stopPropagation();
+
+    // Get current mouse position for line/arrow end points
+    const endCoords = getRelativeCoords(e);
 
     // Get author for annotation attribution
     const author = getAuthorString() || undefined;
@@ -270,6 +278,7 @@
             author,
           });
         } else if (store.activeTool === 'line') {
+          // For lines, store actual start/end points to preserve direction
           store.addAnnotation({
             type: 'line',
             page,
@@ -278,9 +287,12 @@
             opacity: 1,
             strokeWidth: 0.002,
             lineStyle: 'solid',
+            startPoint: { x: drawStart!.x, y: drawStart!.y },
+            endPoint: { x: endCoords.x, y: endCoords.y },
             author,
           });
         } else if (store.activeTool === 'arrow') {
+          // For arrows, store actual start/end points to preserve direction
           store.addAnnotation({
             type: 'arrow',
             page,
@@ -291,6 +303,8 @@
             lineStyle: 'solid',
             startArrow: 'none',
             endArrow: 'closed',
+            startPoint: { x: drawStart!.x, y: drawStart!.y },
+            endPoint: { x: endCoords.x, y: endCoords.y },
             author,
           });
         } else if (store.activeTool === 'sequenceNumber') {
@@ -318,6 +332,7 @@
 
     isDrawing = false;
     drawStart = null;
+    drawEnd = null;
     drawRect = null;
   }
 
@@ -410,7 +425,7 @@
   onmousedown={interactive ? handleMouseDown : undefined}
   onmousemove={interactive ? handleMouseMove : undefined}
   onmouseup={interactive ? handleMouseUp : undefined}
-  onmouseleave={interactive ? () => { isDrawing = false; drawRect = null; currentInkPath = []; } : undefined}
+  onmouseleave={interactive ? () => { isDrawing = false; drawStart = null; drawEnd = null; drawRect = null; currentInkPath = []; } : undefined}
 >
   <!-- Rendered annotations -->
   {#each annotations as annotation (annotation.id)}
@@ -571,11 +586,12 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       {@const strokeWidth = (annotation.strokeWidth || 0.002) * pageWidth * scale}
+      {@const x1 = annotation.startPoint ? annotation.startPoint.x * pageWidth * scale : pixelRect.x}
+      {@const y1 = annotation.startPoint ? annotation.startPoint.y * pageHeight * scale : pixelRect.y}
+      {@const x2 = annotation.endPoint ? annotation.endPoint.x * pageWidth * scale : pixelRect.x + pixelRect.width}
+      {@const y2 = annotation.endPoint ? annotation.endPoint.y * pageHeight * scale : pixelRect.y + pixelRect.height}
       <line
-        x1={pixelRect.x}
-        y1={pixelRect.y}
-        x2={pixelRect.x + pixelRect.width}
-        y2={pixelRect.y + pixelRect.height}
+        {x1} {y1} {x2} {y2}
         stroke={annotation.color}
         stroke-width={strokeWidth}
         stroke-dasharray={getDashArray(annotation.lineStyle, strokeWidth)}
@@ -593,6 +609,10 @@
       {@const hasEndArrow = annotation.endArrow && annotation.endArrow !== 'none'}
       {@const isClosedStart = annotation.startArrow === 'closed'}
       {@const isClosedEnd = annotation.endArrow === 'closed'}
+      {@const x1 = annotation.startPoint ? annotation.startPoint.x * pageWidth * scale : pixelRect.x}
+      {@const y1 = annotation.startPoint ? annotation.startPoint.y * pageHeight * scale : pixelRect.y}
+      {@const x2 = annotation.endPoint ? annotation.endPoint.x * pageWidth * scale : pixelRect.x + pixelRect.width}
+      {@const y2 = annotation.endPoint ? annotation.endPoint.y * pageHeight * scale : pixelRect.y + pixelRect.height}
       <defs>
         {#if hasEndArrow}
           <marker
@@ -632,10 +652,7 @@
         {/if}
       </defs>
       <line
-        x1={pixelRect.x}
-        y1={pixelRect.y}
-        x2={pixelRect.x + pixelRect.width}
-        y2={pixelRect.y + pixelRect.height}
+        {x1} {y1} {x2} {y2}
         stroke={annotation.color}
         stroke-width={strokeWidth}
         stroke-dasharray={getDashArray(annotation.lineStyle, strokeWidth)}
@@ -771,16 +788,26 @@
           stroke-dasharray="4"
         />
       {:else if store.activeTool === 'line'}
+        <!-- Use drawStart and drawEnd for actual direction -->
+        {@const lineX1 = drawStart ? drawStart.x * pageWidth * scale : previewRect.x}
+        {@const lineY1 = drawStart ? drawStart.y * pageHeight * scale : previewRect.y}
+        {@const lineX2 = drawEnd ? drawEnd.x * pageWidth * scale : previewRect.x + previewRect.width}
+        {@const lineY2 = drawEnd ? drawEnd.y * pageHeight * scale : previewRect.y + previewRect.height}
         <line
-          x1={previewRect.x}
-          y1={previewRect.y}
-          x2={previewRect.x + previewRect.width}
-          y2={previewRect.y + previewRect.height}
+          x1={lineX1}
+          y1={lineY1}
+          x2={lineX2}
+          y2={lineY2}
           stroke={store.activeColor}
           stroke-width="2"
           stroke-dasharray="4"
         />
       {:else if store.activeTool === 'arrow'}
+        <!-- Use drawStart and drawEnd for actual direction -->
+        {@const arrowX1 = drawStart ? drawStart.x * pageWidth * scale : previewRect.x}
+        {@const arrowY1 = drawStart ? drawStart.y * pageHeight * scale : previewRect.y}
+        {@const arrowX2 = drawEnd ? drawEnd.x * pageWidth * scale : previewRect.x + previewRect.width}
+        {@const arrowY2 = drawEnd ? drawEnd.y * pageHeight * scale : previewRect.y + previewRect.height}
         <defs>
           <marker
             id="preview-arrow-end"
@@ -798,10 +825,10 @@
           </marker>
         </defs>
         <line
-          x1={previewRect.x}
-          y1={previewRect.y}
-          x2={previewRect.x + previewRect.width}
-          y2={previewRect.y + previewRect.height}
+          x1={arrowX1}
+          y1={arrowY1}
+          x2={arrowX2}
+          y2={arrowY2}
           stroke={store.activeColor}
           stroke-width="2"
           stroke-dasharray="4"

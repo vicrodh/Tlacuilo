@@ -353,9 +353,16 @@ def embed_annotations(
 
                 elif annot_type in ("line", "arrow"):
                     # Line annotation (with optional arrow heads)
-                    # Use rect corners as start/end points
-                    p1 = fitz.Point(pdf_rect.x0, pdf_rect.y0)
-                    p2 = fitz.Point(pdf_rect.x1, pdf_rect.y1)
+                    # Use startPoint/endPoint if available, otherwise fall back to rect corners
+                    start_pt = annot_data.get("startPoint")
+                    end_pt = annot_data.get("endPoint")
+                    if start_pt and end_pt:
+                        p1 = fitz.Point(start_pt["x"] * page_width, start_pt["y"] * page_height)
+                        p2 = fitz.Point(end_pt["x"] * page_width, end_pt["y"] * page_height)
+                    else:
+                        # Fall back to rect corners
+                        p1 = fitz.Point(pdf_rect.x0, pdf_rect.y0)
+                        p2 = fitz.Point(pdf_rect.x1, pdf_rect.y1)
                     annot = page.add_line_annot(p1, p2)
                     if annot:
                         annot.set_colors(stroke=color_rgb)
@@ -492,6 +499,8 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
             start_arrow = None
             end_arrow = None
             paths = None
+            start_point = None
+            end_point = None
 
             if our_type == "freetext":
                 # Parse DA string to get text color and fontsize
@@ -574,12 +583,17 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
                             our_type = "arrow"
                 except Exception:
                     pass
-                # Get actual line endpoints from vertices
+                # Get actual line endpoints from vertices and store as startPoint/endPoint
                 vertices = annot.vertices
+                start_point = None
+                end_point = None
                 if vertices and len(vertices) >= 2:
                     p1 = vertices[0]
                     p2 = vertices[1]
-                    # Store as rect where x,y is start and width,height encode direction
+                    # Store actual start/end points (normalized)
+                    start_point = {"x": p1[0] / page_width, "y": p1[1] / page_height}
+                    end_point = {"x": p2[0] / page_width, "y": p2[1] / page_height}
+                    # Also compute bounding rect
                     rect = fitz.Rect(
                         min(p1[0], p2[0]),
                         min(p1[1], p2[1]),
@@ -633,6 +647,10 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
                 annot_data["startArrow"] = start_arrow
             if end_arrow is not None:
                 annot_data["endArrow"] = end_arrow
+            if start_point is not None:
+                annot_data["startPoint"] = start_point
+            if end_point is not None:
+                annot_data["endPoint"] = end_point
             page_annots.append(annot_data)
 
         if page_annots:

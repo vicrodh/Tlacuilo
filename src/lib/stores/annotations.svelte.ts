@@ -82,6 +82,9 @@ export interface Annotation {
   // Arrow specific
   startArrow?: ArrowHeadStyle;
   endArrow?: ArrowHeadStyle;
+  // Line/arrow endpoints (normalized 0-1)
+  startPoint?: Point;
+  endPoint?: Point;
   // Sequence number specific
   sequenceNumber?: number;      // The number to display
 }
