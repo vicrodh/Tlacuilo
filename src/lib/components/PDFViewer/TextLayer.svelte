@@ -148,6 +148,9 @@
 
     const layerRect = textLayer.getBoundingClientRect();
 
+    // Padding: ~0.2 of average character width (roughly 0.002 normalized = ~1-2px)
+    const paddingX = 0.002;
+
     for (let i = 0; i < clientRects.length; i++) {
       const rect = clientRects[i];
 
@@ -156,11 +159,19 @@
       const relY = rect.top - layerRect.top;
 
       // Convert to normalized coordinates (accounting for scale)
-      const normalizedRect: NormalizedRect = {
+      let normalizedRect: NormalizedRect = {
         x: relX / (pageWidth * scale),
         y: relY / (pageHeight * scale),
         width: rect.width / (pageWidth * scale),
         height: rect.height / (pageHeight * scale),
+      };
+
+      // Add symmetric padding on both sides
+      normalizedRect = {
+        x: Math.max(0, normalizedRect.x - paddingX),
+        y: normalizedRect.y,
+        width: normalizedRect.width + paddingX * 2,
+        height: normalizedRect.height,
       };
 
       // Only add if it has meaningful size
