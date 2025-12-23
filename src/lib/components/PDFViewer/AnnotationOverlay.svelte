@@ -8,6 +8,7 @@
     type InkPath,
     type LineStyle,
   } from '$lib/stores/annotations.svelte';
+  import { getAuthorString } from '$lib/stores/settings.svelte';
 
   interface Props {
     store: AnnotationsStore;
@@ -182,6 +183,9 @@
     // Prevent event from bubbling
     e.stopPropagation();
 
+    // Get author for annotation attribution
+    const author = getAuthorString() || undefined;
+
     if (store.activeTool === 'ink') {
       // Create ink annotation if path has enough points
       if (currentInkPath.length > 2) {
@@ -193,9 +197,10 @@
           rect: boundingRect,
           color: store.activeColor,
           opacity: 1,
+          author,
           paths: [{
             points: reducedPath,
-            strokeWidth: 0.003, // Default stroke width
+            strokeWidth: 0.003,
             color: store.activeColor,
           }],
         });
@@ -214,6 +219,7 @@
             color: store.activeColor,
             opacity: 0.8,
             text: '',
+            author,
           });
           editingComment = annotation.id;
           commentText = '';
@@ -226,6 +232,7 @@
             opacity: 1,
             text: '',
             fontsize: 12,
+            author,
           });
           editingFreetext = annotation.id;
           freetextValue = '';
@@ -238,6 +245,7 @@
             rect: drawRect,
             color: store.activeColor,
             opacity: markupType === 'highlight' ? 0.3 : 0.8,
+            author,
           });
         } else if (store.activeTool === 'rectangle') {
           store.addAnnotation({
@@ -248,6 +256,7 @@
             opacity: 1,
             strokeWidth: 0.002,
             lineStyle: 'solid',
+            author,
           });
         } else if (store.activeTool === 'ellipse') {
           store.addAnnotation({
@@ -258,6 +267,7 @@
             opacity: 1,
             strokeWidth: 0.002,
             lineStyle: 'solid',
+            author,
           });
         } else if (store.activeTool === 'line') {
           store.addAnnotation({
@@ -268,6 +278,7 @@
             opacity: 1,
             strokeWidth: 0.002,
             lineStyle: 'solid',
+            author,
           });
         } else if (store.activeTool === 'arrow') {
           store.addAnnotation({
@@ -280,6 +291,7 @@
             lineStyle: 'solid',
             startArrow: 'none',
             endArrow: 'closed',
+            author,
           });
         } else if (store.activeTool === 'sequenceNumber') {
           // Make it a square based on the smaller dimension
@@ -297,6 +309,7 @@
             color: store.activeColor,
             opacity: 1,
             sequenceNumber: sequenceCounter,
+            author,
           });
           sequenceCounter++;
         }

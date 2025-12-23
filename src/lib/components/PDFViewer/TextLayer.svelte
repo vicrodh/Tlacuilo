@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import type { AnnotationsStore, AnnotationType } from '$lib/stores/annotations.svelte';
+  import { getAuthorString } from '$lib/stores/settings.svelte';
 
   interface NormalizedRect {
     x: number;
@@ -118,6 +119,7 @@
 
     // Get the pending markup type (defaults to highlight)
     const markupType = store.pendingMarkupType;
+    const author = getAuthorString() || undefined;
 
     // Create annotation for each line rect
     for (const rect of rects) {
@@ -127,6 +129,7 @@
         rect,
         color: store.activeColor,
         opacity: markupType === 'highlight' ? 0.3 : 0.8,
+        author,
       });
     }
 
