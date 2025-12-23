@@ -505,30 +505,31 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
                 # For freetext, get text content from the annotation itself
                 text = annot.get_text() or info.get("content", "") or ""
             elif our_type == "ink":
-                # Get ink paths
+                # Get ink paths from vertices (list of lists of (x,y) tuples)
                 colors = annot.colors
                 stroke_color = colors.get("stroke") or (0, 0, 0)
                 color_hex = rgb_to_hex(stroke_color)
-                # Get ink list (list of point lists)
-                ink_list = annot.ink_list if hasattr(annot, "ink_list") else []
-                if ink_list:
+                # Ink paths are stored in vertices as list of point lists
+                ink_paths = annot.vertices if annot.vertices else []
+                if ink_paths:
                     paths = []
                     border = annot.border or {}
                     sw = border.get("width", 1.0) if isinstance(border, dict) else 1.0
                     stroke_width = sw / page_width  # Normalize
-                    for point_list in ink_list:
+                    for point_list in ink_paths:
                         points = []
                         for pt in point_list:
-                            # Normalize to 0-1
+                            # Points are (x, y) tuples, normalize to 0-1
                             points.append({
-                                "x": pt.x / page_width,
-                                "y": pt.y / page_height,
+                                "x": pt[0] / page_width,
+                                "y": pt[1] / page_height,
                             })
-                        paths.append({
-                            "points": points,
-                            "strokeWidth": stroke_width,
-                            "color": color_hex,
-                        })
+                        if points:
+                            paths.append({
+                                "points": points,
+                                "strokeWidth": stroke_width,
+                                "color": color_hex,
+                            })
             elif our_type in ("rectangle", "ellipse"):
                 # Shape annotations - check for sequence number pattern
                 # Detect filled circles with "SEQ:N" content as sequence numbers
