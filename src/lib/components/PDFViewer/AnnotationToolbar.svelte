@@ -10,6 +10,11 @@
     Type,
     TextSelect,
     Square,
+    Pencil,
+    Circle,
+    Minus,
+    ArrowRight,
+    Hash,
   } from 'lucide-svelte';
   import {
     type AnnotationsStore,
@@ -146,6 +151,78 @@
   >
     <Type size={16} />
   </button>
+
+  <!-- Separator -->
+  <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
+
+  <!-- Drawing tools -->
+  <div class="flex items-center gap-0.5">
+    <!-- Ink/Freehand -->
+    <button
+      onclick={() => selectTool('ink')}
+      class="p-2 rounded transition-colors"
+      class:bg-[var(--nord8)]={store.activeTool === 'ink'}
+      style="color: {store.activeTool === 'ink' ? 'var(--nord0)' : 'var(--nord4)'};"
+      title="Freehand Draw"
+    >
+      <Pencil size={16} />
+    </button>
+
+    <!-- Rectangle -->
+    <button
+      onclick={() => selectTool('rectangle')}
+      class="p-2 rounded transition-colors"
+      class:bg-[var(--nord8)]={store.activeTool === 'rectangle'}
+      style="color: {store.activeTool === 'rectangle' ? 'var(--nord0)' : 'var(--nord4)'};"
+      title="Rectangle"
+    >
+      <Square size={16} />
+    </button>
+
+    <!-- Ellipse -->
+    <button
+      onclick={() => selectTool('ellipse')}
+      class="p-2 rounded transition-colors"
+      class:bg-[var(--nord8)]={store.activeTool === 'ellipse'}
+      style="color: {store.activeTool === 'ellipse' ? 'var(--nord0)' : 'var(--nord4)'};"
+      title="Ellipse"
+    >
+      <Circle size={16} />
+    </button>
+
+    <!-- Line -->
+    <button
+      onclick={() => selectTool('line')}
+      class="p-2 rounded transition-colors"
+      class:bg-[var(--nord8)]={store.activeTool === 'line'}
+      style="color: {store.activeTool === 'line' ? 'var(--nord0)' : 'var(--nord4)'};"
+      title="Line"
+    >
+      <Minus size={16} />
+    </button>
+
+    <!-- Arrow -->
+    <button
+      onclick={() => selectTool('arrow')}
+      class="p-2 rounded transition-colors"
+      class:bg-[var(--nord8)]={store.activeTool === 'arrow'}
+      style="color: {store.activeTool === 'arrow' ? 'var(--nord0)' : 'var(--nord4)'};"
+      title="Arrow"
+    >
+      <ArrowRight size={16} />
+    </button>
+
+    <!-- Sequence Number -->
+    <button
+      onclick={() => selectTool('sequenceNumber')}
+      class="p-2 rounded transition-colors"
+      class:bg-[var(--nord8)]={store.activeTool === 'sequenceNumber'}
+      style="color: {store.activeTool === 'sequenceNumber' ? 'var(--nord0)' : 'var(--nord4)'};"
+      title="Sequence Number"
+    >
+      <Hash size={16} />
+    </button>
+  </div>
 
   <!-- Separator -->
   <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>

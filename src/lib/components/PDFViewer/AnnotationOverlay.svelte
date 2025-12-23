@@ -71,6 +71,12 @@
   let freetextValue = $state('');
   let freetextInputRef: HTMLTextAreaElement;
 
+  // Ink drawing state
+  let currentInkPath = $state<{ x: number; y: number }[]>([]);
+
+  // Sequence number counter (persisted in store would be better, but local for now)
+  let sequenceCounter = $state(1);
+
   const annotations = $derived(store.getAnnotationsForPage(page));
 
   // Convert mouse event to NORMALIZED coordinates (0-1)
@@ -97,6 +103,31 @@
     };
   }
 
+  // Calculate bounding rect from path points
+  function calculateBoundingRect(points: { x: number; y: number }[]): Rect {
+    if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+    let minX = points[0].x, maxX = points[0].x;
+    let minY = points[0].y, maxY = points[0].y;
+    for (const p of points) {
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  // Reduce points to improve performance (take every Nth point)
+  function reducePoints(points: { x: number; y: number }[], n: number): { x: number; y: number }[] {
+    if (points.length <= n * 2) return points;
+    const result = [points[0]];
+    for (let i = n; i < points.length - 1; i += n) {
+      result.push(points[i]);
+    }
+    result.push(points[points.length - 1]);
+    return result;
+  }
+
   function handleMouseDown(e: MouseEvent) {
     if (!store.activeTool || e.button !== 0) return;
 
@@ -105,78 +136,170 @@
     e.preventDefault();
 
     const coords = getRelativeCoords(e);
-    isDrawing = true;
-    drawStart = coords;
-    drawRect = { x: coords.x, y: coords.y, width: 0, height: 0 };
+
+    if (store.activeTool === 'ink') {
+      // Start ink path
+      currentInkPath = [coords];
+      isDrawing = true;
+    } else {
+      // Start rect-based drawing
+      isDrawing = true;
+      drawStart = coords;
+      drawRect = { x: coords.x, y: coords.y, width: 0, height: 0 };
+    }
   }
 
   function handleMouseMove(e: MouseEvent) {
-    if (!isDrawing || !drawStart) return;
+    if (!isDrawing) return;
 
     // Prevent event from bubbling during drawing
     e.stopPropagation();
 
     const coords = getRelativeCoords(e);
-    const x = Math.min(drawStart.x, coords.x);
-    const y = Math.min(drawStart.y, coords.y);
-    const width = Math.abs(coords.x - drawStart.x);
-    const height = Math.abs(coords.y - drawStart.y);
 
-    drawRect = { x, y, width, height };
+    if (store.activeTool === 'ink') {
+      // Add point to ink path
+      currentInkPath = [...currentInkPath, coords];
+    } else if (drawStart) {
+      // Update rect for shape tools
+      const x = Math.min(drawStart.x, coords.x);
+      const y = Math.min(drawStart.y, coords.y);
+      const width = Math.abs(coords.x - drawStart.x);
+      const height = Math.abs(coords.y - drawStart.y);
+      drawRect = { x, y, width, height };
+    }
   }
 
   function handleMouseUp(e: MouseEvent) {
-    if (!isDrawing || !drawRect || !store.activeTool) {
+    if (!isDrawing || !store.activeTool) {
       isDrawing = false;
       drawStart = null;
       drawRect = null;
+      currentInkPath = [];
       return;
     }
 
     // Prevent event from bubbling
     e.stopPropagation();
 
-    // Only create annotation if it has meaningful size (threshold in normalized space)
-    // 0.005 = 0.5% of page dimension, roughly 3-4 pixels at typical zoom
-    if (drawRect.width > 0.005 && drawRect.height > 0.005) {
-      if (store.activeTool === 'comment') {
-        // For comments, show input dialog
-        const annotation = store.addAnnotation({
-          type: 'comment',
+    if (store.activeTool === 'ink') {
+      // Create ink annotation if path has enough points
+      if (currentInkPath.length > 2) {
+        const reducedPath = reducePoints(currentInkPath, 3);
+        const boundingRect = calculateBoundingRect(reducedPath);
+        store.addAnnotation({
+          type: 'ink',
           page,
-          rect: drawRect,
-          color: store.activeColor,
-          opacity: 0.8,
-          text: '',
-        });
-        editingComment = annotation.id;
-        commentText = '';
-      } else if (store.activeTool === 'freetext') {
-        // For freetext, create annotation with defined area and show input
-        // Default fontsize 12pt matches PyMuPDF default
-        const annotation = store.addAnnotation({
-          type: 'freetext',
-          page,
-          rect: drawRect,
+          rect: boundingRect,
           color: store.activeColor,
           opacity: 1,
-          text: '',
-          fontsize: 12,
+          paths: [{
+            points: reducedPath,
+            strokeWidth: 0.003, // Default stroke width
+            color: store.activeColor,
+          }],
         });
-        editingFreetext = annotation.id;
-        freetextValue = '';
-        // Focus input after render
-        setTimeout(() => freetextInputRef?.focus(), 0);
-      } else if (store.activeTool === 'area-select') {
-        // Area selection mode: use pendingMarkupType
-        const markupType = store.pendingMarkupType;
-        store.addAnnotation({
-          type: markupType,
-          page,
-          rect: drawRect,
-          color: store.activeColor,
-          opacity: markupType === 'highlight' ? 0.3 : 0.8,
-        });
+      }
+      currentInkPath = [];
+    } else if (drawRect) {
+      // Only create annotation if it has meaningful size
+      const hasSize = drawRect.width > 0.005 || drawRect.height > 0.005;
+
+      if (hasSize) {
+        if (store.activeTool === 'comment') {
+          const annotation = store.addAnnotation({
+            type: 'comment',
+            page,
+            rect: drawRect,
+            color: store.activeColor,
+            opacity: 0.8,
+            text: '',
+          });
+          editingComment = annotation.id;
+          commentText = '';
+        } else if (store.activeTool === 'freetext') {
+          const annotation = store.addAnnotation({
+            type: 'freetext',
+            page,
+            rect: drawRect,
+            color: store.activeColor,
+            opacity: 1,
+            text: '',
+            fontsize: 12,
+          });
+          editingFreetext = annotation.id;
+          freetextValue = '';
+          setTimeout(() => freetextInputRef?.focus(), 0);
+        } else if (store.activeTool === 'area-select') {
+          const markupType = store.pendingMarkupType;
+          store.addAnnotation({
+            type: markupType,
+            page,
+            rect: drawRect,
+            color: store.activeColor,
+            opacity: markupType === 'highlight' ? 0.3 : 0.8,
+          });
+        } else if (store.activeTool === 'rectangle') {
+          store.addAnnotation({
+            type: 'rectangle',
+            page,
+            rect: drawRect,
+            color: store.activeColor,
+            opacity: 1,
+            strokeWidth: 0.002,
+            lineStyle: 'solid',
+          });
+        } else if (store.activeTool === 'ellipse') {
+          store.addAnnotation({
+            type: 'ellipse',
+            page,
+            rect: drawRect,
+            color: store.activeColor,
+            opacity: 1,
+            strokeWidth: 0.002,
+            lineStyle: 'solid',
+          });
+        } else if (store.activeTool === 'line') {
+          store.addAnnotation({
+            type: 'line',
+            page,
+            rect: drawRect,
+            color: store.activeColor,
+            opacity: 1,
+            strokeWidth: 0.002,
+            lineStyle: 'solid',
+          });
+        } else if (store.activeTool === 'arrow') {
+          store.addAnnotation({
+            type: 'arrow',
+            page,
+            rect: drawRect,
+            color: store.activeColor,
+            opacity: 1,
+            strokeWidth: 0.002,
+            lineStyle: 'solid',
+            startArrow: 'none',
+            endArrow: 'closed',
+          });
+        } else if (store.activeTool === 'sequenceNumber') {
+          // Make it a square based on the smaller dimension
+          const size = Math.min(drawRect.width, drawRect.height);
+          const squareRect = {
+            x: drawRect.x,
+            y: drawRect.y,
+            width: size,
+            height: size,
+          };
+          store.addAnnotation({
+            type: 'sequenceNumber',
+            page,
+            rect: squareRect,
+            color: store.activeColor,
+            opacity: 1,
+            sequenceNumber: sequenceCounter,
+          });
+          sequenceCounter++;
+        }
       }
     }
 
@@ -254,6 +377,10 @@
     if (!store.activeTool) return 'default';
     if (store.activeTool === 'comment') return 'cell';
     if (store.activeTool === 'freetext') return 'text';
+    if (store.activeTool === 'ink') return 'crosshair';
+    if (store.activeTool === 'rectangle' || store.activeTool === 'ellipse') return 'crosshair';
+    if (store.activeTool === 'line' || store.activeTool === 'arrow') return 'crosshair';
+    if (store.activeTool === 'sequenceNumber') return 'crosshair';
     return 'crosshair';
   });
 </script>
@@ -270,7 +397,7 @@
   onmousedown={interactive ? handleMouseDown : undefined}
   onmousemove={interactive ? handleMouseMove : undefined}
   onmouseup={interactive ? handleMouseUp : undefined}
-  onmouseleave={interactive ? () => { isDrawing = false; drawRect = null; } : undefined}
+  onmouseleave={interactive ? () => { isDrawing = false; drawRect = null; currentInkPath = []; } : undefined}
 >
   <!-- Rendered annotations -->
   {#each annotations as annotation (annotation.id)}
@@ -539,62 +666,157 @@
   {/each}
 
   <!-- Drawing preview -->
-  {#if isDrawing && drawRect && store.activeTool}
-    {@const previewRect = toPixelRect(drawRect)}
-    {#if store.activeTool === 'area-select' && store.pendingMarkupType === 'highlight'}
-      <rect
-        x={previewRect.x}
-        y={previewRect.y}
-        width={previewRect.width}
-        height={previewRect.height}
-        fill={store.activeColor}
-        fill-opacity="0.3"
-        stroke={store.activeColor}
-        stroke-width="1"
-        stroke-dasharray="4"
-      />
-    {:else if store.activeTool === 'area-select' && store.pendingMarkupType === 'underline'}
-      <line
-        x1={previewRect.x}
-        y1={previewRect.y + previewRect.height}
-        x2={previewRect.x + previewRect.width}
-        y2={previewRect.y + previewRect.height}
-        stroke={store.activeColor}
-        stroke-width="2"
-        stroke-dasharray="4"
-      />
-    {:else if store.activeTool === 'area-select' && store.pendingMarkupType === 'strikethrough'}
-      <line
-        x1={previewRect.x}
-        y1={previewRect.y + previewRect.height / 2}
-        x2={previewRect.x + previewRect.width}
-        y2={previewRect.y + previewRect.height / 2}
-        stroke={store.activeColor}
-        stroke-width="2"
-        stroke-dasharray="4"
-      />
-    {:else if store.activeTool === 'comment'}
-      <rect
-        x={previewRect.x}
-        y={previewRect.y}
-        width={previewRect.width}
-        height={previewRect.height}
+  {#if isDrawing && store.activeTool}
+    <!-- Ink preview -->
+    {#if store.activeTool === 'ink' && currentInkPath.length > 1}
+      {@const pathData = inkPathToSvg({ points: currentInkPath, strokeWidth: 0.003, color: store.activeColor }, pageWidth, pageHeight, scale)}
+      <path
+        d={pathData}
         fill="none"
         stroke={store.activeColor}
-        stroke-width="2"
-        stroke-dasharray="4"
+        stroke-width={0.003 * pageWidth * scale}
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        opacity="0.7"
       />
-    {:else if store.activeTool === 'freetext'}
-      <rect
-        x={previewRect.x}
-        y={previewRect.y}
-        width={previewRect.width}
-        height={previewRect.height}
-        fill="rgba(255,255,255,0.8)"
-        stroke={store.activeColor}
-        stroke-width="1"
-        stroke-dasharray="4"
-      />
+    {:else if drawRect}
+      {@const previewRect = toPixelRect(drawRect)}
+      {#if store.activeTool === 'area-select' && store.pendingMarkupType === 'highlight'}
+        <rect
+          x={previewRect.x}
+          y={previewRect.y}
+          width={previewRect.width}
+          height={previewRect.height}
+          fill={store.activeColor}
+          fill-opacity="0.3"
+          stroke={store.activeColor}
+          stroke-width="1"
+          stroke-dasharray="4"
+        />
+      {:else if store.activeTool === 'area-select' && store.pendingMarkupType === 'underline'}
+        <line
+          x1={previewRect.x}
+          y1={previewRect.y + previewRect.height}
+          x2={previewRect.x + previewRect.width}
+          y2={previewRect.y + previewRect.height}
+          stroke={store.activeColor}
+          stroke-width="2"
+          stroke-dasharray="4"
+        />
+      {:else if store.activeTool === 'area-select' && store.pendingMarkupType === 'strikethrough'}
+        <line
+          x1={previewRect.x}
+          y1={previewRect.y + previewRect.height / 2}
+          x2={previewRect.x + previewRect.width}
+          y2={previewRect.y + previewRect.height / 2}
+          stroke={store.activeColor}
+          stroke-width="2"
+          stroke-dasharray="4"
+        />
+      {:else if store.activeTool === 'comment'}
+        <rect
+          x={previewRect.x}
+          y={previewRect.y}
+          width={previewRect.width}
+          height={previewRect.height}
+          fill="none"
+          stroke={store.activeColor}
+          stroke-width="2"
+          stroke-dasharray="4"
+        />
+      {:else if store.activeTool === 'freetext'}
+        <rect
+          x={previewRect.x}
+          y={previewRect.y}
+          width={previewRect.width}
+          height={previewRect.height}
+          fill="rgba(255,255,255,0.8)"
+          stroke={store.activeColor}
+          stroke-width="1"
+          stroke-dasharray="4"
+        />
+      {:else if store.activeTool === 'rectangle'}
+        <rect
+          x={previewRect.x}
+          y={previewRect.y}
+          width={previewRect.width}
+          height={previewRect.height}
+          fill="none"
+          stroke={store.activeColor}
+          stroke-width="2"
+          stroke-dasharray="4"
+        />
+      {:else if store.activeTool === 'ellipse'}
+        <ellipse
+          cx={previewRect.x + previewRect.width / 2}
+          cy={previewRect.y + previewRect.height / 2}
+          rx={previewRect.width / 2}
+          ry={previewRect.height / 2}
+          fill="none"
+          stroke={store.activeColor}
+          stroke-width="2"
+          stroke-dasharray="4"
+        />
+      {:else if store.activeTool === 'line'}
+        <line
+          x1={previewRect.x}
+          y1={previewRect.y}
+          x2={previewRect.x + previewRect.width}
+          y2={previewRect.y + previewRect.height}
+          stroke={store.activeColor}
+          stroke-width="2"
+          stroke-dasharray="4"
+        />
+      {:else if store.activeTool === 'arrow'}
+        <defs>
+          <marker
+            id="preview-arrow-end"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto"
+          >
+            <path
+              d="M 0 0 L 10 5 L 0 10 z"
+              fill={store.activeColor}
+            />
+          </marker>
+        </defs>
+        <line
+          x1={previewRect.x}
+          y1={previewRect.y}
+          x2={previewRect.x + previewRect.width}
+          y2={previewRect.y + previewRect.height}
+          stroke={store.activeColor}
+          stroke-width="2"
+          stroke-dasharray="4"
+          marker-end="url(#preview-arrow-end)"
+        />
+      {:else if store.activeTool === 'sequenceNumber'}
+        {@const size = Math.min(previewRect.width, previewRect.height)}
+        {@const r = size / 2}
+        {@const cx = previewRect.x + size / 2}
+        {@const cy = previewRect.y + size / 2}
+        <circle
+          {cx} {cy} {r}
+          fill={store.activeColor}
+          opacity="0.7"
+        />
+        <text
+          x={cx}
+          y={cy}
+          text-anchor="middle"
+          dominant-baseline="central"
+          fill="white"
+          font-size="{r * 1.2}px"
+          font-weight="bold"
+          font-family="Helvetica, Arial, sans-serif"
+        >
+          {sequenceCounter}
+        </text>
+      {/if}
     {/if}
   {/if}
 </svg>
