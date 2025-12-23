@@ -7,6 +7,13 @@
     Trash2,
     ChevronDown,
     ChevronRight,
+    Type,
+    Pencil,
+    Square,
+    Circle,
+    Minus,
+    ArrowRight,
+    Hash,
   } from 'lucide-svelte';
   import type { AnnotationsStore, Annotation } from '$lib/stores/annotations.svelte';
 
@@ -61,6 +68,14 @@
       case 'comment': return MessageSquare;
       case 'underline': return Underline;
       case 'strikethrough': return Strikethrough;
+      case 'freetext': return Type;
+      case 'ink': return Pencil;
+      case 'rectangle': return Square;
+      case 'ellipse': return Circle;
+      case 'line': return Minus;
+      case 'arrow': return ArrowRight;
+      case 'sequenceNumber': return Hash;
+      default: return MessageSquare;
     }
   }
 
@@ -70,6 +85,14 @@
       case 'comment': return 'Comment';
       case 'underline': return 'Underline';
       case 'strikethrough': return 'Strikethrough';
+      case 'freetext': return 'Typewriter';
+      case 'ink': return 'Freehand';
+      case 'rectangle': return 'Rectangle';
+      case 'ellipse': return 'Ellipse';
+      case 'line': return 'Line';
+      case 'arrow': return 'Arrow';
+      case 'sequenceNumber': return 'Sequence #';
+      default: return 'Annotation';
     }
   }
 
@@ -147,12 +170,19 @@
                         <span class="text-[10px] opacity-40">{formatTime(annotation.createdAt)}</span>
                       </div>
 
-                      {#if annotation.type === 'comment' && annotation.text}
+                      {#if (annotation.type === 'comment' || annotation.type === 'freetext') && annotation.text}
                         <p
                           class="text-xs mt-1 line-clamp-2"
                           style="color: var(--nord4);"
                         >
                           {annotation.text}
+                        </p>
+                      {:else if annotation.type === 'sequenceNumber' && annotation.sequenceNumber}
+                        <p
+                          class="text-xs mt-1"
+                          style="color: var(--nord4);"
+                        >
+                          #{annotation.sequenceNumber}
                         </p>
                       {/if}
                     </div>
