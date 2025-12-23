@@ -21,6 +21,7 @@
     MoreVertical,
     Eye,
     EyeOff,
+    Printer,
   } from 'lucide-svelte';
   import { save, open } from '@tauri-apps/plugin-dialog';
   import { createAnnotationsStore } from '$lib/stores/annotations.svelte';
@@ -28,6 +29,7 @@
   import AnnotationOverlay from './AnnotationOverlay.svelte';
   import AnnotationsPanel from './AnnotationsPanel.svelte';
   import TextLayer from './TextLayer.svelte';
+  import PrintDialog from './PrintDialog.svelte';
 
   interface Props {
     filePath: string;
@@ -83,6 +85,10 @@
   let isSavingAnnotations = $state(false);
   let annotationsInitialized = $state(false);
   let lastAnnotationCount = $state(0);
+
+  // Print
+  let showPrintDialog = $state(false);
+  let isPrinting = $state(false);
 
   // Load annotations from PDF (industry standard - reads native PDF annotations)
   async function loadAnnotations() {
@@ -223,6 +229,34 @@
       alert(`Failed to save annotations to PDF: ${err}`);
     } finally {
       isExporting = false;
+    }
+  }
+
+  // Print document
+  async function handlePrint(withAnnotations: boolean) {
+    showPrintDialog = false;
+    isPrinting = true;
+
+    try {
+      let pdfPath = filePath;
+
+      if (withAnnotations && annotationsStore.getAllAnnotations().length > 0) {
+        // Embed annotations to temp file
+        const json = serializeAnnotations();
+        const result = await invoke<{ output_path: string }>(
+          'print_prepare_pdf',
+          { input: filePath, annotationsJson: json }
+        );
+        pdfPath = result.output_path;
+      }
+
+      // Open system print dialog
+      await invoke('print_pdf', { path: pdfPath });
+    } catch (err) {
+      console.error('[MuPDFViewer] Print failed:', err);
+      alert(`Failed to print: ${err}`);
+    } finally {
+      isPrinting = false;
     }
   }
 
@@ -787,6 +821,13 @@
       return;
     }
 
+    // Print: Ctrl+P
+    if (isMod && e.key === 'p') {
+      e.preventDefault();
+      showPrintDialog = true;
+      return;
+    }
+
     // Close: Escape
     if (e.key === 'Escape') {
       // Deselect annotation first, or close viewer
@@ -1347,6 +1388,15 @@
     </button>
     <div class="my-1 border-t" style="border-color: var(--nord3);"></div>
     <button
+      onclick={() => { showPrintDialog = true; showAnnotationMenu = false; }}
+      class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
+      disabled={isPrinting}
+    >
+      <Printer size={14} />
+      Print...
+    </button>
+    <div class="my-1 border-t" style="border-color: var(--nord3);"></div>
+    <button
       onclick={exportToXfdf}
       class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
     >
@@ -1362,3 +1412,11 @@
     </button>
   </div>
 {/if}
+
+<!-- Print Dialog -->
+<PrintDialog
+  visible={showPrintDialog}
+  annotationCount={annotationsStore.getAllAnnotations().length}
+  onPrint={handlePrint}
+  onCancel={() => showPrintDialog = false}
+/>
