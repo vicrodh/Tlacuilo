@@ -426,8 +426,9 @@ def embed_annotations(
                     )
                     if text_annot:
                         text_annot.set_opacity(1)
-                        # Mark as part of sequence number
-                        text_annot.set_info(content=f"SEQ_TEXT:{seq_num}")
+                        # Use subject field (not content) to mark as sequence number text
+                        # This avoids showing "SEQ_TEXT:N" in PDF viewer tooltips
+                        text_annot.set_info(subject=f"SEQ_TEXT:{seq_num}")
                         text_annot.update()
 
                 if annot:
@@ -532,7 +533,9 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
 
             if our_type == "freetext":
                 # Skip freetext annotations that are part of sequence numbers
-                if text.startswith("SEQ_TEXT:"):
+                # Check both content and subject fields
+                subject = info.get("subject", "")
+                if text.startswith("SEQ_TEXT:") or subject.startswith("SEQ_TEXT:"):
                     continue
 
                 # Parse DA string to get text color and fontsize
