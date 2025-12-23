@@ -383,16 +383,52 @@ def embed_annotations(
                             annot.set_line_ends(start_style, end_style)
 
                 elif annot_type == "sequenceNumber":
-                    # Sequence number: filled circle with number stored in content
-                    # The number is rendered by the frontend; PDF stores it as metadata
+                    # Sequence number: filled circle with number overlay
                     seq_num = annot_data.get("sequenceNumber", 1)
-                    annot = page.add_circle_annot(pdf_rect)
+
+                    # Make rect square using the smaller dimension
+                    size = min(pdf_rect.width, pdf_rect.height)
+                    square_rect = fitz.Rect(
+                        pdf_rect.x0,
+                        pdf_rect.y0,
+                        pdf_rect.x0 + size,
+                        pdf_rect.y0 + size,
+                    )
+
+                    # Add filled circle
+                    annot = page.add_circle_annot(square_rect)
                     if annot:
                         annot.set_colors(stroke=color_rgb, fill=color_rgb)
                         annot.set_border(width=1)
                         # Store the sequence number in content field for round-trip
-                        # Format: "SEQ:N" to identify this as a sequence number
                         annot.set_info(content=f"SEQ:{seq_num}")
+                        annot.update()
+
+                    # Add number as freetext overlay (for external PDF viewers)
+                    font_size = size * 0.6
+                    # Create a rect for the text, slightly adjusted for vertical centering
+                    # FreeText aligns text at top, so we offset the rect down
+                    text_offset_y = size * 0.2  # Offset to center vertically
+                    text_rect = fitz.Rect(
+                        square_rect.x0,
+                        square_rect.y0 + text_offset_y,
+                        square_rect.x1,
+                        square_rect.y1,
+                    )
+                    text_annot = page.add_freetext_annot(
+                        text_rect,
+                        str(seq_num),
+                        fontsize=font_size,
+                        fontname="helv",
+                        text_color=(1, 1, 1),  # White text
+                        fill_color=None,  # Transparent background
+                        align=1,  # Center horizontally
+                    )
+                    if text_annot:
+                        text_annot.set_opacity(1)
+                        # Mark as part of sequence number
+                        text_annot.set_info(content=f"SEQ_TEXT:{seq_num}")
+                        text_annot.update()
 
                 if annot:
                     annot.set_opacity(opacity)
@@ -495,6 +531,10 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
             seq_num = None
 
             if our_type == "freetext":
+                # Skip freetext annotations that are part of sequence numbers
+                if text.startswith("SEQ_TEXT:"):
+                    continue
+
                 # Parse DA string to get text color and fontsize
                 da_info = parse_da_string(doc, annot)
                 if da_info["color"]:
