@@ -27,6 +27,7 @@
   import AnnotationToolbar from './AnnotationToolbar.svelte';
   import AnnotationOverlay from './AnnotationOverlay.svelte';
   import AnnotationsPanel from './AnnotationsPanel.svelte';
+  import TextLayer from './TextLayer.svelte';
 
   interface Props {
     filePath: string;
@@ -1186,6 +1187,18 @@
                     style="background: white; transform: rotate({rotation}deg);"
                     draggable="false"
                   />
+
+                  <!-- Text layer for text selection (only when annotation tools visible) -->
+                  {#if showAnnotationTools}
+                    <TextLayer
+                      pdfPath={filePath}
+                      page={pageNum}
+                      pageWidth={loadedPage.width}
+                      pageHeight={loadedPage.height}
+                      scale={1}
+                      store={annotationsStore}
+                    />
+                  {/if}
 
                   <!-- Annotation overlay (always render since PDF hides native annotations) -->
                   {#if showAnnotationOverlay}

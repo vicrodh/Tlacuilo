@@ -4,8 +4,10 @@
 //! - Loading PDF documents
 //! - Rendering pages at various DPI/quality levels
 //! - Getting document metadata
+//! - Extracting text with positions for text selection
 
 use base64::Engine;
+use mupdf::text_page::TextPageOptions;
 use mupdf::{Colorspace, Document, Matrix};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
@@ -244,4 +246,138 @@ pub fn pdf_render_thumbnails(
 #[tauri::command]
 pub fn pdf_close(_path: String) -> Result<(), String> {
     Ok(())
+}
+
+/// Rectangle in normalized coordinates (0-1)
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NormalizedRect {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+/// A single character with its bounding box
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TextCharInfo {
+    pub char: String,
+    pub quad: [f32; 8], // 4 corners: [x0,y0, x1,y1, x2,y2, x3,y3]
+}
+
+/// A line of text with its bounding box and characters
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TextLineInfo {
+    pub text: String,
+    pub rect: NormalizedRect,
+    pub chars: Vec<TextCharInfo>,
+}
+
+/// A block of text (paragraph) with its lines
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TextBlockInfo {
+    pub rect: NormalizedRect,
+    pub lines: Vec<TextLineInfo>,
+}
+
+/// Text content of a page
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PageTextContent {
+    pub page: u32,
+    pub blocks: Vec<TextBlockInfo>,
+}
+
+/// Extract text blocks with positions from a page
+#[tauri::command]
+pub fn pdf_get_text_blocks(path: String, page: u32) -> Result<PageTextContent, String> {
+    let document = Document::open(&path)
+        .map_err(|e| format!("Failed to load PDF: {:?}", e))?;
+
+    let page_index = (page - 1) as i32;
+    let pdf_page = document
+        .load_page(page_index)
+        .map_err(|e| format!("Failed to get page {}: {:?}", page, e))?;
+
+    // Get page dimensions for normalization
+    let bounds = pdf_page.bounds()
+        .map_err(|e| format!("Failed to get page bounds: {:?}", e))?;
+    let page_width = bounds.width();
+    let page_height = bounds.height();
+
+    // Extract text page
+    let text_page = pdf_page
+        .to_text_page(TextPageOptions::empty())
+        .map_err(|e| format!("Failed to extract text: {:?}", e))?;
+
+    let mut blocks = Vec::new();
+
+    for block in text_page.blocks() {
+        // Skip image blocks
+        if block.lines().next().is_none() {
+            continue;
+        }
+
+        let block_bounds = block.bounds();
+        let block_rect = NormalizedRect {
+            x: block_bounds.x0 / page_width,
+            y: block_bounds.y0 / page_height,
+            width: (block_bounds.x1 - block_bounds.x0) / page_width,
+            height: (block_bounds.y1 - block_bounds.y0) / page_height,
+        };
+
+        let mut lines = Vec::new();
+
+        for line in block.lines() {
+            let line_bounds = line.bounds();
+            let line_rect = NormalizedRect {
+                x: line_bounds.x0 / page_width,
+                y: line_bounds.y0 / page_height,
+                width: (line_bounds.x1 - line_bounds.x0) / page_width,
+                height: (line_bounds.y1 - line_bounds.y0) / page_height,
+            };
+
+            let mut chars = Vec::new();
+            let mut line_text = String::new();
+
+            for char_info in line.chars() {
+                if let Some(c) = char_info.char() {
+                    line_text.push(c);
+
+                    let quad = char_info.quad();
+                    // Normalize quad coordinates
+                    let normalized_quad = [
+                        quad.ul.x / page_width,
+                        quad.ul.y / page_height,
+                        quad.ur.x / page_width,
+                        quad.ur.y / page_height,
+                        quad.lr.x / page_width,
+                        quad.lr.y / page_height,
+                        quad.ll.x / page_width,
+                        quad.ll.y / page_height,
+                    ];
+
+                    chars.push(TextCharInfo {
+                        char: c.to_string(),
+                        quad: normalized_quad,
+                    });
+                }
+            }
+
+            if !line_text.is_empty() {
+                lines.push(TextLineInfo {
+                    text: line_text,
+                    rect: line_rect,
+                    chars,
+                });
+            }
+        }
+
+        if !lines.is_empty() {
+            blocks.push(TextBlockInfo {
+                rect: block_rect,
+                lines,
+            });
+        }
+    }
+
+    Ok(PageTextContent { page, blocks })
 }
