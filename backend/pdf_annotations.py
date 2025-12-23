@@ -236,6 +236,7 @@ def embed_annotations(
                 color_hex = annot_data.get("color", "#FFFF00")
                 opacity = annot_data.get("opacity", 0.5)
                 text = annot_data.get("text", "")
+                author = annot_data.get("author", "")
 
                 # Convert normalized rect to PDF rect
                 pdf_rect = normalized_to_pdf_rect(rect_data, page_width, page_height)
@@ -393,8 +394,11 @@ def embed_annotations(
                 if annot:
                     annot.set_opacity(opacity)
                     # Store our ID in the subject field for round-trip
-                    # (PyMuPDF's set_info doesn't accept 'name' parameter)
-                    annot.set_info(subject=annot_id)
+                    # Author goes in the title field (PyMuPDF convention)
+                    info_dict = {"subject": annot_id}
+                    if author:
+                        info_dict["title"] = author
+                    annot.set_info(**info_dict)
                     annot.update()
 
                     stats["total"] += 1
@@ -472,6 +476,8 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
             # Our ID is stored in 'subject' field (see embed_annotations)
             annot_id = info.get("subject") or str(uuid4())
             text = info.get("content", "")
+            # Author is stored in 'title' field
+            author = info.get("title", "")
 
             # Get colors and fontsize - FreeText needs special handling
             fontsize = None
@@ -621,6 +627,7 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
                 "color": color_hex,
                 "opacity": opacity,
                 "text": text,
+                "author": author,
                 "createdAt": created,
                 "modifiedAt": modified,
             }
