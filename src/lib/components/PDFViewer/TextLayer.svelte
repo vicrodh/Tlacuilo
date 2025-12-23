@@ -50,6 +50,29 @@
     loadTextContent(pdfPath, page);
   });
 
+  // Action to scale text span to target width
+  function scaleToWidth(node: HTMLSpanElement, targetWidth: number) {
+    function applyScale() {
+      const actualWidth = node.scrollWidth;
+      if (actualWidth > 0 && targetWidth > 0) {
+        const scaleX = targetWidth / actualWidth;
+        if (Math.abs(scaleX - 1) > 0.01) {
+          node.style.transform = `scaleX(${scaleX})`;
+        }
+      }
+    }
+
+    // Apply after font loads
+    requestAnimationFrame(applyScale);
+
+    return {
+      update(newTargetWidth: number) {
+        targetWidth = newTargetWidth;
+        requestAnimationFrame(applyScale);
+      }
+    };
+  }
+
   async function loadTextContent(path: string, pageNum: number) {
     if (!path) return;
 
@@ -207,15 +230,17 @@
     {#each textContent.blocks as block}
       {#each block.lines as line}
         {@const pixelRect = toPixelRect(line.rect)}
+        {@const fontSize = pixelRect.height * 0.82}
         <span
-          class="absolute whitespace-pre"
+          use:scaleToWidth={pixelRect.width}
+          class="absolute whitespace-pre text-span"
           style="
             left: {pixelRect.x}px;
             top: {pixelRect.y}px;
-            font-size: {pixelRect.height * 0.85}px;
+            font-size: {fontSize}px;
             line-height: {pixelRect.height}px;
-            color: transparent;
-            background: transparent;
+            height: {pixelRect.height}px;
+            transform-origin: left top;
           "
         >{line.text}</span>
       {/each}
