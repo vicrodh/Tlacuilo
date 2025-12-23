@@ -32,6 +32,12 @@ ANNOT_TYPE_MAP = {
     "strikethrough": fitz.PDF_ANNOT_STRIKE_OUT,
     "comment": fitz.PDF_ANNOT_TEXT,
     "freetext": fitz.PDF_ANNOT_FREE_TEXT,
+    "ink": fitz.PDF_ANNOT_INK,
+    "rectangle": fitz.PDF_ANNOT_SQUARE,
+    "ellipse": fitz.PDF_ANNOT_CIRCLE,
+    "line": fitz.PDF_ANNOT_LINE,
+    "arrow": fitz.PDF_ANNOT_LINE,  # Same as line but with arrow heads
+    # sequenceNumber uses circle + freetext combination
 }
 
 # Reverse map for reading
@@ -41,6 +47,17 @@ ANNOT_TYPE_REVERSE = {
     fitz.PDF_ANNOT_STRIKE_OUT: "strikethrough",
     fitz.PDF_ANNOT_TEXT: "comment",
     fitz.PDF_ANNOT_FREE_TEXT: "freetext",
+    fitz.PDF_ANNOT_INK: "ink",
+    fitz.PDF_ANNOT_SQUARE: "rectangle",
+    fitz.PDF_ANNOT_CIRCLE: "ellipse",
+    fitz.PDF_ANNOT_LINE: "line",  # Could be line or arrow, check line ends
+}
+
+# Arrow head styles for line annotations
+ARROW_STYLE_MAP = {
+    "none": fitz.PDF_ANNOT_LE_NONE,
+    "open": fitz.PDF_ANNOT_LE_OPEN_ARROW,
+    "closed": fitz.PDF_ANNOT_LE_CLOSED_ARROW,
 }
 
 
@@ -284,6 +301,106 @@ def embed_annotations(
                         if text:
                             annot.set_info(content=text)
 
+                elif annot_type == "ink":
+                    # Ink/freehand annotation
+                    paths = annot_data.get("paths", [])
+                    if paths:
+                        ink_list = []
+                        for path in paths:
+                            points = path.get("points", [])
+                            pdf_points = []
+                            for pt in points:
+                                pdf_points.append(fitz.Point(
+                                    pt["x"] * page_width,
+                                    pt["y"] * page_height,
+                                ))
+                            if pdf_points:
+                                ink_list.append(pdf_points)
+                        if ink_list:
+                            annot = page.add_ink_annot(ink_list)
+                            if annot:
+                                annot.set_colors(stroke=color_rgb)
+                                sw = annot_data.get("strokeWidth", 0.003) * page_width
+                                annot.set_border(width=sw)
+
+                elif annot_type == "rectangle":
+                    # Rectangle/square annotation
+                    annot = page.add_rect_annot(pdf_rect)
+                    if annot:
+                        fill_data = annot_data.get("fill", {})
+                        fill_color = None
+                        if fill_data.get("enabled"):
+                            fill_color = hex_to_rgb(fill_data.get("color", color_hex))
+                        annot.set_colors(stroke=color_rgb, fill=fill_color)
+                        sw = annot_data.get("strokeWidth", 0.002) * page_width
+                        line_style = annot_data.get("lineStyle", "solid")
+                        dashes = [3, 3] if line_style == "dashed" else ([1, 1] if line_style == "dotted" else None)
+                        annot.set_border(width=sw, dashes=dashes)
+
+                elif annot_type == "ellipse":
+                    # Circle/ellipse annotation
+                    annot = page.add_circle_annot(pdf_rect)
+                    if annot:
+                        fill_data = annot_data.get("fill", {})
+                        fill_color = None
+                        if fill_data.get("enabled"):
+                            fill_color = hex_to_rgb(fill_data.get("color", color_hex))
+                        annot.set_colors(stroke=color_rgb, fill=fill_color)
+                        sw = annot_data.get("strokeWidth", 0.002) * page_width
+                        line_style = annot_data.get("lineStyle", "solid")
+                        dashes = [3, 3] if line_style == "dashed" else ([1, 1] if line_style == "dotted" else None)
+                        annot.set_border(width=sw, dashes=dashes)
+
+                elif annot_type in ("line", "arrow"):
+                    # Line annotation (with optional arrow heads)
+                    # Use rect corners as start/end points
+                    p1 = fitz.Point(pdf_rect.x0, pdf_rect.y0)
+                    p2 = fitz.Point(pdf_rect.x1, pdf_rect.y1)
+                    annot = page.add_line_annot(p1, p2)
+                    if annot:
+                        annot.set_colors(stroke=color_rgb)
+                        sw = annot_data.get("strokeWidth", 0.002) * page_width
+                        line_style = annot_data.get("lineStyle", "solid")
+                        dashes = [3, 3] if line_style == "dashed" else ([1, 1] if line_style == "dotted" else None)
+                        annot.set_border(width=sw, dashes=dashes)
+                        # Set arrow heads
+                        if annot_type == "arrow":
+                            start_arrow = annot_data.get("startArrow", "none")
+                            end_arrow = annot_data.get("endArrow", "closed")
+                            start_style = ARROW_STYLE_MAP.get(start_arrow, fitz.PDF_ANNOT_LE_NONE)
+                            end_style = ARROW_STYLE_MAP.get(end_arrow, fitz.PDF_ANNOT_LE_CLOSED_ARROW)
+                            annot.set_line_ends(start_style, end_style)
+
+                elif annot_type == "sequenceNumber":
+                    # Sequence number: circle with number inside
+                    # Use circle annotation + freetext overlay
+                    annot = page.add_circle_annot(pdf_rect)
+                    if annot:
+                        annot.set_colors(stroke=color_rgb, fill=color_rgb)
+                        annot.set_border(width=1)
+                    # Add number as freetext
+                    seq_num = annot_data.get("sequenceNumber", 1)
+                    # Center the text in the rect
+                    text_rect = fitz.Rect(
+                        pdf_rect.x0,
+                        pdf_rect.y0,
+                        pdf_rect.x1,
+                        pdf_rect.y1,
+                    )
+                    font_size = min(pdf_rect.width, pdf_rect.height) * 0.6
+                    text_annot = page.add_freetext_annot(
+                        text_rect,
+                        str(seq_num),
+                        fontsize=font_size,
+                        fontname="helv",
+                        text_color=(1, 1, 1),  # White text
+                        fill_color=None,
+                        align=1,  # Center align
+                    )
+                    if text_annot:
+                        text_annot.set_opacity(1)
+                        text_annot.update()
+
                 if annot:
                     annot.set_opacity(opacity)
                     # Store our ID in the subject field for round-trip
@@ -326,6 +443,9 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
     doc = fitz.open(str(input_path))
     result: dict[str, list[dict[str, Any]]] = {}
 
+    # Reverse map for arrow styles
+    arrow_style_reverse = {v: k for k, v in ARROW_STYLE_MAP.items()}
+
     for page_idx, page in enumerate(doc):
         page_num = page_idx + 1
         page_rect = page.rect
@@ -366,6 +486,13 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
 
             # Get colors and fontsize - FreeText needs special handling
             fontsize = None
+            fill_data = None
+            stroke_width = None
+            line_style = None
+            start_arrow = None
+            end_arrow = None
+            paths = None
+
             if our_type == "freetext":
                 # Parse DA string to get text color and fontsize
                 da_info = parse_da_string(doc, annot)
@@ -376,6 +503,89 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
                 fontsize = da_info["fontsize"] or 12  # Default 12pt if not found
                 # For freetext, get text content from the annotation itself
                 text = annot.get_text() or info.get("content", "") or ""
+            elif our_type == "ink":
+                # Get ink paths
+                colors = annot.colors
+                stroke_color = colors.get("stroke") or (0, 0, 0)
+                color_hex = rgb_to_hex(stroke_color)
+                # Get ink list (list of point lists)
+                ink_list = annot.ink_list if hasattr(annot, "ink_list") else []
+                if ink_list:
+                    paths = []
+                    border = annot.border or {}
+                    sw = border.get("width", 1.0) if isinstance(border, dict) else 1.0
+                    stroke_width = sw / page_width  # Normalize
+                    for point_list in ink_list:
+                        points = []
+                        for pt in point_list:
+                            # Normalize to 0-1
+                            points.append({
+                                "x": pt.x / page_width,
+                                "y": pt.y / page_height,
+                            })
+                        paths.append({
+                            "points": points,
+                            "strokeWidth": stroke_width,
+                            "color": color_hex,
+                        })
+            elif our_type in ("rectangle", "ellipse"):
+                # Shape annotations
+                colors = annot.colors
+                stroke_color = colors.get("stroke") or (0, 0, 0)
+                fill_color = colors.get("fill")
+                color_hex = rgb_to_hex(stroke_color)
+                # Get border info
+                border = annot.border or {}
+                sw = border.get("width", 1.0) if isinstance(border, dict) else 1.0
+                stroke_width = sw / page_width  # Normalize
+                # Get line style (dashes)
+                dashes = border.get("dashes", []) if isinstance(border, dict) else []
+                if dashes:
+                    line_style = "dashed"
+                else:
+                    line_style = "solid"
+                # Fill info
+                if fill_color:
+                    fill_data = {
+                        "enabled": True,
+                        "color": rgb_to_hex(fill_color),
+                        "opacity": annot.opacity if annot.opacity >= 0 else 0.3,
+                    }
+            elif our_type == "line":
+                # Line annotation (could be arrow)
+                colors = annot.colors
+                stroke_color = colors.get("stroke") or (0, 0, 0)
+                color_hex = rgb_to_hex(stroke_color)
+                # Get border info
+                border = annot.border or {}
+                sw = border.get("width", 1.0) if isinstance(border, dict) else 1.0
+                stroke_width = sw / page_width
+                # Get line style
+                dashes = border.get("dashes", []) if isinstance(border, dict) else []
+                line_style = "dashed" if dashes else "solid"
+                # Get arrow heads (line ends)
+                try:
+                    line_ends = annot.line_ends
+                    if line_ends:
+                        start_arrow = arrow_style_reverse.get(line_ends[0], "none")
+                        end_arrow = arrow_style_reverse.get(line_ends[1], "none")
+                        # If has arrows, mark as arrow type
+                        if end_arrow != "none" or start_arrow != "none":
+                            our_type = "arrow"
+                except Exception:
+                    pass
+                # Get actual line endpoints from vertices
+                vertices = annot.vertices
+                if vertices and len(vertices) >= 2:
+                    p1 = vertices[0]
+                    p2 = vertices[1]
+                    # Store as rect where x,y is start and width,height encode direction
+                    rect = fitz.Rect(
+                        min(p1[0], p2[0]),
+                        min(p1[1], p2[1]),
+                        max(p1[0], p2[0]),
+                        max(p1[1], p2[1]),
+                    )
             else:
                 colors = annot.colors
                 stroke_color = colors.get("stroke") or colors.get("fill") or (1, 1, 0)
@@ -408,9 +618,21 @@ def read_annotations(input_path: Path) -> dict[str, list[dict[str, Any]]]:
                 "createdAt": created,
                 "modifiedAt": modified,
             }
-            # Add fontsize for freetext annotations
+            # Add optional fields
             if fontsize is not None:
                 annot_data["fontsize"] = fontsize
+            if paths is not None:
+                annot_data["paths"] = paths
+            if fill_data is not None:
+                annot_data["fill"] = fill_data
+            if stroke_width is not None:
+                annot_data["strokeWidth"] = stroke_width
+            if line_style is not None:
+                annot_data["lineStyle"] = line_style
+            if start_arrow is not None:
+                annot_data["startArrow"] = start_arrow
+            if end_arrow is not None:
+                annot_data["endArrow"] = end_arrow
             page_annots.append(annot_data)
 
         if page_annots:

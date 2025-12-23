@@ -7,18 +7,33 @@
 
 import { getContext, setContext } from 'svelte';
 
-export type AnnotationType = 'highlight' | 'comment' | 'underline' | 'strikethrough' | 'freetext';
+// Base annotation types + new shape/drawing types
+export type AnnotationType =
+  | 'highlight' | 'comment' | 'underline' | 'strikethrough' | 'freetext'
+  | 'ink' | 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'sequenceNumber';
 
 // Markup types that can be applied via text or area selection
 export type MarkupType = 'highlight' | 'underline' | 'strikethrough';
 
-// Tool modes: selection modes + standalone tools
+// Tool modes: selection modes + standalone tools + drawing tools
 export type ToolMode =
   | 'text-select'   // Select text to apply markup
   | 'area-select'   // Draw area to apply markup
   | 'comment'       // Place comment icons
   | 'freetext'      // Typewriter tool
+  | 'ink'           // Freehand drawing
+  | 'rectangle'     // Rectangle shape
+  | 'ellipse'       // Ellipse/circle shape
+  | 'line'          // Line
+  | 'arrow'         // Arrow
+  | 'sequenceNumber' // Numbered circles
   | null;           // No tool active (pointer mode)
+
+// Line style options
+export type LineStyle = 'solid' | 'dashed' | 'dotted';
+
+// Arrow head style
+export type ArrowHeadStyle = 'none' | 'open' | 'closed';
 
 export interface Point {
   x: number;
@@ -32,6 +47,20 @@ export interface Rect {
   height: number;
 }
 
+// Path for ink/freehand annotations
+export interface InkPath {
+  points: Point[];
+  strokeWidth: number;
+  color: string;
+}
+
+// Fill options for shapes
+export interface ShapeFill {
+  enabled: boolean;
+  color: string;
+  opacity: number;
+}
+
 export interface Annotation {
   id: string;
   type: AnnotationType;
@@ -39,10 +68,22 @@ export interface Annotation {
   rect: Rect;
   color: string;
   opacity: number;
-  text?: string; // For comments and freetext
-  fontsize?: number; // For freetext (in PDF points)
+  text?: string;                // For comments and freetext
+  fontsize?: number;            // For freetext (in PDF points)
   createdAt: Date;
   modifiedAt: Date;
+  author?: string;              // Author attribution
+  // Ink annotation specific
+  paths?: InkPath[];            // Array of paths for ink annotations
+  // Shape annotation specific
+  fill?: ShapeFill;             // Fill settings for shapes
+  lineStyle?: LineStyle;        // Line style (solid/dashed/dotted)
+  strokeWidth?: number;         // Stroke width in normalized units
+  // Arrow specific
+  startArrow?: ArrowHeadStyle;
+  endArrow?: ArrowHeadStyle;
+  // Sequence number specific
+  sequenceNumber?: number;      // The number to display
 }
 
 export interface AnnotationsState {

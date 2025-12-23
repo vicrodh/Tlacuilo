@@ -5,6 +5,8 @@
     type AnnotationType,
     type AnnotationsStore,
     type Rect,
+    type InkPath,
+    type LineStyle,
   } from '$lib/stores/annotations.svelte';
 
   interface Props {
@@ -24,6 +26,45 @@
   let drawRect = $state<Rect | null>(null);
   let editingComment = $state<string | null>(null);
   let commentText = $state('');
+
+  // Convert ink path points to SVG path data
+  function inkPathToSvg(path: InkPath, pageW: number, pageH: number, s: number): string {
+    const points = path.points;
+    if (!points || points.length < 2) return '';
+
+    // Convert normalized points to pixel coordinates
+    const pixelPoints = points.map(p => ({
+      x: p.x * pageW * s,
+      y: p.y * pageH * s,
+    }));
+
+    // Start path
+    let d = `M ${pixelPoints[0].x} ${pixelPoints[0].y}`;
+
+    // Use quadratic bezier curves for smooth lines
+    for (let i = 1; i < pixelPoints.length; i++) {
+      const prev = pixelPoints[i - 1];
+      const curr = pixelPoints[i];
+      const midX = (prev.x + curr.x) / 2;
+      const midY = (prev.y + curr.y) / 2;
+      d += ` Q ${prev.x} ${prev.y} ${midX} ${midY}`;
+    }
+
+    // End at last point
+    const last = pixelPoints[pixelPoints.length - 1];
+    d += ` L ${last.x} ${last.y}`;
+
+    return d;
+  }
+
+  // Get SVG dash array for line style
+  function getDashArray(style: LineStyle | undefined, strokeWidth: number): string {
+    if (!style || style === 'solid') return '';
+    const sw = Math.max(strokeWidth, 2);
+    if (style === 'dashed') return `${sw * 3} ${sw * 2}`;
+    if (style === 'dotted') return `${sw} ${sw}`;
+    return '';
+  }
 
   // Freetext (typewriter) state
   let editingFreetext = $state<string | null>(null);
@@ -325,6 +366,175 @@
           {annotation.text || ''}
         </div>
       </foreignObject>
+    {:else if annotation.type === 'ink' && annotation.paths}
+      <!-- Ink/freehand annotation -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <g
+        class="cursor-pointer"
+        onclick={(e) => handleAnnotationClick(e, annotation)}
+      >
+        {#each annotation.paths as path}
+          {@const strokeWidth = (path.strokeWidth || 0.003) * pageWidth * scale}
+          <path
+            d={inkPathToSvg(path, pageWidth, pageHeight, scale)}
+            fill="none"
+            stroke={path.color || annotation.color}
+            stroke-width={strokeWidth}
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            opacity={annotation.opacity}
+          />
+        {/each}
+      </g>
+    {:else if annotation.type === 'rectangle'}
+      <!-- Rectangle annotation -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      {@const strokeWidth = (annotation.strokeWidth || 0.002) * pageWidth * scale}
+      <rect
+        x={pixelRect.x}
+        y={pixelRect.y}
+        width={pixelRect.width}
+        height={pixelRect.height}
+        fill={annotation.fill?.enabled ? annotation.fill.color : 'none'}
+        fill-opacity={annotation.fill?.enabled ? annotation.fill.opacity : 0}
+        stroke={annotation.color}
+        stroke-width={strokeWidth}
+        stroke-dasharray={getDashArray(annotation.lineStyle, strokeWidth)}
+        opacity={annotation.opacity}
+        class="cursor-pointer"
+        onclick={(e) => handleAnnotationClick(e, annotation)}
+      />
+    {:else if annotation.type === 'ellipse'}
+      <!-- Ellipse annotation -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      {@const strokeWidth = (annotation.strokeWidth || 0.002) * pageWidth * scale}
+      {@const cx = pixelRect.x + pixelRect.width / 2}
+      {@const cy = pixelRect.y + pixelRect.height / 2}
+      {@const rx = pixelRect.width / 2}
+      {@const ry = pixelRect.height / 2}
+      <ellipse
+        {cx} {cy} {rx} {ry}
+        fill={annotation.fill?.enabled ? annotation.fill.color : 'none'}
+        fill-opacity={annotation.fill?.enabled ? annotation.fill.opacity : 0}
+        stroke={annotation.color}
+        stroke-width={strokeWidth}
+        stroke-dasharray={getDashArray(annotation.lineStyle, strokeWidth)}
+        opacity={annotation.opacity}
+        class="cursor-pointer"
+        onclick={(e) => handleAnnotationClick(e, annotation)}
+      />
+    {:else if annotation.type === 'line'}
+      <!-- Line annotation -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      {@const strokeWidth = (annotation.strokeWidth || 0.002) * pageWidth * scale}
+      <line
+        x1={pixelRect.x}
+        y1={pixelRect.y}
+        x2={pixelRect.x + pixelRect.width}
+        y2={pixelRect.y + pixelRect.height}
+        stroke={annotation.color}
+        stroke-width={strokeWidth}
+        stroke-dasharray={getDashArray(annotation.lineStyle, strokeWidth)}
+        opacity={annotation.opacity}
+        class="cursor-pointer"
+        onclick={(e) => handleAnnotationClick(e, annotation)}
+      />
+    {:else if annotation.type === 'arrow'}
+      <!-- Arrow annotation -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      {@const strokeWidth = (annotation.strokeWidth || 0.002) * pageWidth * scale}
+      {@const arrowId = `arrow-${annotation.id}`}
+      {@const hasStartArrow = annotation.startArrow && annotation.startArrow !== 'none'}
+      {@const hasEndArrow = annotation.endArrow && annotation.endArrow !== 'none'}
+      {@const isClosedStart = annotation.startArrow === 'closed'}
+      {@const isClosedEnd = annotation.endArrow === 'closed'}
+      <defs>
+        {#if hasEndArrow}
+          <marker
+            id="{arrowId}-end"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto"
+          >
+            <path
+              d="M 0 0 L 10 5 L 0 10 {isClosedEnd ? 'z' : ''}"
+              fill={isClosedEnd ? annotation.color : 'none'}
+              stroke={annotation.color}
+              stroke-width="1"
+            />
+          </marker>
+        {/if}
+        {#if hasStartArrow}
+          <marker
+            id="{arrowId}-start"
+            viewBox="0 0 10 10"
+            refX="1"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto"
+          >
+            <path
+              d="M 10 0 L 0 5 L 10 10 {isClosedStart ? 'z' : ''}"
+              fill={isClosedStart ? annotation.color : 'none'}
+              stroke={annotation.color}
+              stroke-width="1"
+            />
+          </marker>
+        {/if}
+      </defs>
+      <line
+        x1={pixelRect.x}
+        y1={pixelRect.y}
+        x2={pixelRect.x + pixelRect.width}
+        y2={pixelRect.y + pixelRect.height}
+        stroke={annotation.color}
+        stroke-width={strokeWidth}
+        stroke-dasharray={getDashArray(annotation.lineStyle, strokeWidth)}
+        marker-start={hasStartArrow ? `url(#${arrowId}-start)` : undefined}
+        marker-end={hasEndArrow ? `url(#${arrowId}-end)` : undefined}
+        opacity={annotation.opacity}
+        class="cursor-pointer"
+        onclick={(e) => handleAnnotationClick(e, annotation)}
+      />
+    {:else if annotation.type === 'sequenceNumber'}
+      <!-- Sequence number annotation -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      {@const r = Math.min(pixelRect.width, pixelRect.height) / 2}
+      {@const cx = pixelRect.x + pixelRect.width / 2}
+      {@const cy = pixelRect.y + pixelRect.height / 2}
+      {@const fontSize = r * 1.2}
+      <g
+        class="cursor-pointer"
+        onclick={(e) => handleAnnotationClick(e, annotation)}
+      >
+        <circle
+          {cx} {cy} {r}
+          fill={annotation.color}
+          opacity={annotation.opacity}
+        />
+        <text
+          x={cx}
+          y={cy}
+          text-anchor="middle"
+          dominant-baseline="central"
+          fill="white"
+          font-size="{fontSize}px"
+          font-weight="bold"
+          font-family="Helvetica, Arial, sans-serif"
+        >
+          {annotation.sequenceNumber || 1}
+        </text>
+      </g>
     {/if}
   {/each}
 
