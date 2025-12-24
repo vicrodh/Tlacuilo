@@ -932,12 +932,19 @@
   function scrollToPage(page: number) {
     const element = pageElements.get(page);
     if (element && canvasContainer) {
+      // Pre-load the target page and nearby pages BEFORE scrolling
+      loadPage(page);
+      if (page > 1) loadPage(page - 1);
+      if (page < totalPages) loadPage(page + 1);
+
       isScrollingToPage = true;
       element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      // Reset flag after scroll animation
+
+      // After scroll animation completes, load visible pages and reset flag
       setTimeout(() => {
         isScrollingToPage = false;
-      }, 500);
+        loadVisiblePages();
+      }, 600);
     }
   }
 
@@ -956,6 +963,11 @@
 
     currentPage = page;
     pageInputValue = String(page);
+
+    // Pre-load target page and neighbors
+    loadPage(page);
+    if (page > 1) loadPage(page - 1);
+    if (page < totalPages) loadPage(page + 1);
 
     const element = pageElements.get(page);
     if (element && canvasContainer) {
@@ -980,9 +992,11 @@
         behavior: 'smooth',
       });
 
+      // After scroll animation completes, load visible pages
       setTimeout(() => {
         isScrollingToPage = false;
-      }, 500);
+        loadVisiblePages();
+      }, 600);
     }
   }
 
