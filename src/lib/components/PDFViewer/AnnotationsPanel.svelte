@@ -18,6 +18,7 @@
     Palette,
     Navigation,
   } from 'lucide-svelte';
+  import { ask } from '@tauri-apps/plugin-dialog';
   import type { AnnotationsStore, Annotation } from '$lib/stores/annotations.svelte';
   import { HIGHLIGHT_COLORS } from '$lib/stores/annotations.svelte';
 
@@ -90,12 +91,17 @@
     openMenuId = null;
   }
 
-  function handleDelete(e: MouseEvent, id: string) {
+  async function handleDelete(e: MouseEvent, id: string) {
     e.stopPropagation();
-    if (confirm('Delete this annotation?')) {
+    openMenuId = null;
+
+    const confirmed = await ask('Delete this annotation?', {
+      title: 'Delete Annotation',
+      kind: 'warning',
+    });
+    if (confirmed) {
       store.deleteAnnotation(id);
     }
-    openMenuId = null;
   }
 
   // Close menu when clicking outside

@@ -126,7 +126,7 @@ export function createAnnotationsStore() {
     selectedId: null,
     activeTool: null,
     activeColor: '#FFEB3B', // Default yellow for markup tools (typewriter switches to black)
-    activeOpacity: 1, // Default full opacity
+    activeOpacity: 0.6, // Default 60% opacity
     pendingMarkupType: 'highlight', // Default markup type
     sequenceCounter: 1, // Starting sequence number
     activeLineStyle: 'solid', // Default line style

@@ -323,6 +323,9 @@
     };
   }
 
+  // Debounce annotation creation to allow dblclick to complete first
+  let annotationTimeout: ReturnType<typeof setTimeout> | null = null;
+
   // Handle text selection end (for annotation mode)
   function handleMouseUp(e: MouseEvent) {
     // Only create annotations in text-select mode
@@ -330,6 +333,18 @@
       return;
     }
 
+    // Cancel any pending annotation creation
+    if (annotationTimeout) {
+      clearTimeout(annotationTimeout);
+    }
+
+    // Delay annotation creation to allow dblclick to fire and update selection
+    annotationTimeout = setTimeout(() => {
+      createAnnotationFromSelection();
+    }, 200);
+  }
+
+  function createAnnotationFromSelection() {
     // Use our custom selection
     if (selectedQuads.length === 0) return;
 
@@ -347,7 +362,7 @@
         page,
         rect,
         color: store.activeColor,
-        opacity: markupType === 'highlight' ? 0.3 : 0.8,
+        opacity: store.activeOpacity,
         author,
       });
     }

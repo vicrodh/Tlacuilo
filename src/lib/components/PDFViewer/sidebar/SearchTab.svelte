@@ -609,14 +609,20 @@
   .search-icon {
     position: absolute;
     left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
     color: var(--nord4);
     opacity: 0.6;
+    pointer-events: none;
   }
 
   .loading-icon {
     position: absolute;
     right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
     color: var(--nord8);
+    pointer-events: none;
   }
 
   .clear-btn {

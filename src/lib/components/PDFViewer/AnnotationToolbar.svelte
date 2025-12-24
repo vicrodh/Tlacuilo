@@ -22,6 +22,7 @@
     EyeOff,
     Move,
   } from 'lucide-svelte';
+  import { ask } from '@tauri-apps/plugin-dialog';
   import {
     type AnnotationsStore,
     type MarkupType,
@@ -41,11 +42,33 @@
   let { store, onClearAll, showOverlay = true, onToggleOverlay }: Props = $props();
 
   let showColorPicker = $state(false);
-  let showOpacitySlider = $state(false);
+  let showShapesMenu = $state(false);
   let showLineStyleMenu = $state(false);
   let showArrowMenu = $state(false);
   let showFillMenu = $state(false);
   let sequenceInput = $state('');
+
+  // Shape tools for the dropdown
+  const shapeTools: { tool: ToolMode; icon: typeof Square; label: string }[] = [
+    { tool: 'rectangle', icon: Square, label: 'Rectangle' },
+    { tool: 'ellipse', icon: Circle, label: 'Ellipse' },
+    { tool: 'line', icon: Minus, label: 'Line' },
+    { tool: 'arrow', icon: ArrowRight, label: 'Arrow' },
+  ];
+
+  // Check if current tool is a shape
+  const isShapeTool = $derived(
+    store.activeTool === 'rectangle' ||
+    store.activeTool === 'ellipse' ||
+    store.activeTool === 'line' ||
+    store.activeTool === 'arrow'
+  );
+
+  // Get current shape icon
+  const currentShapeIcon = $derived(() => {
+    const shape = shapeTools.find(s => s.tool === store.activeTool);
+    return shape?.icon ?? Square;
+  });
 
   // Markup type options for selection modes
   const markupTypes: { type: MarkupType; icon: typeof Highlighter; label: string }[] = [
@@ -87,14 +110,23 @@
 
   function toggleColorPicker() {
     showColorPicker = !showColorPicker;
-    showOpacitySlider = false;
+    showShapesMenu = false;
     showLineStyleMenu = false;
     showArrowMenu = false;
     showFillMenu = false;
   }
 
-  function toggleOpacitySlider() {
-    showOpacitySlider = !showOpacitySlider;
+  function toggleShapesMenu() {
+    showShapesMenu = !showShapesMenu;
+    showColorPicker = false;
+    showLineStyleMenu = false;
+    showArrowMenu = false;
+    showFillMenu = false;
+  }
+
+  function selectShapeTool(tool: ToolMode) {
+    store.setActiveTool(tool);
+    showShapesMenu = false;
     showColorPicker = false;
     showLineStyleMenu = false;
     showArrowMenu = false;
@@ -104,7 +136,7 @@
   function toggleLineStyleMenu() {
     showLineStyleMenu = !showLineStyleMenu;
     showColorPicker = false;
-    showOpacitySlider = false;
+    showShapesMenu = false;
     showArrowMenu = false;
     showFillMenu = false;
   }
@@ -112,7 +144,7 @@
   function toggleArrowMenu() {
     showArrowMenu = !showArrowMenu;
     showColorPicker = false;
-    showOpacitySlider = false;
+    showShapesMenu = false;
     showLineStyleMenu = false;
     showFillMenu = false;
   }
@@ -120,7 +152,7 @@
   function toggleFillMenu() {
     showFillMenu = !showFillMenu;
     showColorPicker = false;
-    showOpacitySlider = false;
+    showShapesMenu = false;
     showLineStyleMenu = false;
     showArrowMenu = false;
   }
@@ -154,8 +186,12 @@
     store.resetSequenceCounter();
   }
 
-  function handleClearAll() {
-    if (confirm('Clear all annotations?')) {
+  async function handleClearAll() {
+    const confirmed = await ask('Clear all annotations? This cannot be undone.', {
+      title: 'Clear Annotations',
+      kind: 'warning',
+    });
+    if (confirmed) {
       store.clearAnnotations();
       onClearAll?.();
     }
@@ -232,7 +268,10 @@
       style="color: {store.activeTool === 'area-select' ? 'var(--nord0)' : 'var(--nord4)'};"
       title="Area Selection"
     >
-      <Square size={16} />
+      <!-- Dashed rectangle icon -->
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 2" />
+      </svg>
     </button>
   </div>
 
@@ -294,49 +333,38 @@
       <Pencil size={16} />
     </button>
 
-    <!-- Rectangle -->
-    <button
-      onclick={() => selectTool('rectangle')}
-      class="p-2 rounded transition-colors"
-      class:bg-[var(--nord8)]={store.activeTool === 'rectangle'}
-      style="color: {store.activeTool === 'rectangle' ? 'var(--nord0)' : 'var(--nord4)'};"
-      title="Rectangle"
-    >
-      <Square size={16} />
-    </button>
+    <!-- Shapes dropdown -->
+    <div class="relative">
+      <button
+        onclick={toggleShapesMenu}
+        class="p-2 rounded transition-colors flex items-center gap-0.5"
+        class:bg-[var(--nord8)]={isShapeTool}
+        style="color: {isShapeTool ? 'var(--nord0)' : 'var(--nord4)'};"
+        title="Shapes"
+      >
+        {@const CurrentIcon = currentShapeIcon()}
+        <CurrentIcon size={16} />
+        <ChevronRight size={12} class="rotate-90 opacity-60" />
+      </button>
 
-    <!-- Ellipse -->
-    <button
-      onclick={() => selectTool('ellipse')}
-      class="p-2 rounded transition-colors"
-      class:bg-[var(--nord8)]={store.activeTool === 'ellipse'}
-      style="color: {store.activeTool === 'ellipse' ? 'var(--nord0)' : 'var(--nord4)'};"
-      title="Ellipse"
-    >
-      <Circle size={16} />
-    </button>
-
-    <!-- Line -->
-    <button
-      onclick={() => selectTool('line')}
-      class="p-2 rounded transition-colors"
-      class:bg-[var(--nord8)]={store.activeTool === 'line'}
-      style="color: {store.activeTool === 'line' ? 'var(--nord0)' : 'var(--nord4)'};"
-      title="Line"
-    >
-      <Minus size={16} />
-    </button>
-
-    <!-- Arrow -->
-    <button
-      onclick={() => selectTool('arrow')}
-      class="p-2 rounded transition-colors"
-      class:bg-[var(--nord8)]={store.activeTool === 'arrow'}
-      style="color: {store.activeTool === 'arrow' ? 'var(--nord0)' : 'var(--nord4)'};"
-      title="Arrow"
-    >
-      <ArrowRight size={16} />
-    </button>
+      {#if showShapesMenu}
+        <div
+          class="absolute top-full left-1/2 mt-1 rounded-lg shadow-lg py-1 z-50"
+          style="background-color: var(--nord1); border: 1px solid var(--nord3); transform: translateX(-50%); min-width: 120px;"
+        >
+          {#each shapeTools as shape}
+            <button
+              onclick={() => selectShapeTool(shape.tool)}
+              class="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--nord2)] transition-colors"
+              class:bg-[var(--nord3)]={store.activeTool === shape.tool}
+            >
+              <shape.icon size={14} />
+              <span>{shape.label}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
 
     <!-- Sequence Number -->
     <button
@@ -380,6 +408,7 @@
           box-sizing: border-box;
         "
       >
+        <!-- Color grid -->
         <div
           style="
             display: grid;
@@ -402,48 +431,23 @@
             ></button>
           {/each}
         </div>
-      </div>
-    {/if}
-  </div>
 
-  <!-- Opacity control -->
-  <div class="relative">
-    <button
-      onclick={toggleOpacitySlider}
-      class="p-2 rounded transition-colors hover:bg-[var(--nord3)] flex items-center gap-1"
-      title="Annotation opacity ({Math.round(store.activeOpacity * 100)}%)"
-    >
-      <div
-        class="w-4 h-4 rounded-sm border flex items-center justify-center text-[8px] font-bold"
-        style="border-color: var(--nord3); background: linear-gradient(135deg, var(--nord4) 50%, var(--nord1) 50%);"
-      >
-        {Math.round(store.activeOpacity * 100)}
-      </div>
-    </button>
-
-    {#if showOpacitySlider}
-      <div
-        class="absolute top-full left-1/2 mt-1 rounded-lg shadow-lg p-3"
-        style="
-          background-color: var(--nord1);
-          border: 1px solid var(--nord3);
-          z-index: 99999;
-          transform: translateX(-50%);
-          width: 150px;
-        "
-      >
-        <div class="text-xs mb-2 text-center" style="color: var(--nord4);">
-          Opacity: {Math.round(store.activeOpacity * 100)}%
+        <!-- Opacity slider -->
+        <div class="mt-3 pt-3" style="border-top: 1px solid var(--nord3);">
+          <div class="text-xs mb-2 flex justify-between" style="color: var(--nord4);">
+            <span>Opacity</span>
+            <span>{Math.round(store.activeOpacity * 100)}%</span>
+          </div>
+          <input
+            type="range"
+            min="0.1"
+            max="1"
+            step="0.1"
+            value={store.activeOpacity}
+            oninput={handleOpacityChange}
+            class="w-full"
+          />
         </div>
-        <input
-          type="range"
-          min="0.1"
-          max="1"
-          step="0.1"
-          value={store.activeOpacity}
-          oninput={handleOpacityChange}
-          class="w-full"
-        />
       </div>
     {/if}
   </div>

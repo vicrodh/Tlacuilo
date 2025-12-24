@@ -115,8 +115,8 @@
   .tab-bar {
     display: flex;
     align-items: center;
-    background-color: #1a1a1a;
-    border-bottom: 1px solid #333;
+    background-color: var(--nord0);
+    border-bottom: 1px solid var(--nord3);
     height: 36px;
     padding: 0 4px;
     gap: 4px;
@@ -143,10 +143,10 @@
     gap: 6px;
     padding: 0 8px;
     height: 28px;
-    background-color: #252525;
+    background-color: var(--nord1);
     border: 1px solid transparent;
     border-radius: 6px 6px 0 0;
-    color: #888;
+    color: var(--nord4);
     font-size: 12px;
     cursor: pointer;
     min-width: 100px;
@@ -156,15 +156,15 @@
   }
 
   .tab:hover {
-    background-color: #2a2a2a;
-    color: #aaa;
+    background-color: var(--nord2);
+    color: var(--nord5);
   }
 
   .tab.active {
-    background-color: #333;
-    color: #fff;
-    border-color: #444;
-    border-bottom-color: #333;
+    background-color: var(--nord2);
+    color: var(--nord6);
+    border-color: var(--nord3);
+    border-bottom-color: var(--nord2);
   }
 
   .tab.dirty .tab-title {
@@ -172,7 +172,7 @@
   }
 
   .tab.drag-over {
-    border-left: 2px solid #4a9eff;
+    border-left: 2px solid var(--nord8);
   }
 
   .tab.dragging {
@@ -195,7 +195,7 @@
   }
 
   .dirty-indicator {
-    color: #f59e0b;
+    color: var(--nord13);
     margin-right: 2px;
   }
 
@@ -207,7 +207,7 @@
     background: transparent;
     border: none;
     border-radius: 4px;
-    color: #666;
+    color: var(--nord4);
     cursor: pointer;
     opacity: 0;
     transition: all 0.15s ease;
@@ -219,8 +219,8 @@
   }
 
   .close-btn:hover {
-    background-color: #3a3a3a;
-    color: #f44336;
+    background-color: var(--nord3);
+    color: var(--nord11);
   }
 
   .tab.dirty .close-btn {
@@ -236,14 +236,14 @@
     background: transparent;
     border: none;
     border-radius: 4px;
-    color: #666;
+    color: var(--nord4);
     cursor: pointer;
     transition: all 0.15s ease;
     flex-shrink: 0;
   }
 
   .new-tab-btn:hover {
-    background-color: #333;
-    color: #fff;
+    background-color: var(--nord2);
+    color: var(--nord6);
   }
 </style>

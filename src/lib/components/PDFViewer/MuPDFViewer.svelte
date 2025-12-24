@@ -616,7 +616,7 @@
       const rendered = await invoke<RenderedPage[]>('pdf_render_thumbnails', {
         path: filePath,
         pages: [pageNum],
-        maxSize: 150,
+        maxSize: 200,
       });
 
       if (rendered.length > 0) {
