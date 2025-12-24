@@ -598,6 +598,7 @@
     flex-direction: column;
     gap: 0.5rem;
     margin-bottom: 0.5rem;
+    padding: 0 0.25rem;
   }
 
   .search-input-wrapper {
@@ -612,8 +613,9 @@
     top: 50%;
     transform: translateY(-50%);
     color: var(--nord4);
-    opacity: 0.6;
+    opacity: 0.5;
     pointer-events: none;
+    z-index: 1;
   }
 
   .loading-icon {
@@ -689,7 +691,7 @@
 
   .search-input {
     width: 100%;
-    padding: 0.5rem 2.25rem 0.5rem 2.25rem;
+    padding: 0.625rem 2.25rem;
     border-radius: 0.375rem;
     border: 1px solid var(--nord3);
     background-color: var(--nord0);
