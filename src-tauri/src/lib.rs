@@ -344,19 +344,43 @@ fn print_prepare_pdf(
     })
 }
 
-/// Open a PDF file in the system's default print dialog
+/// Open a PDF file in the system's print dialog
 #[tauri::command]
 fn print_pdf(path: String) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
+        // Try different methods to open print dialog on Linux
+        // First try okular with --print flag (if available)
+        let okular_result = std::process::Command::new("okular")
+            .arg("--print")
+            .arg(&path)
+            .spawn();
+
+        if okular_result.is_ok() {
+            return Ok(());
+        }
+
+        // Try evince (GNOME PDF viewer) - it doesn't have a direct print flag,
+        // but we can open it and user can print with Ctrl+P
+        let evince_result = std::process::Command::new("evince")
+            .arg(&path)
+            .spawn();
+
+        if evince_result.is_ok() {
+            return Ok(());
+        }
+
+        // Fall back to xdg-open (opens in default PDF viewer)
         std::process::Command::new("xdg-open")
             .arg(&path)
             .spawn()
-            .map_err(|e| format!("Failed to open print dialog: {}", e))?;
+            .map_err(|e| format!("Failed to open PDF viewer: {}", e))?;
     }
 
     #[cfg(target_os = "macos")]
     {
+        // On macOS, use lpr for direct printing or open with Preview
+        // lpr sends directly to print queue, so we use Preview instead
         std::process::Command::new("open")
             .arg("-a")
             .arg("Preview")
@@ -367,9 +391,16 @@ fn print_pdf(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", &path])
+        // On Windows, use ShellExecute with "print" verb
+        std::process::Command::new("rundll32")
+            .args(["mshtml.dll,PrintHTML", &path])
             .spawn()
+            .or_else(|_| {
+                // Fallback: open the file and let user print manually
+                std::process::Command::new("cmd")
+                    .args(["/C", "start", "", &path])
+                    .spawn()
+            })
             .map_err(|e| format!("Failed to open print dialog: {}", e))?;
     }
 

@@ -27,6 +27,7 @@ export type ToolMode =
   | 'line'          // Line
   | 'arrow'         // Arrow
   | 'sequenceNumber' // Numbered circles
+  | 'move'          // Move/drag annotations
   | null;           // No tool active (pointer mode)
 
 // Line style options
@@ -94,15 +95,27 @@ export interface AnnotationsState {
   selectedId: string | null;
   activeTool: ToolMode;
   activeColor: string;
+  activeOpacity: number; // 0-1 opacity for new annotations
   // Pending markup type to apply (for text-select and area-select modes)
   pendingMarkupType: MarkupType;
+  // Sequence number counter
+  sequenceCounter: number;
+  // Line/shape style settings
+  activeLineStyle: LineStyle;
+  activeStartArrow: ArrowHeadStyle;
+  activeEndArrow: ArrowHeadStyle;
+  // Shape fill settings
+  activeFillEnabled: boolean;
+  activeFillColor: string;
+  activeFillOpacity: number;
 }
 
 // History action types for undo/redo
 type HistoryAction =
   | { type: 'add'; annotation: Annotation }
   | { type: 'delete'; annotation: Annotation }
-  | { type: 'update'; id: string; oldState: Partial<Annotation>; newState: Partial<Annotation> };
+  | { type: 'update'; id: string; oldState: Partial<Annotation>; newState: Partial<Annotation> }
+  | { type: 'clear'; annotations: Annotation[] };
 
 const ANNOTATION_KEY = Symbol('annotations');
 const MAX_HISTORY_SIZE = 50;
@@ -113,7 +126,15 @@ export function createAnnotationsStore() {
     selectedId: null,
     activeTool: null,
     activeColor: '#FFEB3B', // Default yellow for markup tools (typewriter switches to black)
+    activeOpacity: 1, // Default full opacity
     pendingMarkupType: 'highlight', // Default markup type
+    sequenceCounter: 1, // Starting sequence number
+    activeLineStyle: 'solid', // Default line style
+    activeStartArrow: 'none', // Default start arrow
+    activeEndArrow: 'closed', // Default end arrow (for arrow tool)
+    activeFillEnabled: false, // Default no fill
+    activeFillColor: '#FFEB3B', // Default fill color (same as stroke)
+    activeFillOpacity: 0.3, // Default fill opacity
   });
 
   // Undo/Redo history
@@ -234,6 +255,12 @@ export function createAnnotationsStore() {
         // Undo update = restore old state
         updateAnnotation(action.id, action.oldState, true);
         break;
+      case 'clear':
+        // Undo clear = restore all deleted annotations
+        for (const annotation of action.annotations) {
+          addAnnotationWithId(annotation, true);
+        }
+        break;
     }
 
     redoStack.push(action);
@@ -256,6 +283,12 @@ export function createAnnotationsStore() {
       case 'update':
         // Redo update = apply new state
         updateAnnotation(action.id, action.newState, true);
+        break;
+      case 'clear':
+        // Redo clear = delete all annotations again
+        for (const annotation of action.annotations) {
+          deleteAnnotation(annotation.id, true);
+        }
         break;
     }
 
@@ -315,14 +348,73 @@ export function createAnnotationsStore() {
     state.activeColor = color;
   }
 
+  function setActiveOpacity(opacity: number): void {
+    state.activeOpacity = Math.max(0, Math.min(1, opacity));
+  }
+
+  function getNextSequenceNumber(): number {
+    const num = state.sequenceCounter;
+    state.sequenceCounter++;
+    return num;
+  }
+
+  function setSequenceCounter(value: number): void {
+    state.sequenceCounter = Math.max(1, Math.floor(value));
+  }
+
+  function resetSequenceCounter(): void {
+    state.sequenceCounter = 1;
+  }
+
+  function setActiveLineStyle(style: LineStyle): void {
+    state.activeLineStyle = style;
+  }
+
+  function setActiveStartArrow(style: ArrowHeadStyle): void {
+    state.activeStartArrow = style;
+  }
+
+  function setActiveEndArrow(style: ArrowHeadStyle): void {
+    state.activeEndArrow = style;
+  }
+
+  function setActiveFillEnabled(enabled: boolean): void {
+    state.activeFillEnabled = enabled;
+  }
+
+  function setActiveFillColor(color: string): void {
+    state.activeFillColor = color;
+  }
+
+  function setActiveFillOpacity(opacity: number): void {
+    state.activeFillOpacity = Math.max(0, Math.min(1, opacity));
+  }
+
   function clearAnnotations(page?: number): void {
+    // Collect all annotations that will be deleted for undo support
+    const deletedAnnotations: Annotation[] = [];
+
     if (page !== undefined) {
+      const pageAnns = state.annotations.get(page);
+      if (pageAnns) {
+        deletedAnnotations.push(...pageAnns);
+      }
       state.annotations.delete(page);
     } else {
+      // Collect all annotations before clearing
+      state.annotations.forEach(pageAnns => {
+        deletedAnnotations.push(...pageAnns);
+      });
       state.annotations.clear();
     }
+
     state.annotations = new Map(state.annotations);
     state.selectedId = null;
+
+    // Push to history for undo support (only if there were annotations)
+    if (deletedAnnotations.length > 0) {
+      pushToHistory({ type: 'clear', annotations: deletedAnnotations });
+    }
   }
 
   function getAllAnnotations(): Annotation[] {
@@ -355,7 +447,15 @@ export function createAnnotationsStore() {
     get selectedId() { return state.selectedId; },
     get activeTool() { return state.activeTool; },
     get activeColor() { return state.activeColor; },
+    get activeOpacity() { return state.activeOpacity; },
     get pendingMarkupType() { return state.pendingMarkupType; },
+    get sequenceCounter() { return state.sequenceCounter; },
+    get activeLineStyle() { return state.activeLineStyle; },
+    get activeStartArrow() { return state.activeStartArrow; },
+    get activeEndArrow() { return state.activeEndArrow; },
+    get activeFillEnabled() { return state.activeFillEnabled; },
+    get activeFillColor() { return state.activeFillColor; },
+    get activeFillOpacity() { return state.activeFillOpacity; },
 
     addAnnotation,
     updateAnnotation,
@@ -365,6 +465,16 @@ export function createAnnotationsStore() {
     setActiveTool,
     setPendingMarkupType,
     setActiveColor,
+    setActiveOpacity,
+    getNextSequenceNumber,
+    setSequenceCounter,
+    resetSequenceCounter,
+    setActiveLineStyle,
+    setActiveStartArrow,
+    setActiveEndArrow,
+    setActiveFillEnabled,
+    setActiveFillColor,
+    setActiveFillOpacity,
     clearAnnotations,
     getAllAnnotations,
     exportAnnotations,

@@ -77,8 +77,18 @@
   // Ink drawing state
   let currentInkPath = $state<{ x: number; y: number }[]>([]);
 
-  // Sequence number counter (persisted in store would be better, but local for now)
-  let sequenceCounter = $state(1);
+  // Hover state for annotation tooltips
+  let hoveredAnnotationId = $state<string | null>(null);
+  let tooltipPosition = $state<{ x: number; y: number } | null>(null);
+
+  // Move/drag state
+  let isDragging = $state(false);
+  let draggingAnnotationId = $state<string | null>(null);
+  let dragOffset = $state<{ x: number; y: number } | null>(null);
+  let dragOriginalRect = $state<Rect | null>(null);
+  let dragOriginalStartPoint = $state<Point | null>(null);
+  let dragOriginalEndPoint = $state<Point | null>(null);
+  let dragOriginalPaths = $state<InkPath[] | null>(null);
 
   const annotations = $derived(store.getAnnotationsForPage(page));
 
@@ -131,8 +141,64 @@
     return result;
   }
 
+  // Check if a point is inside an annotation's bounds
+  function findAnnotationAtPoint(point: { x: number; y: number }): Annotation | null {
+    // Search in reverse order (top-most first)
+    for (let i = annotations.length - 1; i >= 0; i--) {
+      const ann = annotations[i];
+      const rect = ann.rect;
+      // Expand hit area slightly for small annotations
+      const margin = 0.005;
+      if (
+        point.x >= rect.x - margin &&
+        point.x <= rect.x + rect.width + margin &&
+        point.y >= rect.y - margin &&
+        point.y <= rect.y + rect.height + margin
+      ) {
+        return ann;
+      }
+    }
+    return null;
+  }
+
   function handleMouseDown(e: MouseEvent) {
-    if (!store.activeTool || e.button !== 0) return;
+    if (e.button !== 0) return;
+
+    // Handle move tool
+    if (store.activeTool === 'move') {
+      e.stopPropagation();
+      e.preventDefault();
+      const coords = getRelativeCoords(e);
+      const annotation = findAnnotationAtPoint(coords);
+      if (annotation) {
+        isDragging = true;
+        draggingAnnotationId = annotation.id;
+        // Store offset from mouse to annotation top-left
+        dragOffset = {
+          x: coords.x - annotation.rect.x,
+          y: coords.y - annotation.rect.y,
+        };
+        dragOriginalRect = { ...annotation.rect };
+        // Store original points for line/arrow annotations
+        if (annotation.startPoint) {
+          dragOriginalStartPoint = { ...annotation.startPoint };
+        }
+        if (annotation.endPoint) {
+          dragOriginalEndPoint = { ...annotation.endPoint };
+        }
+        // Store original paths for ink annotations
+        if (annotation.paths) {
+          dragOriginalPaths = annotation.paths.map(path => ({
+            ...path,
+            points: path.points.map(p => ({ ...p })),
+          }));
+        }
+        store.selectAnnotation(annotation.id);
+      }
+      return;
+    }
+
+    if (!store.activeTool) return;
 
     // Prevent event from bubbling to container (stops panning/scrolling)
     e.stopPropagation();
@@ -153,6 +219,63 @@
   }
 
   function handleMouseMove(e: MouseEvent) {
+    // Handle dragging
+    if (isDragging && draggingAnnotationId && dragOffset && dragOriginalRect) {
+      e.stopPropagation();
+      e.preventDefault();
+      const coords = getRelativeCoords(e);
+
+      // Calculate new position
+      const newX = coords.x - dragOffset.x;
+      const newY = coords.y - dragOffset.y;
+
+      // Calculate delta from original position
+      const deltaX = newX - dragOriginalRect.x;
+      const deltaY = newY - dragOriginalRect.y;
+
+      // Clamp to page bounds
+      const clampedX = Math.max(0, Math.min(1 - dragOriginalRect.width, newX));
+      const clampedY = Math.max(0, Math.min(1 - dragOriginalRect.height, newY));
+
+      // Build update object
+      const updates: Partial<Annotation> = {
+        rect: {
+          x: clampedX,
+          y: clampedY,
+          width: dragOriginalRect.width,
+          height: dragOriginalRect.height,
+        },
+      };
+
+      // Update start/end points for line/arrow annotations
+      if (dragOriginalStartPoint) {
+        updates.startPoint = {
+          x: dragOriginalStartPoint.x + deltaX,
+          y: dragOriginalStartPoint.y + deltaY,
+        };
+      }
+      if (dragOriginalEndPoint) {
+        updates.endPoint = {
+          x: dragOriginalEndPoint.x + deltaX,
+          y: dragOriginalEndPoint.y + deltaY,
+        };
+      }
+
+      // Also update ink paths if present
+      if (dragOriginalPaths) {
+        updates.paths = dragOriginalPaths.map(path => ({
+          ...path,
+          points: path.points.map(p => ({
+            x: p.x + deltaX,
+            y: p.y + deltaY,
+          })),
+        }));
+      }
+
+      store.updateAnnotation(draggingAnnotationId, updates);
+      return;
+    }
+
     if (!isDrawing) return;
 
     // Prevent event from bubbling during drawing
@@ -176,6 +299,18 @@
   }
 
   function handleMouseUp(e: MouseEvent) {
+    // End dragging
+    if (isDragging) {
+      isDragging = false;
+      draggingAnnotationId = null;
+      dragOffset = null;
+      dragOriginalRect = null;
+      dragOriginalStartPoint = null;
+      dragOriginalEndPoint = null;
+      dragOriginalPaths = null;
+      return;
+    }
+
     if (!isDrawing || !store.activeTool) {
       isDrawing = false;
       drawStart = null;
@@ -204,7 +339,7 @@
           page,
           rect: boundingRect,
           color: store.activeColor,
-          opacity: 1,
+          opacity: store.activeOpacity,
           author,
           paths: [{
             points: reducedPath,
@@ -225,7 +360,7 @@
             page,
             rect: drawRect,
             color: store.activeColor,
-            opacity: 0.8,
+            opacity: store.activeOpacity,
             text: '',
             author,
           });
@@ -237,7 +372,7 @@
             page,
             rect: drawRect,
             color: store.activeColor,
-            opacity: 1,
+            opacity: store.activeOpacity,
             text: '',
             fontsize: 12,
             author,
@@ -252,7 +387,7 @@
             page,
             rect: drawRect,
             color: store.activeColor,
-            opacity: markupType === 'highlight' ? 0.3 : 0.8,
+            opacity: store.activeOpacity,
             author,
           });
         } else if (store.activeTool === 'rectangle') {
@@ -261,9 +396,14 @@
             page,
             rect: drawRect,
             color: store.activeColor,
-            opacity: 1,
+            opacity: store.activeOpacity,
             strokeWidth: 0.002,
-            lineStyle: 'solid',
+            lineStyle: store.activeLineStyle,
+            fill: store.activeFillEnabled ? {
+              enabled: true,
+              color: store.activeFillColor,
+              opacity: store.activeFillOpacity,
+            } : undefined,
             author,
           });
         } else if (store.activeTool === 'ellipse') {
@@ -272,9 +412,14 @@
             page,
             rect: drawRect,
             color: store.activeColor,
-            opacity: 1,
+            opacity: store.activeOpacity,
             strokeWidth: 0.002,
-            lineStyle: 'solid',
+            lineStyle: store.activeLineStyle,
+            fill: store.activeFillEnabled ? {
+              enabled: true,
+              color: store.activeFillColor,
+              opacity: store.activeFillOpacity,
+            } : undefined,
             author,
           });
         } else if (store.activeTool === 'line') {
@@ -284,9 +429,9 @@
             page,
             rect: drawRect,
             color: store.activeColor,
-            opacity: 1,
+            opacity: store.activeOpacity,
             strokeWidth: 0.002,
-            lineStyle: 'solid',
+            lineStyle: store.activeLineStyle,
             startPoint: { x: drawStart!.x, y: drawStart!.y },
             endPoint: { x: endCoords.x, y: endCoords.y },
             author,
@@ -298,11 +443,11 @@
             page,
             rect: drawRect,
             color: store.activeColor,
-            opacity: 1,
+            opacity: store.activeOpacity,
             strokeWidth: 0.002,
-            lineStyle: 'solid',
-            startArrow: 'none',
-            endArrow: 'closed',
+            lineStyle: store.activeLineStyle,
+            startArrow: store.activeStartArrow,
+            endArrow: store.activeEndArrow,
             startPoint: { x: drawStart!.x, y: drawStart!.y },
             endPoint: { x: endCoords.x, y: endCoords.y },
             author,
@@ -321,11 +466,10 @@
             page,
             rect: squareRect,
             color: store.activeColor,
-            opacity: 1,
-            sequenceNumber: sequenceCounter,
+            opacity: store.activeOpacity,
+            sequenceNumber: store.getNextSequenceNumber(),
             author,
           });
-          sequenceCounter++;
         }
       }
     }
@@ -340,11 +484,39 @@
     e.stopPropagation();
 
     if (!store.activeTool) {
-      // Select mode
+      // Select mode - clicking highlights in the list
       store.selectAnnotation(
         store.selectedId === annotation.id ? null : annotation.id
       );
     }
+  }
+
+  function handleAnnotationMouseEnter(e: MouseEvent, annotation: Annotation) {
+    hoveredAnnotationId = annotation.id;
+    tooltipPosition = { x: e.clientX, y: e.clientY };
+  }
+
+  function handleAnnotationMouseMove(e: MouseEvent) {
+    if (hoveredAnnotationId) {
+      tooltipPosition = { x: e.clientX, y: e.clientY };
+    }
+  }
+
+  function handleAnnotationMouseLeave() {
+    hoveredAnnotationId = null;
+    tooltipPosition = null;
+  }
+
+  // Format date for tooltip display
+  function formatDateTime(date: Date): string {
+    const d = new Date(date);
+    return d.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   function handleDeleteAnnotation(id: string) {
@@ -403,6 +575,7 @@
   const cursorStyle = $derived(() => {
     if (!interactive) return 'default';
     if (!store.activeTool) return 'default';
+    if (store.activeTool === 'move') return isDragging ? 'grabbing' : 'grab';
     if (store.activeTool === 'comment') return 'cell';
     if (store.activeTool === 'freetext') return 'text';
     if (store.activeTool === 'ink') return 'crosshair';
@@ -425,7 +598,7 @@
   onmousedown={interactive ? handleMouseDown : undefined}
   onmousemove={interactive ? handleMouseMove : undefined}
   onmouseup={interactive ? handleMouseUp : undefined}
-  onmouseleave={interactive ? () => { isDrawing = false; drawStart = null; drawEnd = null; drawRect = null; currentInkPath = []; } : undefined}
+  onmouseleave={interactive ? () => { isDrawing = false; drawStart = null; drawEnd = null; drawRect = null; currentInkPath = []; isDragging = false; draggingAnnotationId = null; dragOffset = null; dragOriginalRect = null; dragOriginalStartPoint = null; dragOriginalEndPoint = null; dragOriginalPaths = null; } : undefined}
 >
   <!-- Rendered annotations -->
   {#each annotations as annotation (annotation.id)}
@@ -433,6 +606,7 @@
     {#if annotation.type === 'highlight'}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_mouse_events_have_key_events -->
       <rect
         x={pixelRect.x}
         y={pixelRect.y}
@@ -443,10 +617,14 @@
         class="cursor-pointer hover:opacity-80 transition-opacity"
         class:ring-2={store.selectedId === annotation.id}
         onclick={(e) => handleAnnotationClick(e, annotation)}
+        onmouseenter={(e) => handleAnnotationMouseEnter(e, annotation)}
+        onmousemove={handleAnnotationMouseMove}
+        onmouseleave={handleAnnotationMouseLeave}
       />
     {:else if annotation.type === 'underline'}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_mouse_events_have_key_events -->
       <line
         x1={pixelRect.x}
         y1={pixelRect.y + pixelRect.height}
@@ -456,10 +634,14 @@
         stroke-width="2"
         class="cursor-pointer"
         onclick={(e) => handleAnnotationClick(e, annotation)}
+        onmouseenter={(e) => handleAnnotationMouseEnter(e, annotation)}
+        onmousemove={handleAnnotationMouseMove}
+        onmouseleave={handleAnnotationMouseLeave}
       />
     {:else if annotation.type === 'strikethrough'}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_mouse_events_have_key_events -->
       <line
         x1={pixelRect.x}
         y1={pixelRect.y + pixelRect.height / 2}
@@ -469,14 +651,21 @@
         stroke-width="2"
         class="cursor-pointer"
         onclick={(e) => handleAnnotationClick(e, annotation)}
+        onmouseenter={(e) => handleAnnotationMouseEnter(e, annotation)}
+        onmousemove={handleAnnotationMouseMove}
+        onmouseleave={handleAnnotationMouseLeave}
       />
     {:else if annotation.type === 'comment'}
       <!-- Comment marker -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_mouse_events_have_key_events -->
       <g
         class="cursor-pointer"
         onclick={(e) => handleAnnotationClick(e, annotation)}
+        onmouseenter={(e) => handleAnnotationMouseEnter(e, annotation)}
+        onmousemove={handleAnnotationMouseMove}
+        onmouseleave={handleAnnotationMouseLeave}
       >
         <rect
           x={pixelRect.x}
@@ -499,6 +688,7 @@
       <!-- Freetext / Typewriter annotation -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_mouse_events_have_key_events -->
       {@const fontSize = (annotation.fontsize || 12) * scale}
       <foreignObject
         x={pixelRect.x}
@@ -507,6 +697,9 @@
         height={Math.max(pixelRect.height, fontSize * 1.5)}
         class="cursor-pointer overflow-visible"
         onclick={(e) => handleAnnotationClick(e, annotation)}
+        onmouseenter={(e) => handleAnnotationMouseEnter(e, annotation)}
+        onmousemove={handleAnnotationMouseMove}
+        onmouseleave={handleAnnotationMouseLeave}
       >
         <div
           xmlns="http://www.w3.org/1999/xhtml"
@@ -525,9 +718,13 @@
       <!-- Ink/freehand annotation -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_mouse_events_have_key_events -->
       <g
         class="cursor-pointer"
         onclick={(e) => handleAnnotationClick(e, annotation)}
+        onmouseenter={(e) => handleAnnotationMouseEnter(e, annotation)}
+        onmousemove={handleAnnotationMouseMove}
+        onmouseleave={handleAnnotationMouseLeave}
       >
         {#each annotation.paths as path}
           {@const strokeWidth = (path.strokeWidth || 0.003) * pageWidth * scale}
@@ -546,6 +743,7 @@
       <!-- Rectangle annotation -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_mouse_events_have_key_events -->
       {@const strokeWidth = (annotation.strokeWidth || 0.002) * pageWidth * scale}
       <rect
         x={pixelRect.x}
@@ -560,11 +758,15 @@
         opacity={annotation.opacity}
         class="cursor-pointer"
         onclick={(e) => handleAnnotationClick(e, annotation)}
+        onmouseenter={(e) => handleAnnotationMouseEnter(e, annotation)}
+        onmousemove={handleAnnotationMouseMove}
+        onmouseleave={handleAnnotationMouseLeave}
       />
     {:else if annotation.type === 'ellipse'}
       <!-- Ellipse annotation -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_mouse_events_have_key_events -->
       {@const strokeWidth = (annotation.strokeWidth || 0.002) * pageWidth * scale}
       {@const cx = pixelRect.x + pixelRect.width / 2}
       {@const cy = pixelRect.y + pixelRect.height / 2}
@@ -580,11 +782,15 @@
         opacity={annotation.opacity}
         class="cursor-pointer"
         onclick={(e) => handleAnnotationClick(e, annotation)}
+        onmouseenter={(e) => handleAnnotationMouseEnter(e, annotation)}
+        onmousemove={handleAnnotationMouseMove}
+        onmouseleave={handleAnnotationMouseLeave}
       />
     {:else if annotation.type === 'line'}
       <!-- Line annotation -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_mouse_events_have_key_events -->
       {@const strokeWidth = (annotation.strokeWidth || 0.002) * pageWidth * scale}
       {@const x1 = annotation.startPoint ? annotation.startPoint.x * pageWidth * scale : pixelRect.x}
       {@const y1 = annotation.startPoint ? annotation.startPoint.y * pageHeight * scale : pixelRect.y}
@@ -598,11 +804,15 @@
         opacity={annotation.opacity}
         class="cursor-pointer"
         onclick={(e) => handleAnnotationClick(e, annotation)}
+        onmouseenter={(e) => handleAnnotationMouseEnter(e, annotation)}
+        onmousemove={handleAnnotationMouseMove}
+        onmouseleave={handleAnnotationMouseLeave}
       />
     {:else if annotation.type === 'arrow'}
       <!-- Arrow annotation -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_mouse_events_have_key_events -->
       {@const strokeWidth = (annotation.strokeWidth || 0.002) * pageWidth * scale}
       {@const arrowId = `arrow-${annotation.id}`}
       {@const hasStartArrow = annotation.startArrow && annotation.startArrow !== 'none'}
@@ -613,59 +823,66 @@
       {@const y1 = annotation.startPoint ? annotation.startPoint.y * pageHeight * scale : pixelRect.y}
       {@const x2 = annotation.endPoint ? annotation.endPoint.x * pageWidth * scale : pixelRect.x + pixelRect.width}
       {@const y2 = annotation.endPoint ? annotation.endPoint.y * pageHeight * scale : pixelRect.y + pixelRect.height}
-      <defs>
-        {#if hasEndArrow}
-          <marker
-            id="{arrowId}-end"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto"
-          >
-            <path
-              d="M 0 0 L 10 5 L 0 10 {isClosedEnd ? 'z' : ''}"
-              fill={isClosedEnd ? annotation.color : 'none'}
-              stroke={annotation.color}
-              stroke-width="1"
-            />
-          </marker>
-        {/if}
-        {#if hasStartArrow}
-          <marker
-            id="{arrowId}-start"
-            viewBox="0 0 10 10"
-            refX="1"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto"
-          >
-            <path
-              d="M 10 0 L 0 5 L 10 10 {isClosedStart ? 'z' : ''}"
-              fill={isClosedStart ? annotation.color : 'none'}
-              stroke={annotation.color}
-              stroke-width="1"
-            />
-          </marker>
-        {/if}
-      </defs>
-      <line
-        {x1} {y1} {x2} {y2}
-        stroke={annotation.color}
-        stroke-width={strokeWidth}
-        stroke-dasharray={getDashArray(annotation.lineStyle, strokeWidth)}
-        marker-start={hasStartArrow ? `url(#${arrowId}-start)` : undefined}
-        marker-end={hasEndArrow ? `url(#${arrowId}-end)` : undefined}
-        opacity={annotation.opacity}
+      <g
         class="cursor-pointer"
         onclick={(e) => handleAnnotationClick(e, annotation)}
-      />
+        onmouseenter={(e) => handleAnnotationMouseEnter(e, annotation)}
+        onmousemove={handleAnnotationMouseMove}
+        onmouseleave={handleAnnotationMouseLeave}
+      >
+        <defs>
+          {#if hasEndArrow}
+            <marker
+              id="{arrowId}-end"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto"
+            >
+              <path
+                d="M 0 0 L 10 5 L 0 10 {isClosedEnd ? 'z' : ''}"
+                fill={isClosedEnd ? annotation.color : 'none'}
+                stroke={annotation.color}
+                stroke-width="1"
+              />
+            </marker>
+          {/if}
+          {#if hasStartArrow}
+            <marker
+              id="{arrowId}-start"
+              viewBox="0 0 10 10"
+              refX="1"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto"
+            >
+              <path
+                d="M 10 0 L 0 5 L 10 10 {isClosedStart ? 'z' : ''}"
+                fill={isClosedStart ? annotation.color : 'none'}
+                stroke={annotation.color}
+                stroke-width="1"
+              />
+            </marker>
+          {/if}
+        </defs>
+        <line
+          {x1} {y1} {x2} {y2}
+          stroke={annotation.color}
+          stroke-width={strokeWidth}
+          stroke-dasharray={getDashArray(annotation.lineStyle, strokeWidth)}
+          marker-start={hasStartArrow ? `url(#${arrowId}-start)` : undefined}
+          marker-end={hasEndArrow ? `url(#${arrowId}-end)` : undefined}
+          opacity={annotation.opacity}
+        />
+      </g>
     {:else if annotation.type === 'sequenceNumber'}
       <!-- Sequence number annotation -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_mouse_events_have_key_events -->
       {@const r = Math.min(pixelRect.width, pixelRect.height) / 2}
       {@const cx = pixelRect.x + pixelRect.width / 2}
       {@const cy = pixelRect.y + pixelRect.height / 2}
@@ -673,6 +890,9 @@
       <g
         class="cursor-pointer"
         onclick={(e) => handleAnnotationClick(e, annotation)}
+        onmouseenter={(e) => handleAnnotationMouseEnter(e, annotation)}
+        onmousemove={handleAnnotationMouseMove}
+        onmouseleave={handleAnnotationMouseLeave}
       >
         <circle
           {cx} {cy} {r}
@@ -854,7 +1074,7 @@
           font-weight="bold"
           font-family="Helvetica, Arial, sans-serif"
         >
-          {sequenceCounter}
+          {store.sequenceCounter}
         </text>
       {/if}
     {/if}
@@ -939,35 +1159,36 @@
   {/if}
 {/if}
 
-<!-- Selected annotation controls -->
-{#if store.selectedId && !editingComment && !editingFreetext}
-  {@const selected = annotations.find(a => a.id === store.selectedId)}
-  {#if selected}
-    {@const selectedRect = toPixelRect(selected.rect)}
+<!-- Annotation hover tooltip -->
+{#if hoveredAnnotationId && tooltipPosition && !store.activeTool}
+  {@const hovered = annotations.find(a => a.id === hoveredAnnotationId)}
+  {#if hovered}
     <div
-      class="absolute z-40 flex items-center gap-1 p-1 rounded"
+      class="fixed z-[99999] px-3 py-2 rounded-lg shadow-lg pointer-events-none"
       style="
-        left: {selectedRect.x + selectedRect.width + 4}px;
-        top: {selectedRect.y}px;
+        left: {tooltipPosition.x + 12}px;
+        top: {tooltipPosition.y + 12}px;
         background-color: var(--nord1);
         border: 1px solid var(--nord3);
+        max-width: 250px;
       "
     >
-      {#if (selected.type === 'comment' || selected.type === 'freetext') && selected.text}
-        <div
-          class="px-2 py-1 text-xs max-w-[200px]"
-          style="color: var(--nord4);"
-        >
-          {selected.text}
+      {#if hovered.author}
+        <div class="text-xs font-medium" style="color: var(--nord6);">
+          {hovered.author}
         </div>
       {/if}
-      <button
-        onclick={() => handleDeleteAnnotation(store.selectedId!)}
-        class="p-1 rounded hover:bg-[var(--nord11)] hover:text-white transition-colors"
-        title="Delete annotation"
-      >
-        <X size={14} />
-      </button>
+      <div class="text-[10px]" style="color: var(--nord4);">
+        {formatDateTime(hovered.createdAt)}
+      </div>
+      {#if (hovered.type === 'comment' || hovered.type === 'freetext') && hovered.text}
+        <div
+          class="mt-1 pt-1 border-t text-xs line-clamp-3"
+          style="border-color: var(--nord3); color: var(--nord4);"
+        >
+          {hovered.text}
+        </div>
+      {/if}
     </div>
   {/if}
 {/if}

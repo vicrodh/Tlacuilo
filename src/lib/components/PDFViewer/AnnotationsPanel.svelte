@@ -14,8 +14,12 @@
     Minus,
     ArrowRight,
     Hash,
+    MoreVertical,
+    Palette,
+    Navigation,
   } from 'lucide-svelte';
   import type { AnnotationsStore, Annotation } from '$lib/stores/annotations.svelte';
+  import { HIGHLIGHT_COLORS } from '$lib/stores/annotations.svelte';
 
   interface Props {
     store: AnnotationsStore;
@@ -23,6 +27,10 @@
   }
 
   let { store, onNavigateToPage }: Props = $props();
+
+  // Dropdown menu state
+  let openMenuId = $state<string | null>(null);
+  let showColorPicker = $state<string | null>(null);
 
   // Group annotations by page
   const annotationsByPage = $derived(() => {
@@ -57,9 +65,43 @@
     store.selectAnnotation(annotation.id);
   }
 
+  function toggleMenu(e: MouseEvent, id: string) {
+    e.stopPropagation();
+    openMenuId = openMenuId === id ? null : id;
+    showColorPicker = null;
+  }
+
+  function handleGoTo(e: MouseEvent, annotation: Annotation) {
+    e.stopPropagation();
+    onNavigateToPage(annotation.page);
+    store.selectAnnotation(annotation.id);
+    openMenuId = null;
+  }
+
+  function handleChangeColor(e: MouseEvent, id: string) {
+    e.stopPropagation();
+    showColorPicker = showColorPicker === id ? null : id;
+  }
+
+  function applyColor(e: MouseEvent, id: string, color: string) {
+    e.stopPropagation();
+    store.updateAnnotation(id, { color });
+    showColorPicker = null;
+    openMenuId = null;
+  }
+
   function handleDelete(e: MouseEvent, id: string) {
     e.stopPropagation();
-    store.deleteAnnotation(id);
+    if (confirm('Delete this annotation?')) {
+      store.deleteAnnotation(id);
+    }
+    openMenuId = null;
+  }
+
+  // Close menu when clicking outside
+  function handleClickOutside() {
+    openMenuId = null;
+    showColorPicker = null;
   }
 
   function getIcon(type: Annotation['type']) {
@@ -165,9 +207,12 @@
 
                     <!-- Content -->
                     <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-2">
+                      <div class="flex items-center gap-2 flex-wrap">
                         <span class="text-xs font-medium">{getLabel(annotation.type)}</span>
                         <span class="text-[10px] opacity-40">{formatTime(annotation.createdAt)}</span>
+                        {#if annotation.author}
+                          <span class="text-[10px] opacity-50 italic">by {annotation.author}</span>
+                        {/if}
                       </div>
 
                       {#if (annotation.type === 'comment' || annotation.type === 'freetext') && annotation.text}
@@ -187,14 +232,74 @@
                       {/if}
                     </div>
 
-                    <!-- Delete button -->
-                    <button
-                      onclick={(e) => handleDelete(e, annotation.id)}
-                      class="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--nord11)] hover:text-white transition-all flex-shrink-0"
-                      title="Delete"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                    <!-- Actions menu -->
+                    <div class="relative flex-shrink-0">
+                      <button
+                        onclick={(e) => toggleMenu(e, annotation.id)}
+                        class="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--nord3)] transition-all"
+                        title="Actions"
+                      >
+                        <MoreVertical size={12} />
+                      </button>
+
+                      {#if openMenuId === annotation.id}
+                        <div
+                          class="absolute right-0 top-full mt-1 rounded-lg shadow-lg py-1 z-50"
+                          style="background-color: var(--nord1); border: 1px solid var(--nord3); min-width: 140px;"
+                        >
+                          <!-- Go to -->
+                          <button
+                            onclick={(e) => handleGoTo(e, annotation)}
+                            class="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--nord2)] transition-colors text-left"
+                          >
+                            <Navigation size={12} />
+                            <span>Go to</span>
+                          </button>
+
+                          <!-- Change color -->
+                          <div class="relative">
+                            <button
+                              onclick={(e) => handleChangeColor(e, annotation.id)}
+                              class="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--nord2)] transition-colors text-left"
+                            >
+                              <Palette size={12} />
+                              <span>Change color</span>
+                              <ChevronRight size={10} class="ml-auto opacity-50" />
+                            </button>
+
+                            {#if showColorPicker === annotation.id}
+                              <div
+                                class="absolute left-full top-0 ml-1 rounded-lg shadow-lg p-2 z-50"
+                                style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+                              >
+                                <div class="grid grid-cols-4 gap-1">
+                                  {#each HIGHLIGHT_COLORS as color}
+                                    <button
+                                      onclick={(e) => applyColor(e, annotation.id, color.value)}
+                                      class="w-5 h-5 rounded border transition-transform hover:scale-110"
+                                      style="background-color: {color.value}; border-color: {annotation.color === color.value ? 'var(--nord6)' : 'var(--nord3)'};"
+                                      title={color.name}
+                                    ></button>
+                                  {/each}
+                                </div>
+                              </div>
+                            {/if}
+                          </div>
+
+                          <!-- Separator -->
+                          <div class="h-px my-1" style="background-color: var(--nord3);"></div>
+
+                          <!-- Delete -->
+                          <button
+                            onclick={(e) => handleDelete(e, annotation.id)}
+                            class="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--nord11)] hover:text-white transition-colors text-left"
+                          >
+                            <Trash2 size={12} />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      {/if}
+                    </div>
                   </div>
                 {/each}
               </div>
@@ -205,3 +310,6 @@
     {/if}
   </div>
 </div>
+
+<!-- Close menu when clicking outside -->
+<svelte:window onclick={handleClickOutside} />

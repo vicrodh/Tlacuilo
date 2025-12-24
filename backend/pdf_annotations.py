@@ -435,9 +435,13 @@ def embed_annotations(
                     annot.set_opacity(opacity)
                     # Store our ID in the subject field for round-trip
                     # Author goes in the title field (PyMuPDF convention)
+                    # For sequenceNumber, preserve the SEQ:N content that was set earlier
                     info_dict = {"subject": annot_id}
                     if author:
                         info_dict["title"] = author
+                    if annot_type == "sequenceNumber":
+                        seq_num = annot_data.get("sequenceNumber", 1)
+                        info_dict["content"] = f"SEQ:{seq_num}"
                     annot.set_info(**info_dict)
                     annot.update()
 

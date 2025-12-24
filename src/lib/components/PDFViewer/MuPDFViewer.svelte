@@ -19,8 +19,6 @@
     FileDown,
     FileUp,
     MoreVertical,
-    Eye,
-    EyeOff,
     Printer,
   } from 'lucide-svelte';
   import { save, open } from '@tauri-apps/plugin-dialog';
@@ -957,33 +955,34 @@
           <PenTool size={16} />
         </button>
 
-        {#if annotationsDirty}
-          <button
-            onclick={saveAnnotationsToPdf}
-            disabled={isExporting}
-            class="p-2 rounded-lg transition-colors hover:bg-[var(--nord2)] relative"
-            class:animate-pulse={isExporting}
-            title="Save annotations to PDF"
-          >
-            <Save size={16} />
+        <button
+          onclick={saveAnnotationsToPdf}
+          disabled={isExporting || !annotationsDirty}
+          class="p-2 rounded-lg transition-colors relative"
+          class:hover:bg-[var(--nord2)]={annotationsDirty && !isExporting}
+          class:opacity-40={!annotationsDirty}
+          class:cursor-not-allowed={!annotationsDirty}
+          class:animate-pulse={isExporting}
+          title={annotationsDirty ? "Save annotations to PDF" : "No changes to save"}
+        >
+          <Save size={16} />
+          {#if annotationsDirty}
             <div
               class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full"
               style="background-color: var(--nord13);"
             ></div>
-          </button>
-        {/if}
-
-        <!-- Toggle annotation overlay visibility -->
-        <button
-          onclick={() => showAnnotationOverlay = !showAnnotationOverlay}
-          class="p-2 rounded-lg transition-colors hover:bg-[var(--nord2)]"
-          title={showAnnotationOverlay ? "Hide annotation overlay" : "Show annotation overlay"}
-        >
-          {#if showAnnotationOverlay}
-            <Eye size={16} />
-          {:else}
-            <EyeOff size={16} class="opacity-50" />
           {/if}
+        </button>
+
+        <!-- Print button -->
+        <button
+          onclick={() => showPrintDialog = true}
+          disabled={isPrinting}
+          class="p-2 rounded-lg transition-colors hover:bg-[var(--nord2)]"
+          class:animate-pulse={isPrinting}
+          title="Print document"
+        >
+          <Printer size={16} />
         </button>
 
         <!-- Annotation export/import menu -->
@@ -1127,7 +1126,11 @@
         class="flex items-center justify-center px-3 py-2 border-b"
         style="background-color: var(--nord1); border-color: var(--nord3);"
       >
-        <AnnotationToolbar store={annotationsStore} />
+        <AnnotationToolbar
+          store={annotationsStore}
+          showOverlay={showAnnotationOverlay}
+          onToggleOverlay={() => showAnnotationOverlay = !showAnnotationOverlay}
+        />
       </div>
     {/if}
   {/if}
