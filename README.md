@@ -144,6 +144,12 @@ npm run tauri:build
 - **[Sumatra PDF](https://www.sumatrapdfreader.org/)** - MuPDF-based reader with excellent rendering quality
 - **[Stirling PDF](https://github.com/Stirling-Tools/Stirling-PDF)** - Comprehensive open-source PDF toolkit
 
+## Roadmap
+
+### Nice to Have (Needs Research)
+
+- **Cloud Storage Integration**: OneDrive, Google Drive, Dropbox, iCloud - import and save files directly to cloud services
+
 ## Contributing
 
 We are not accepting pull requests at this time. Please open an issue if you have suggestions.
