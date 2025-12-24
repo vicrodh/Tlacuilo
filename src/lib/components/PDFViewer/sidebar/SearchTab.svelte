@@ -71,6 +71,9 @@
   let totalPages = $state(0);
   let currentResultIndex = $state(-1);
   let searchTimeout: ReturnType<typeof setTimeout>;
+  let currentSearchId = 0; // Used to cancel stale searches
+  const SEARCH_DEBOUNCE_MS = 600;
+  const MIN_QUERY_LENGTH = 3;
 
   // Cache analysis by file path
   let analysisCache = new Map<string, OcrAnalysis>();
@@ -128,10 +131,10 @@
 
     clearTimeout(searchTimeout);
 
-    if (query.length >= 2) {
+    if (query.length >= MIN_QUERY_LENGTH) {
       searchTimeout = setTimeout(() => {
         handleSearch();
-      }, 300);
+      }, SEARCH_DEBOUNCE_MS);
     } else if (query.length === 0) {
       searchResults = [];
       currentResultIndex = -1;
@@ -243,26 +246,38 @@
   }
 
   async function handleSearch() {
-    if (!searchQuery.trim()) {
+    const query = searchQuery.trim();
+    if (!query || query.length < MIN_QUERY_LENGTH) {
       searchResults = [];
       return;
     }
 
+    // Increment search ID to invalidate any previous search
+    const thisSearchId = ++currentSearchId;
+
     isSearching = true;
-    searchResults = [];
+    console.time(`[Search] "${query}"`);
 
     try {
-      // Use MuPDF's native search - much faster than iterating pages
+      // Use MuPDF's native search - runs in background thread
       const nativeResults = await invoke<NativeSearchResults>('pdf_search_text', {
         path: filePath,
-        query: searchQuery,
-        maxResults: 1000,
+        query: query,
+        maxResults: 500, // Reduced for faster response
       });
+
+      console.timeEnd(`[Search] "${query}"`);
+
+      // Check if this search is still current (user may have typed more)
+      if (thisSearchId !== currentSearchId) {
+        console.log(`[Search] Discarding stale results for "${query}"`);
+        return;
+      }
 
       // Map native results to frontend format
       const results: SearchResult[] = nativeResults.results.map((r) => ({
         page: r.page,
-        text: searchQuery,
+        text: query,
         context: r.context,
         normalizedY: r.y,
       }));
@@ -274,8 +289,12 @@
       }
     } catch (err) {
       console.error('Search failed:', err);
+      console.timeEnd(`[Search] "${query}"`);
     } finally {
-      isSearching = false;
+      // Only clear isSearching if this is still the current search
+      if (thisSearchId === currentSearchId) {
+        isSearching = false;
+      }
     }
   }
 
@@ -313,7 +332,7 @@
   }
 
   function handleKeyDown(e: KeyboardEvent) {
-    // F3 or Enter: next result
+    // F3 or Enter: next result or trigger immediate search
     if (e.key === 'F3' || e.key === 'Enter') {
       e.preventDefault();
       if (searchResults.length > 0) {
@@ -322,7 +341,9 @@
         } else {
           nextResult();
         }
-      } else if (e.key === 'Enter') {
+      } else if (e.key === 'Enter' && searchQuery.length >= MIN_QUERY_LENGTH) {
+        // Cancel debounce and search immediately
+        clearTimeout(searchTimeout);
         handleSearch();
       }
     }
@@ -441,7 +462,7 @@
           </div>
           <input
             type="text"
-            placeholder="Search in document..."
+            placeholder="Search (min 3 chars)..."
             bind:value={searchQuery}
             onkeydown={handleKeyDown}
             class="search-input-field"

@@ -448,10 +448,10 @@ fn search_text_blocking(path: &str, query: &str, max_results: u32) -> Result<Vec
     let mut results = Vec::new();
     let mut total_found: u32 = 0;
 
-    // Track last result position for deduplication
-    let mut last_page: u32 = 0;
-    let mut last_y: f32 = -1.0;
-    const Y_THRESHOLD: f32 = 0.02; // 2% of page height threshold for dedup
+    // Track seen positions for deduplication: (page, y_bucket)
+    // We bucket Y positions to detect duplicates at similar heights
+    let mut seen_positions: std::collections::HashSet<(u32, i32)> = std::collections::HashSet::new();
+    const Y_BUCKET_SIZE: f32 = 0.015; // ~1.5% of page height per bucket
 
     for page_num in 0..num_pages {
         if total_found >= max_results {
@@ -491,10 +491,15 @@ fn search_text_blocking(path: &str, query: &str, max_results: u32) -> Result<Vec
             let normalized_y = y0 / page_height;
             let current_page = page_num + 1;
 
-            // Deduplicate: skip if same page and very close Y position
-            if current_page == last_page && (normalized_y - last_y).abs() < Y_THRESHOLD {
+            // Bucket the Y position for deduplication
+            let y_bucket = (normalized_y / Y_BUCKET_SIZE) as i32;
+            let position_key = (current_page, y_bucket);
+
+            // Deduplicate: skip if we've already seen this position
+            if seen_positions.contains(&position_key) {
                 continue;
             }
+            seen_positions.insert(position_key);
 
             let rect = NormalizedRect {
                 x: x0 / page_width,
@@ -517,8 +522,6 @@ fn search_text_blocking(path: &str, query: &str, max_results: u32) -> Result<Vec
                 context,
             });
 
-            last_page = current_page;
-            last_y = normalized_y;
             total_found += 1;
 
             if total_found >= max_results {
