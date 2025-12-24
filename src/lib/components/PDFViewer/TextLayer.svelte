@@ -222,8 +222,11 @@
     return merged;
   }
 
-  // Check if text-select mode is active
+  // Check if text-select mode is active (for annotation creation)
   const isTextSelectMode = $derived(store.activeTool === 'text-select');
+
+  // Check if annotation tools are visible (any tool active means toolbar is open)
+  const annotationToolsVisible = $derived(store.activeTool !== null);
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -233,10 +236,10 @@
   style="
     width: {pageWidth * scale}px;
     height: {pageHeight * scale}px;
-    pointer-events: {isTextSelectMode ? 'auto' : 'none'};
-    user-select: {isTextSelectMode ? 'text' : 'none'};
+    pointer-events: auto;
+    user-select: text;
     z-index: {isTextSelectMode ? 20 : 5};
-    cursor: {isTextSelectMode ? 'text' : 'default'};
+    cursor: text;
   "
   onmouseup={handleMouseUp}
 >

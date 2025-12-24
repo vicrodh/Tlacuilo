@@ -1234,17 +1234,15 @@
                     draggable="false"
                   />
 
-                  <!-- Text layer for text selection (only when annotation tools visible) -->
-                  {#if showAnnotationTools}
-                    <TextLayer
-                      pdfPath={filePath}
-                      page={pageNum}
-                      pageWidth={loadedPage.width}
-                      pageHeight={loadedPage.height}
-                      scale={1}
-                      store={annotationsStore}
-                    />
-                  {/if}
+                  <!-- Text layer for text selection (always visible for copy support) -->
+                  <TextLayer
+                    pdfPath={filePath}
+                    page={pageNum}
+                    pageWidth={loadedPage.width}
+                    pageHeight={loadedPage.height}
+                    scale={1}
+                    store={annotationsStore}
+                  />
 
                   <!-- Annotation overlay (always render since PDF hides native annotations) -->
                   {#if showAnnotationOverlay}
