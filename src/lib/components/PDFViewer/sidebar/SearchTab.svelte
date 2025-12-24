@@ -11,9 +11,10 @@
     onFocusOnResult?: (page: number, normalizedY: number) => void;
     onFileReload?: () => void;
     externalSearchQuery?: string;
+    onSearchStateChange?: (query: string, currentPage: number, currentIndex: number) => void;
   }
 
-  let { filePath, onNavigateToPage, onFocusOnResult, onFileReload, externalSearchQuery = '' }: Props = $props();
+  let { filePath, onNavigateToPage, onFocusOnResult, onFileReload, externalSearchQuery = '', onSearchStateChange }: Props = $props();
 
   // OCR Analysis result type
   interface OcrAnalysis {
@@ -328,6 +329,25 @@
   function dismissErrorNotification() {
     showErrorNotification = false;
   }
+
+  // Notify parent of search state changes for highlight layer
+  $effect(() => {
+    const query = searchQuery;
+    const result = searchResults[currentResultIndex];
+    const page = result?.page ?? 0;
+
+    // Calculate match index on the current page
+    let indexOnPage = 0;
+    if (result) {
+      for (let i = 0; i < currentResultIndex; i++) {
+        if (searchResults[i].page === page) {
+          indexOnPage++;
+        }
+      }
+    }
+
+    onSearchStateChange?.(query, page, indexOnPage);
+  });
 </script>
 
 <div class="search-tab">

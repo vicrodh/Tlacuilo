@@ -26,6 +26,7 @@
     onThumbnailScroll: () => void;
     onFileReload?: () => void;
     searchTrigger?: { text: string; timestamp: number } | null;
+    onSearchStateChange?: (query: string, currentPage: number, currentIndex: number) => void;
   }
 
   let {
@@ -41,6 +42,7 @@
     onThumbnailScroll,
     onFileReload,
     searchTrigger = null,
+    onSearchStateChange,
   }: Props = $props();
 
   // State for passing search query to SearchTab
@@ -110,6 +112,7 @@
           {onFocusOnResult}
           {onFileReload}
           {externalSearchQuery}
+          {onSearchStateChange}
         />
       {/if}
     </div>

@@ -28,6 +28,7 @@
   import AnnotationOverlay from './AnnotationOverlay.svelte';
   import ViewerRightSidebar from './ViewerRightSidebar.svelte';
   import TextLayer from './TextLayer.svelte';
+  import SearchHighlightLayer from './SearchHighlightLayer.svelte';
   import PrintDialog from './PrintDialog.svelte';
 
   interface Props {
@@ -100,6 +101,17 @@
 
   function handleSearchText(text: string) {
     searchTrigger = { text, timestamp: Date.now() };
+  }
+
+  // Search highlight state (for highlighting matches in viewport)
+  let searchHighlight = $state<{ query: string; currentPage: number; currentIndex: number }>({
+    query: '',
+    currentPage: 0,
+    currentIndex: 0,
+  });
+
+  function handleSearchStateChange(query: string, currentPage: number, currentIndex: number) {
+    searchHighlight = { query, currentPage, currentIndex };
   }
 
   // Load annotations from PDF (industry standard - reads native PDF annotations)
@@ -1289,6 +1301,19 @@
                     onSearchText={handleSearchText}
                   />
 
+                  <!-- Search highlight layer (shows matches when searching) -->
+                  {#if searchHighlight.query}
+                    <SearchHighlightLayer
+                      pdfPath={filePath}
+                      page={pageNum}
+                      pageWidth={loadedPage.width}
+                      pageHeight={loadedPage.height}
+                      searchQuery={searchHighlight.query}
+                      currentMatchPage={searchHighlight.currentPage}
+                      currentMatchIndex={searchHighlight.currentIndex}
+                    />
+                  {/if}
+
                   <!-- Annotation overlay (always render since PDF hides native annotations) -->
                   {#if showAnnotationOverlay}
                     <AnnotationOverlay
@@ -1343,6 +1368,7 @@
         onThumbnailScroll={handleThumbnailScroll}
         onFileReload={loadPDF}
         {searchTrigger}
+        onSearchStateChange={handleSearchStateChange}
       />
     {/if}
   </div>
