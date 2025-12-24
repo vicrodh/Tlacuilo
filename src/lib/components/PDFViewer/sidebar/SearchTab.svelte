@@ -140,9 +140,9 @@
           deskew: true,
           rotate_pages: true,
           remove_background: false,
-          clean: true,
-          skip_text: true,
-          force_ocr: false,
+          clean: false,           // Requires 'unpaper' to be installed
+          skip_text: false,       // Don't skip - we want full OCR
+          force_ocr: true,        // Force OCR for Tagged PDFs
           redo_ocr: false,
           optimize: 1,
         },

@@ -206,7 +206,7 @@
       {:else if currentPage === 'compress'}
         <CompressPDF />
       {:else if currentPage === 'ocr'}
-        <OCRPDF />
+        <OCRPDF onOpenInViewer={(path) => { setPendingOpenFile(path); navigate('viewer'); }} />
       {:else if currentPage === 'convert'}
         <ConvertToPDF onOpenInViewer={(path) => { setPendingOpenFile(path); navigate('viewer'); }} />
       {:else if currentPage === 'export'}

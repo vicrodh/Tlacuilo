@@ -199,9 +199,12 @@ def analyze_pdf(input_path: str) -> dict:
         with Pdf.open(input_path) as pdf:
             has_images = False
             for page in list(pdf.pages)[:3]:  # Sample first 3 pages
-                if "/XObject" in page.get("/Resources", {}):
-                    xobjects = page["/Resources"].get("/XObject", {})
-                    for obj in xobjects.values():
+                resources = page.get("/Resources", {})
+                if "/XObject" in resources:
+                    xobjects = resources.get("/XObject", {})
+                    # pikepdf dictionaries don't have .values(), iterate via keys
+                    for key in xobjects.keys():
+                        obj = xobjects[key]
                         if obj.get("/Subtype") == "/Image":
                             has_images = True
                             break

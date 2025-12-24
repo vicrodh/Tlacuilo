@@ -10,13 +10,21 @@
     AlertCircle,
     AlertTriangle,
     Info,
-    Settings2
+    Settings2,
+    BookOpen
   } from 'lucide-svelte';
   import { listen } from '@tauri-apps/api/event';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
   import { log, logSuccess, logError, logWarning, registerFile, unregisterModule } from '$lib/stores/status.svelte';
+  import { setPendingOpenFile } from '$lib/stores/status.svelte';
+
+  interface Props {
+    onOpenInViewer?: (path: string) => void;
+  }
+
+  let { onOpenInViewer }: Props = $props();
 
   const MODULE = 'OCR';
 
@@ -73,12 +81,12 @@
   let showAdvanced = $state(false);
   let options = $state<OcrOptions>({
     language: 'eng',
-    deskew: false,
-    rotate_pages: false,
+    deskew: true,           // Enable by default for better results
+    rotate_pages: true,     // Enable by default for scanned docs
     remove_background: false,
-    clean: false,
-    skip_text: true,
-    force_ocr: false,
+    clean: false,           // Requires 'unpaper' to be installed
+    skip_text: false,       // Don't skip - we want full OCR
+    force_ocr: true,        // Force OCR for Tagged PDFs
     redo_ocr: false,
     optimize: 1,
   });
@@ -445,6 +453,17 @@
                 <p class="mt-2 text-sm opacity-60">{result.message}</p>
               {/if}
               <p class="mt-2 text-xs opacity-50">Saved to: {result.output_path}</p>
+
+              {#if result.output_path && onOpenInViewer}
+                <button
+                  onclick={() => onOpenInViewer(result.output_path!)}
+                  class="mt-4 flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg transition-colors hover:opacity-90"
+                  style="background-color: var(--nord10); color: var(--nord6);"
+                >
+                  <BookOpen size={18} />
+                  <span>Open in Viewer</span>
+                </button>
+              {/if}
             {:else}
               <div
                 class="flex items-center gap-2 px-4 py-3 rounded-lg"
