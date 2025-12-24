@@ -30,6 +30,7 @@
   import TextLayer from './TextLayer.svelte';
   import SearchHighlightLayer from './SearchHighlightLayer.svelte';
   import PrintDialog from './PrintDialog.svelte';
+  import OcrProgressSplash from '../OcrProgressSplash.svelte';
 
   interface Props {
     filePath: string;
@@ -129,6 +130,8 @@
   let documentNeedsOcr = $state(false);
   let ocrAnalyzed = $state(false);
   let showOcrButton = $state(false);
+  let isRunningOcr = $state(false);
+  let ocrMessage = $state('Processing OCR...');
 
   // Analyze document for OCR need (called after PDF loads)
   async function analyzeForOcr() {
@@ -138,6 +141,13 @@
       debugLog('MuPDFViewer', 'OCR analysis result:', result);
 
       ocrAnalyzed = true;
+
+      // If document already has text, no need to prompt for OCR
+      if (result.success && result.has_text && !result.needs_ocr) {
+        documentNeedsOcr = false;
+        showOcrButton = false;
+        return;
+      }
 
       if (result.success && result.needs_ocr) {
         documentNeedsOcr = true;
@@ -157,9 +167,8 @@
           );
 
           if (applyOcr) {
-            // TODO: Implement direct OCR application or redirect to OCR view
-            showOcrButton = true;
-            await message('OCR can be applied from the OCR tool in the sidebar or tools menu.', { title: 'Apply OCR' });
+            // Run OCR directly with splash notification
+            await runOcrOnDocument();
           } else {
             showOcrButton = true;
           }
@@ -168,6 +177,68 @@
     } catch (err) {
       debugLog('MuPDFViewer', 'OCR analysis failed:', err, 'error');
       // Don't show error to user, just log it
+    }
+  }
+
+  // Run OCR on the current document (in-place, then reload)
+  async function runOcrOnDocument() {
+    isRunningOcr = true;
+    ocrMessage = 'Processing OCR...';
+
+    try {
+      debugLog('MuPDFViewer', 'Running OCR on document...', { filePath });
+
+      const result = await invoke<{ success: boolean; output_path?: string; error?: string }>('ocr_run', {
+        input: filePath,
+        output: null, // Overwrite original (writes to temp first, then replaces)
+        options: {
+          language: 'eng+spa',
+          deskew: true,
+          rotate_pages: true,
+          remove_background: false,
+          clean: false,
+          skip_text: false,
+          force_ocr: true,
+          redo_ocr: false,
+          optimize: 1,
+        },
+      });
+
+      if (result.success) {
+        debugLog('MuPDFViewer', 'OCR completed successfully');
+        ocrMessage = 'OCR complete! Reloading document...';
+
+        // Clear OCR state before reload to prevent re-prompting
+        documentNeedsOcr = false;
+        showOcrButton = false;
+
+        // Small delay to show success message
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Reload the PDF to show the new text layer
+        await loadPDF();
+
+        await message('OCR processing completed successfully. The document now has searchable text.', {
+          title: 'OCR Complete',
+          kind: 'info',
+        });
+      } else {
+        debugLog('MuPDFViewer', 'OCR failed:', result.error, 'error');
+        await message(`OCR processing failed: ${result.error}`, {
+          title: 'OCR Failed',
+          kind: 'error',
+        });
+        showOcrButton = true;
+      }
+    } catch (err) {
+      debugLog('MuPDFViewer', 'OCR error:', err, 'error');
+      await message(`OCR processing failed: ${err}`, {
+        title: 'OCR Error',
+        kind: 'error',
+      });
+      showOcrButton = true;
+    } finally {
+      isRunningOcr = false;
     }
   }
 
@@ -1530,3 +1601,6 @@
   onPrint={handlePrint}
   onCancel={() => showPrintDialog = false}
 />
+
+<!-- OCR Progress Splash -->
+<OcrProgressSplash visible={isRunningOcr} message={ocrMessage} />

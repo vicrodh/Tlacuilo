@@ -434,8 +434,34 @@
           {/if}
         </div>
 
+        <!-- Processing Card -->
+        {#if isProcessing}
+          <div
+            class="rounded-xl p-6"
+            style="background-color: var(--nord1);"
+          >
+            <div class="flex items-center gap-4">
+              <div class="w-12 h-12 rounded-full flex items-center justify-center" style="background-color: var(--nord2);">
+                <div class="w-6 h-6 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
+              </div>
+              <div class="flex-1">
+                <h4 class="text-base font-medium" style="color: var(--nord8);">Processing OCR...</h4>
+                <p class="text-sm opacity-60 mt-1">This may take a few minutes depending on the document size</p>
+              </div>
+            </div>
+            <!-- Progress bar (infinite) -->
+            <div class="mt-4 h-1 rounded-full overflow-hidden" style="background-color: var(--nord3);">
+              <div
+                class="h-full rounded-full animate-pulse"
+                style="background-color: var(--nord8); width: 100%; animation: progress-slide 1.5s ease-in-out infinite;"
+              ></div>
+            </div>
+            <p class="text-xs opacity-40 mt-2 text-center">Do not close this window while processing</p>
+          </div>
+        {/if}
+
         <!-- Result Card -->
-        {#if result}
+        {#if result && !isProcessing}
           <div
             class="rounded-xl p-6"
             style="background-color: var(--nord1);"
@@ -454,9 +480,10 @@
               {/if}
               <p class="mt-2 text-xs opacity-50">Saved to: {result.output_path}</p>
 
-              {#if result.output_path && onOpenInViewer}
+              {#if result?.output_path && onOpenInViewer}
+                {@const outputPath = result.output_path}
                 <button
-                  onclick={() => onOpenInViewer(result.output_path!)}
+                  onclick={() => onOpenInViewer(outputPath)}
                   class="mt-4 flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg transition-colors hover:opacity-90"
                   style="background-color: var(--nord10); color: var(--nord6);"
                 >
@@ -538,3 +565,17 @@
     </div>
   </div>
 </div>
+
+<style>
+  @keyframes progress-slide {
+    0% {
+      transform: translateX(-100%);
+    }
+    50% {
+      transform: translateX(0%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+</style>
