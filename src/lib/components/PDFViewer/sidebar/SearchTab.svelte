@@ -9,9 +9,10 @@
     filePath: string;
     onNavigateToPage: (page: number) => void;
     onFileReload?: () => void;
+    externalSearchQuery?: string;
   }
 
-  let { filePath, onNavigateToPage, onFileReload }: Props = $props();
+  let { filePath, onNavigateToPage, onFileReload, externalSearchQuery = '' }: Props = $props();
 
   // OCR Analysis result type
   interface OcrAnalysis {
@@ -97,6 +98,16 @@
     } else if (query.length === 0) {
       searchResults = [];
       currentResultIndex = -1;
+    }
+  });
+
+  // React to external search query (from context menu)
+  let lastExternalQuery = '';
+  $effect(() => {
+    if (externalSearchQuery && externalSearchQuery !== lastExternalQuery) {
+      lastExternalQuery = externalSearchQuery;
+      searchQuery = externalSearchQuery;
+      // Debounced search will trigger automatically
     }
   });
 

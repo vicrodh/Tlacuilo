@@ -95,6 +95,13 @@
   let showPrintDialog = $state(false);
   let isPrinting = $state(false);
 
+  // Search trigger (for context menu -> search tab communication)
+  let searchTrigger = $state<{ text: string; timestamp: number } | null>(null);
+
+  function handleSearchText(text: string) {
+    searchTrigger = { text, timestamp: Date.now() };
+  }
+
   // Load annotations from PDF (industry standard - reads native PDF annotations)
   async function loadAnnotations() {
     try {
@@ -1242,6 +1249,8 @@
                     pageHeight={loadedPage.height}
                     scale={1}
                     store={annotationsStore}
+                    showAnnotationTools={showAnnotationTools}
+                    onSearchText={handleSearchText}
                   />
 
                   <!-- Annotation overlay (always render since PDF hides native annotations) -->
@@ -1296,6 +1305,7 @@
         onLoadThumbnail={loadThumbnail}
         onThumbnailScroll={handleThumbnailScroll}
         onFileReload={loadPDF}
+        {searchTrigger}
       />
     {/if}
   </div>

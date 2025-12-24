@@ -24,6 +24,7 @@
     onLoadThumbnail: (page: number) => void;
     onThumbnailScroll: () => void;
     onFileReload?: () => void;
+    searchTrigger?: { text: string; timestamp: number } | null;
   }
 
   let {
@@ -37,7 +38,11 @@
     onLoadThumbnail,
     onThumbnailScroll,
     onFileReload,
+    searchTrigger = null,
   }: Props = $props();
+
+  // State for passing search query to SearchTab
+  let externalSearchQuery = $state('');
 
   type TabId = 'pages' | 'annotations' | 'bookmarks' | 'search';
 
@@ -61,6 +66,18 @@
   function toggleCollapse() {
     isCollapsed = !isCollapsed;
   }
+
+  // React to external search trigger
+  let lastSearchTimestamp = 0;
+  $effect(() => {
+    if (searchTrigger && searchTrigger.timestamp !== lastSearchTimestamp) {
+      lastSearchTimestamp = searchTrigger.timestamp;
+      // Switch to search tab and set query
+      activeTab = 'search';
+      isCollapsed = false;
+      externalSearchQuery = searchTrigger.text;
+    }
+  });
 </script>
 
 <div class="sidebar" class:collapsed={isCollapsed}>
@@ -89,6 +106,7 @@
           {filePath}
           {onNavigateToPage}
           {onFileReload}
+          {externalSearchQuery}
         />
       {/if}
     </div>

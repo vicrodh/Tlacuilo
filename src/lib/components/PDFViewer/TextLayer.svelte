@@ -1,7 +1,8 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import type { AnnotationsStore, AnnotationType } from '$lib/stores/annotations.svelte';
+  import type { AnnotationsStore, AnnotationType, MarkupType } from '$lib/stores/annotations.svelte';
   import { getAuthorString } from '$lib/stores/settings.svelte';
+  import TextContextMenu from './TextContextMenu.svelte';
 
   interface NormalizedRect {
     x: number;
@@ -38,9 +39,14 @@
     pageHeight: number;
     scale?: number;
     store: AnnotationsStore;
+    showAnnotationTools?: boolean;
+    onSearchText?: (text: string) => void;
   }
 
-  let { pdfPath, page, pageWidth, pageHeight, scale = 1, store }: Props = $props();
+  let { pdfPath, page, pageWidth, pageHeight, scale = 1, store, showAnnotationTools = false, onSearchText }: Props = $props();
+
+  // Context menu state
+  let contextMenu = $state({ visible: false, x: 0, y: 0, text: '' });
 
   let textContent = $state<PageTextContent | null>(null);
   let loading = $state(false);
@@ -227,6 +233,86 @@
 
   // Check if annotation tools are visible (any tool active means toolbar is open)
   const annotationToolsVisible = $derived(store.activeTool !== null);
+
+  // Context menu handlers
+  function handleContextMenu(e: MouseEvent) {
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed) {
+      e.preventDefault();
+      contextMenu = {
+        visible: true,
+        x: e.clientX,
+        y: e.clientY,
+        text: selection.toString(),
+      };
+    }
+  }
+
+  function closeContextMenu() {
+    contextMenu = { visible: false, x: 0, y: 0, text: '' };
+  }
+
+  function handleCopy() {
+    navigator.clipboard.writeText(contextMenu.text);
+    window.getSelection()?.removeAllRanges();
+    closeContextMenu();
+  }
+
+  function handleHighlight() {
+    createMarkupFromSelection('highlight');
+    closeContextMenu();
+  }
+
+  function handleUnderline() {
+    createMarkupFromSelection('underline');
+    closeContextMenu();
+  }
+
+  function handleSearchFromMenu() {
+    const text = contextMenu.text;
+    window.getSelection()?.removeAllRanges();
+    closeContextMenu();
+    onSearchText?.(text);
+  }
+
+  function createMarkupFromSelection(type: MarkupType) {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) return;
+
+    const rects = getSelectionRects(selection);
+    if (rects.length === 0) return;
+
+    const author = getAuthorString() || undefined;
+
+    for (const rect of rects) {
+      store.addAnnotation({
+        type,
+        page,
+        rect,
+        color: store.activeColor,
+        opacity: type === 'highlight' ? 0.3 : 0.8,
+        author,
+      });
+    }
+
+    selection.removeAllRanges();
+  }
+
+  // Close context menu on outside click
+  function handleDocumentClick(e: MouseEvent) {
+    if (contextMenu.visible) {
+      closeContextMenu();
+    }
+  }
+
+  $effect(() => {
+    if (contextMenu.visible) {
+      document.addEventListener('click', handleDocumentClick);
+      return () => {
+        document.removeEventListener('click', handleDocumentClick);
+      };
+    }
+  });
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -242,6 +328,7 @@
     cursor: text;
   "
   onmouseup={handleMouseUp}
+  oncontextmenu={handleContextMenu}
 >
   {#if textContent}
     {#each textContent.blocks as block}
@@ -264,6 +351,20 @@
     {/each}
   {/if}
 </div>
+
+<!-- Context menu (rendered outside text layer for proper z-index) -->
+<TextContextMenu
+  visible={contextMenu.visible}
+  x={contextMenu.x}
+  y={contextMenu.y}
+  selectedText={contextMenu.text}
+  showAnnotationActions={showAnnotationTools}
+  onCopy={handleCopy}
+  onHighlight={handleHighlight}
+  onUnderline={handleUnderline}
+  onSearch={handleSearchFromMenu}
+  onClose={closeContextMenu}
+/>
 
 <style>
   .text-layer {
