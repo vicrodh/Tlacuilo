@@ -359,6 +359,9 @@
   // Check if text-select mode is active (for annotation creation via mouseup)
   const isTextSelectMode = $derived(store.activeTool === 'text-select');
 
+  // TextLayer should capture events only in text-select mode or when no tool is active (for copy)
+  const shouldCaptureEvents = $derived(store.activeTool === null || store.activeTool === 'text-select');
+
   // Context menu handlers
   function handleContextMenu(e: MouseEvent) {
     // Use our custom selection
@@ -600,10 +603,10 @@
   style="
     width: {pageWidth * scale}px;
     height: {pageHeight * scale}px;
-    pointer-events: auto;
+    pointer-events: {shouldCaptureEvents ? 'auto' : 'none'};
     user-select: none;
     z-index: {isTextSelectMode ? 20 : 5};
-    cursor: text;
+    cursor: {shouldCaptureEvents ? 'text' : 'default'};
   "
   onmousedown={handleMouseDown}
   onmousemove={handleMouseMove}
