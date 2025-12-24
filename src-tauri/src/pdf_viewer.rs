@@ -8,7 +8,7 @@
 
 use base64::Engine;
 use mupdf::text_page::TextPageOptions;
-use mupdf::{Colorspace, Document, Matrix, Outline as MuOutline};
+use mupdf::{Colorspace, Document, Matrix, MetadataName, Outline as MuOutline};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 
@@ -445,4 +445,69 @@ pub fn pdf_get_outlines(path: String) -> Result<Vec<OutlineEntry>, String> {
         .collect();
 
     Ok(entries)
+}
+
+/// PDF document metadata
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PdfMetadata {
+    /// PDF format/version (e.g., "PDF 1.7")
+    pub format: Option<String>,
+    /// Encryption info
+    pub encryption: Option<String>,
+    /// Document title
+    pub title: Option<String>,
+    /// Author name
+    pub author: Option<String>,
+    /// Subject/description
+    pub subject: Option<String>,
+    /// Keywords
+    pub keywords: Option<String>,
+    /// Software that created the document
+    pub creator: Option<String>,
+    /// Software that produced the PDF
+    pub producer: Option<String>,
+    /// Creation date (raw PDF format)
+    pub creation_date: Option<String>,
+    /// Modification date (raw PDF format)
+    pub mod_date: Option<String>,
+    /// Number of pages
+    pub page_count: u32,
+    /// File size in bytes
+    pub file_size: u64,
+}
+
+/// Get PDF metadata
+#[tauri::command]
+pub fn pdf_get_metadata(path: String) -> Result<PdfMetadata, String> {
+    let document = Document::open(&path)
+        .map_err(|e| format!("Failed to load PDF: {:?}", e))?;
+
+    let page_count = document
+        .page_count()
+        .map_err(|e| format!("Failed to get page count: {:?}", e))? as u32;
+
+    // Helper to get metadata, returning None for empty strings
+    let get_meta = |name: MetadataName| -> Option<String> {
+        document.metadata(name).ok().filter(|s| !s.is_empty())
+    };
+
+    // Get file size
+    let file_size = std::fs::metadata(&path)
+        .map(|m| m.len())
+        .unwrap_or(0);
+
+    Ok(PdfMetadata {
+        format: get_meta(MetadataName::Format),
+        encryption: get_meta(MetadataName::Encryption),
+        title: get_meta(MetadataName::Title),
+        author: get_meta(MetadataName::Author),
+        subject: get_meta(MetadataName::Subject),
+        keywords: get_meta(MetadataName::Keywords),
+        creator: get_meta(MetadataName::Creator),
+        producer: get_meta(MetadataName::Producer),
+        creation_date: get_meta(MetadataName::CreationDate),
+        mod_date: get_meta(MetadataName::ModDate),
+        page_count,
+        file_size,
+    })
 }

@@ -883,6 +883,7 @@ pub fn run() {
       pdf_viewer::pdf_close,
       pdf_viewer::pdf_get_text_blocks,
       pdf_viewer::pdf_get_outlines,
+      pdf_viewer::pdf_get_metadata,
       // Annotations (JSON file-based)
       annotations::annotations_save,
       annotations::annotations_load,
