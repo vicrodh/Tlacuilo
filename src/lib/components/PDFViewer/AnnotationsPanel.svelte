@@ -277,14 +277,14 @@
                             {#if showColorPicker === annotation.id}
                               <div
                                 class="absolute right-full top-0 mr-1 rounded-lg shadow-lg p-2 z-50"
-                                style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+                                style="background-color: var(--nord1); border: 1px solid var(--nord3); width: 120px;"
                               >
-                                <div class="grid grid-cols-4 gap-1">
+                                <div class="grid grid-cols-4 gap-1.5">
                                   {#each HIGHLIGHT_COLORS as color}
                                     <button
                                       onclick={(e) => applyColor(e, annotation.id, color.value)}
-                                      class="w-5 h-5 rounded border transition-transform hover:scale-110"
-                                      style="background-color: {color.value}; border-color: {annotation.color === color.value ? 'var(--nord6)' : 'var(--nord3)'};"
+                                      class="w-6 h-6 rounded border-2 transition-transform hover:scale-110"
+                                      style="background-color: {color.value}; border-color: {annotation.color === color.value ? 'var(--nord6)' : 'transparent'};"
                                       title={color.name}
                                     ></button>
                                   {/each}
