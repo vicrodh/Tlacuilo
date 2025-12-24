@@ -1,139 +1,161 @@
 # Tlacuilo
 
-Tlacuilo is a full-featured offline PDF toolkit for Linux built with Tauri (Rust) + Svelte 5/TypeScript and a Python 3.12 backend (PyMuPDF, pikepdf, Pillow). Features a modular architecture with a unified PDF viewer component, persistent user settings, and a clean Nord-themed UI.
+A full-featured offline PDF toolkit for Linux. Built with privacy in mind - all processing happens locally on your machine.
+
+## Features
+
+### PDF Viewer & Annotations
+- High-quality PDF rendering powered by MuPDF
+- Multi-tab document viewer
+- Full annotation support: highlights, underlines, strikethrough, comments, freetext, shapes, arrows, sequence numbers
+- Text selection with context menu (copy, search, annotate)
+- Search with highlight and navigation
+- Save annotations embedded in PDF or as XFDF
+- Print support with annotation options
+
+### PDF Operations
+- **Merge**: Combine multiple PDFs with drag-and-drop page reordering
+- **Split**: Extract pages, ranges, or create multiple documents
+- **Rotate**: Per-page or batch rotation with visual preview
+- **Compress**: Reduce file size with configurable quality levels
+
+### Conversion
+- **Images to PDF**: JPG, PNG, WEBP, TIFF, BMP with per-image transforms
+- **PDF to Images**: Export pages as PNG, JPG, WEBP, or TIFF at configurable DPI
+- **Office to PDF**: DOCX, XLSX, PPTX, ODT via LibreOffice
+- **Markdown to PDF**: With syntax highlighting and custom styles
+
+### OCR
+- Automatic OCR detection for scanned documents
+- Multi-language support (Tesseract)
+- Progress indication and batch processing
+
+### UI/UX
+- Clean Nord-themed interface
+- Persistent settings and recent files
+- Customizable favorites in sidebar
+- Keyboard shortcuts
 
 ## Stack
-- Frontend: Svelte 5 (runes) + Vite + Tailwind CSS
-- Desktop shell: Tauri 2.x with tauri-plugin-store for persistence
-- PDF Rendering: MuPDF (Rust) - high-quality (links common deps from the system to avoid GTK crashes on Linux)
-- Backend: Python 3.12 (PyMuPDF, pikepdf, pypdf, reportlab, Pillow)
-- Theme: Nord color palette
-- License: AGPL-3.0 (required by MuPDF)
 
-## Contributing
-We are not accepting pull requests right now. Please open an issue if you have a suggestion.
-See `CONTRIBUTING.md` for details.
+| Layer | Technology |
+|-------|------------|
+| Frontend | [Svelte 5](https://svelte.dev/) (runes) + [Vite](https://vitejs.dev/) + [Tailwind CSS](https://tailwindcss.com/) |
+| Desktop | [Tauri 2.x](https://tauri.app/) (Rust) |
+| PDF Rendering | [MuPDF](https://mupdf.com/) via Rust bindings |
+| PDF Processing | [PyMuPDF](https://pymupdf.readthedocs.io/), [pikepdf](https://pikepdf.readthedocs.io/), [pypdf](https://pypdf.readthedocs.io/) |
+| OCR | [OCRmyPDF](https://ocrmypdf.readthedocs.io/) + [Tesseract](https://tesseract-ocr.github.io/) |
+| Icons | [Lucide](https://lucide.dev/) |
+| Theme | [Nord](https://www.nordtheme.com/) |
 
 ## Prerequisites
+
 - Node.js 18+ and npm
 - Rust toolchain (for Tauri)
 - Python 3.12.x
-- Build deps (Linux): `pkg-config`, `libjpeg`, `zlib`, `freetype2`, `harfbuzz`
-- System libs (optional): libreoffice-fresh (Office conversions), ghostscript (compression), tesseract-ocr (OCR)
 
-### Linux build dependencies (by distro)
+### System Dependencies
 
-MuPDF is configured to link common dependencies from the system on Linux to avoid hard crashes in GTK file dialogs.
+#### Build dependencies (Linux)
 
-- Arch Linux:
-  - `sudo pacman -S --needed pkgconf libjpeg-turbo zlib freetype2 harfbuzz`
-- Debian/Ubuntu:
-  - `sudo apt-get install -y pkg-config libjpeg62-turbo-dev zlib1g-dev libfreetype6-dev libharfbuzz-dev`
-- Fedora:
-  - `sudo dnf install -y pkgconf-pkg-config libjpeg-turbo-devel zlib-devel freetype-devel harfbuzz-devel`
+MuPDF links common dependencies from the system to avoid conflicts with GTK file dialogs.
 
-### Linux file dialogs (KDE / GNOME)
-
-On Linux we default to the XDG Desktop Portal file dialogs for better Wayland + KDE/GNOME integration.
-
-- Runtime packages:
-  - KDE Plasma: `xdg-desktop-portal` + `xdg-desktop-portal-kde`
-  - GNOME: `xdg-desktop-portal` + `xdg-desktop-portal-gtk`
-- Debug override:
-  - Disable portal dialogs: `TLACUILO_GTK_USE_PORTAL=0`
-  - Force portal dialogs: `TLACUILO_GTK_USE_PORTAL=1`
-
-## Install
+**Arch Linux:**
 ```bash
-npm install
+sudo pacman -S --needed pkgconf libjpeg-turbo zlib freetype2 harfbuzz
 ```
 
-### Python backend
+**Debian/Ubuntu:**
 ```bash
+sudo apt-get install -y pkg-config libjpeg62-turbo-dev zlib1g-dev libfreetype6-dev libharfbuzz-dev
+```
+
+**Fedora:**
+```bash
+sudo dnf install -y pkgconf-pkg-config libjpeg-turbo-devel zlib-devel freetype-devel harfbuzz-devel
+```
+
+#### Optional dependencies
+
+| Feature | Package |
+|---------|---------|
+| Office conversion | `libreoffice-fresh` |
+| PDF compression | `ghostscript` |
+| OCR | `tesseract` + language packs (e.g., `tesseract-data-eng`, `tesseract-data-spa`) |
+
+#### File dialogs (Linux)
+
+For better Wayland + KDE/GNOME integration, install XDG Desktop Portal:
+
+- **KDE Plasma**: `xdg-desktop-portal` + `xdg-desktop-portal-kde`
+- **GNOME**: `xdg-desktop-portal` + `xdg-desktop-portal-gtk`
+
+## Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/vicrodh/Tlacuilo.git
+cd Tlacuilo
+
+# Install frontend dependencies
+npm install
+
+# Setup Python backend
 python3.12 -m venv backend/venv
 backend/venv/bin/pip install --upgrade pip
 backend/venv/bin/pip install -r backend/requirements.txt
 ```
 
-## Run
-- Frontend only: `npm run dev`
-- Tauri desktop (bundles frontend + Rust shell): `npm run tauri:dev`
-- Python CLI (dev, pages): `python backend/pdf_pages.py merge --inputs a.pdf b.pdf --output out.pdf`
+## Development
+
+```bash
+# Frontend only (browser)
+npm run dev
+
+# Full desktop app
+npm run tauri:dev
+```
 
 ## Build
-- Production bundle: `npm run tauri:build`
 
-## Project Structure
-```
-.
-├── src/
-│   ├── lib/
-│   │   ├── components/     # Reusable UI components
-│   │   │   ├── PDFViewer/  # Unified PDF viewer module
-│   │   │   └── Sidebar.svelte
-│   │   ├── stores/         # Svelte stores (settings, status)
-│   │   ├── views/          # Feature views (Merge, Split, etc.)
-│   │   └── utils/          # Helpers (pdfjs wrapper, etc.)
-│   └── routes/             # SvelteKit routes
-├── src-tauri/              # Tauri Rust project
-├── backend/                # Python backend (venv + libs)
-└── static/                 # Static assets
-```
-
-## Conventions
-- Code and comments: English. No emojis. Comments explain intent, not the obvious.
-- Functions: small, reusable, defensive defaults.
-- Keep files focused; avoid monolith components/stores.
-
-## Current Features
-
-### PDF Operations
-- **Merge PDFs**: Drag-and-drop file/page ordering with unified viewer preview
-- **Split PDFs**: All pages, selected pages, or custom groups with thumbnail selector
-- **Rotate PDFs**: Per-page or per-group angles with visual preview
-
-### Conversion
-- **Images to PDF**: Convert JPG, PNG, WEBP, TIFF, BMP with per-image transforms (rotate, flip)
-- **PDF to Images**: Export pages as PNG, JPG, WEBP, or TIFF at configurable DPI
-
-### UI/UX
-- **High-Quality PDF Viewer**: MuPDF-powered viewer with Sumatra PDF-level rendering quality, toolbar, sidebar thumbnails, zoom controls, and panning support
-- **Persistent Settings**: User favorites and recent files stored via tauri-plugin-store
-- **Dynamic Dashboard**: Expandable tool groups with macOS-style dropdowns
-- **Customizable Favorites**: User-configurable quick access in sidebar
-
-## Planned Features
-- Document to PDF conversion (DOCX, XLSX, PPTX, ODT via LibreOffice)
-- Markdown to PDF conversion
-- PDF compression (Ghostscript)
-- OCR text extraction (Tesseract)
-- Digital signatures
-- Detachable viewer windows
-- Form field editing
-
-## Known Issues
-
-### File dialog crash on Linux (KDE)
-
-**Symptoms**: Application crashes when selecting a file in the native file picker (before clicking Open).
-
-**Cause**: Conflict with certain PDF applications installed via Flatpak or system packages that may interfere with the GTK/Qt file dialog or PDF library bindings.
-
-**Known conflicting applications** (tested on Arch Linux/KDE Plasma):
-- `com.github.jeromerobert.pdfarranger` (PDF Arranger) - Flatpak
-- `com.github.junrrein.PDFSlicer` (PDF Slicer) - Flatpak
-- `eu.scarpetta.PDFMixTool` (PDF Mix Tool) - Flatpak
-- `sumatrapdf` (Sumatra PDF via Wine) - AUR package
-
-**Solution**: Uninstall conflicting applications:
 ```bash
-# Flatpak apps
-flatpak uninstall com.github.jeromerobert.pdfarranger
-flatpak uninstall com.github.junrrein.PDFSlicer
-flatpak uninstall eu.scarpetta.PDFMixTool
-
-# AUR packages
-yay -R sumatrapdf
+npm run tauri:build
 ```
 
-**Note**: This issue is external to Tlacuilo and relates to system-level library conflicts. The crash does not occur in a clean environment.
+## Attributions
+
+### Core Technologies
+
+- **[MuPDF](https://mupdf.com/)** - High-performance PDF rendering engine (AGPL-3.0)
+- **[Tauri](https://tauri.app/)** - Desktop application framework
+- **[Svelte](https://svelte.dev/)** - Frontend framework
+- **[PyMuPDF](https://pymupdf.readthedocs.io/)** - Python bindings for MuPDF
+- **[pikepdf](https://pikepdf.readthedocs.io/)** - PDF manipulation library
+- **[OCRmyPDF](https://ocrmypdf.readthedocs.io/)** - OCR processing
+- **[Tesseract OCR](https://tesseract-ocr.github.io/)** - OCR engine
+
+### Design
+
+- **[Nord Theme](https://www.nordtheme.com/)** - Color palette
+- **[Lucide Icons](https://lucide.dev/)** - Icon set
+
+### Inspiration
+
+- **[Sumatra PDF](https://www.sumatrapdfreader.org/)** - MuPDF-based reader with excellent rendering quality
+- **[Stirling PDF](https://github.com/Stirling-Tools/Stirling-PDF)** - Comprehensive open-source PDF toolkit
+
+## Contributing
+
+We are not accepting pull requests at this time. Please open an issue if you have suggestions.
+
+## License
+
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+This license is required because Tlacuilo uses [MuPDF](https://mupdf.com/), which is licensed under AGPL-3.0. Under the terms of AGPL-3.0:
+
+- You may use, modify, and distribute this software
+- If you modify and distribute this software, you must release your modifications under AGPL-3.0
+- If you run a modified version on a server and let others interact with it, you must make the source code available
+
+See [LICENSE](LICENSE) for the full license text.
