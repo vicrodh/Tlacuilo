@@ -108,12 +108,17 @@
           class="thumbnail-frame"
           class:active={currentPage === pageNum}
         >
-          <div class="thumbnail-inner">
+          <div
+            class="thumbnail-inner"
+            style={thumb ? `aspect-ratio: ${thumb.width} / ${thumb.height};` : 'aspect-ratio: 8.5 / 11;'}
+          >
             {#if thumb}
               <img
                 src="data:image/png;base64,{thumb.data}"
                 alt="Page {pageNum}"
                 class="thumbnail-img"
+                width={thumb.width}
+                height={thumb.height}
               />
             {:else if isLoading}
               <div class="loading-spinner"></div>
@@ -203,17 +208,17 @@
   }
 
   .thumbnail-inner {
-    aspect-ratio: 3 / 4;
     display: flex;
     align-items: center;
     justify-content: center;
     background-color: white;
+    /* aspect-ratio is set dynamically via inline style */
   }
 
   .thumbnail-img {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
   }
 
   .loading-spinner {
