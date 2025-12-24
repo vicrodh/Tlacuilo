@@ -121,10 +121,11 @@ The viewer is usable for daily work. Manipulation tools (merge, split, rotate, c
 ## Mid-term
 
 ### AcroForms
-- [ ] Detect form fields
-- [ ] Fill fields (text, checkbox, radio, dropdown)
-- [ ] Save filled form
-- [ ] Basic validations
+- [x] Detect form fields
+- [x] Fill fields (text, checkbox, radio, dropdown)
+- [x] Save filled form (pending: save button integration)
+- [x] Form mode toggle with field counter
+- [x] Light-themed styled controls
 
 ### Callouts
 - [ ] Freetext with connector line
