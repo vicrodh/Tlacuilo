@@ -149,7 +149,7 @@ The viewer is usable for daily work. Manipulation tools (merge, split, rotate, c
 
 ### Protection / Security
 - [x] Unlock PDF (remove restrictions)
-- [ ] Encrypt PDF (add password)
+- [x] Encrypt PDF (add password)
 - [x] Remove password protection
 
 ### Redaction

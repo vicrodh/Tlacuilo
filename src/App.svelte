@@ -22,6 +22,7 @@
   import PlaceholderPage from './lib/views/PlaceholderPage.svelte';
   import SignaturesPDF from './lib/views/SignaturesPDF.svelte';
   import UnlockPDF from './lib/views/UnlockPDF.svelte';
+  import EncryptPDF from './lib/views/EncryptPDF.svelte';
   import { getStatus, toggleExpanded, clearLogs, setPendingOpenFile, type LogLevel } from './lib/stores/status.svelte';
   import { getGlobalTabsStore } from './lib/stores/tabs.svelte';
   import { getSettings } from '$lib/stores/settings.svelte';
@@ -237,6 +238,8 @@
         <SignaturesPDF onNavigate={navigate} />
       {:else if currentPage === 'decrypt'}
         <UnlockPDF />
+      {:else if currentPage === 'encrypt'}
+        <EncryptPDF />
       {:else if currentPage !== 'viewer'}
         <PlaceholderPage pageName={currentPage} />
       {/if}
