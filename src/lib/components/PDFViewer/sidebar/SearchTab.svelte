@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { Search, CheckCircle, AlertTriangle, Loader2, FileText, XCircle } from 'lucide-svelte';
+  import { Search, CheckCircle, AlertTriangle, Loader2, FileText, XCircle, ChevronUp, ChevronDown, X } from 'lucide-svelte';
   import InlineNotification from '../InlineNotification.svelte';
   import { debugLog } from '$lib/stores/debugLog.svelte';
 
@@ -49,6 +49,8 @@
   let searchResults = $state<SearchResult[]>([]);
   let isSearching = $state(false);
   let totalPages = $state(0);
+  let currentResultIndex = $state(-1);
+  let searchTimeout: ReturnType<typeof setTimeout>;
 
   // Cache analysis by file path
   let analysisCache = new Map<string, OcrAnalysis>();
@@ -76,7 +78,25 @@
       showErrorNotification = true;
       searchQuery = '';
       searchResults = [];
+      currentResultIndex = -1;
       analyzeDocument();
+    }
+  });
+
+  // Debounced search - triggers when searchQuery changes
+  $effect(() => {
+    const query = searchQuery;
+    if (searchState !== 'searchable') return;
+
+    clearTimeout(searchTimeout);
+
+    if (query.length >= 2) {
+      searchTimeout = setTimeout(() => {
+        handleSearch();
+      }, 300);
+    } else if (query.length === 0) {
+      searchResults = [];
+      currentResultIndex = -1;
     }
   });
 
@@ -222,13 +242,48 @@
     }
   }
 
-  function handleResultClick(result: SearchResult) {
+  function handleResultClick(result: SearchResult, index: number) {
+    currentResultIndex = index;
     onNavigateToPage(result.page);
   }
 
+  function nextResult() {
+    if (searchResults.length === 0) return;
+    currentResultIndex = (currentResultIndex + 1) % searchResults.length;
+    onNavigateToPage(searchResults[currentResultIndex].page);
+  }
+
+  function prevResult() {
+    if (searchResults.length === 0) return;
+    currentResultIndex = currentResultIndex <= 0
+      ? searchResults.length - 1
+      : currentResultIndex - 1;
+    onNavigateToPage(searchResults[currentResultIndex].page);
+  }
+
+  function clearSearch() {
+    searchQuery = '';
+    searchResults = [];
+    currentResultIndex = -1;
+  }
+
   function handleKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Enter') {
-      handleSearch();
+    // F3 or Enter: next result
+    if (e.key === 'F3' || e.key === 'Enter') {
+      e.preventDefault();
+      if (searchResults.length > 0) {
+        if (e.shiftKey) {
+          prevResult();
+        } else {
+          nextResult();
+        }
+      } else if (e.key === 'Enter') {
+        handleSearch();
+      }
+    }
+    // Escape: clear search
+    if (e.key === 'Escape') {
+      clearSearch();
     }
   }
 
@@ -327,21 +382,51 @@
           />
           {#if isSearching}
             <Loader2 size={16} class="loading-icon animate-spin" />
+          {:else if searchQuery.length > 0}
+            <button class="clear-btn" onclick={clearSearch} title="Clear search (Esc)">
+              <X size={14} />
+            </button>
           {/if}
         </div>
 
-        <button class="search-btn" onclick={handleSearch} disabled={isSearching}>
-          Search
-        </button>
+        <!-- Navigation bar with result count and prev/next -->
+        {#if searchResults.length > 0}
+          <div class="nav-bar">
+            <span class="result-indicator">
+              {currentResultIndex >= 0 ? currentResultIndex + 1 : 0} / {searchResults.length}
+            </span>
+            <div class="nav-buttons">
+              <button
+                class="nav-btn"
+                onclick={prevResult}
+                title="Previous result (Shift+F3)"
+                disabled={searchResults.length === 0}
+              >
+                <ChevronUp size={14} />
+              </button>
+              <button
+                class="nav-btn"
+                onclick={nextResult}
+                title="Next result (F3)"
+                disabled={searchResults.length === 0}
+              >
+                <ChevronDown size={14} />
+              </button>
+            </div>
+          </div>
+        {/if}
       </div>
 
       <!-- Search Results -->
       {#if searchResults.length > 0}
         <div class="results-container">
-          <p class="results-count">{searchResults.length} result{searchResults.length !== 1 ? 's' : ''}</p>
           <div class="results-list">
-            {#each searchResults as result (result.page + result.context)}
-              <button class="result-item" onclick={() => handleResultClick(result)}>
+            {#each searchResults as result, index (result.page + '-' + index)}
+              <button
+                class="result-item"
+                class:active={index === currentResultIndex}
+                onclick={() => handleResultClick(result, index)}
+              >
                 <span class="result-page">Page {result.page}</span>
                 <span class="result-context">{result.context}</span>
               </button>
@@ -484,9 +569,71 @@
     color: var(--nord8);
   }
 
+  .clear-btn {
+    position: absolute;
+    right: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    border: none;
+    background: transparent;
+    color: var(--nord4);
+    opacity: 0.6;
+    cursor: pointer;
+    border-radius: 0.25rem;
+    transition: opacity 0.15s, background-color 0.15s;
+  }
+
+  .clear-btn:hover {
+    opacity: 1;
+    background-color: var(--nord2);
+  }
+
+  .nav-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.25rem 0;
+  }
+
+  .result-indicator {
+    font-size: 0.75rem;
+    color: var(--nord4);
+    opacity: 0.8;
+  }
+
+  .nav-buttons {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    border: none;
+    background-color: var(--nord2);
+    color: var(--nord4);
+    cursor: pointer;
+    border-radius: 0.25rem;
+    transition: background-color 0.15s, color 0.15s;
+  }
+
+  .nav-btn:hover:not(:disabled) {
+    background-color: var(--nord3);
+    color: var(--nord6);
+  }
+
+  .nav-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
   .search-input {
     width: 100%;
-    padding: 0.5rem 2rem 0.5rem 2.25rem;
+    padding: 0.5rem 2.25rem 0.5rem 2.25rem;
     border-radius: 0.375rem;
     border: 1px solid var(--nord3);
     background-color: var(--nord0);
@@ -557,6 +704,11 @@
 
   .result-item:hover {
     background-color: var(--nord3);
+  }
+
+  .result-item.active {
+    background-color: var(--nord3);
+    border-left: 2px solid var(--nord8);
   }
 
   .result-page {
