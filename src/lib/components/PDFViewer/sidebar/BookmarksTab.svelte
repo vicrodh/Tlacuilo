@@ -12,7 +12,8 @@
     Trash2,
     Pencil,
     Check,
-    X
+    X,
+    Search
   } from 'lucide-svelte';
   import {
     getBookmarksForFile,
@@ -63,6 +64,41 @@
   // Section visibility
   let outlinesExpanded = $state(true);
   let bookmarksExpanded = $state(true);
+
+  // Search state
+  let searchQuery = $state('');
+
+  // Filtered bookmarks
+  const filteredBookmarks = $derived(() => {
+    if (!searchQuery.trim()) return userBookmarks;
+    const query = searchQuery.toLowerCase();
+    return userBookmarks.filter(bm =>
+      bm.title.toLowerCase().includes(query) ||
+      bm.page.toString().includes(query)
+    );
+  });
+
+  // Filter outline entries recursively
+  function filterOutlines(entries: OutlineEntry[], query: string): OutlineEntry[] {
+    if (!query.trim()) return entries;
+    const lowerQuery = query.toLowerCase();
+
+    return entries.reduce((acc: OutlineEntry[], entry) => {
+      const titleMatches = entry.title.toLowerCase().includes(lowerQuery);
+      const pageMatches = entry.page?.toString().includes(query);
+      const filteredChildren = filterOutlines(entry.children, query);
+
+      if (titleMatches || pageMatches || filteredChildren.length > 0) {
+        acc.push({
+          ...entry,
+          children: filteredChildren
+        });
+      }
+      return acc;
+    }, []);
+  }
+
+  const filteredOutlines = $derived(() => filterOutlines(outlines, searchQuery));
 
   // Load both outlines and bookmarks when file changes
   $effect(() => {
@@ -244,6 +280,22 @@
 {/snippet}
 
 <div class="bookmarks-tab">
+  <!-- Search Input -->
+  <div class="search-container">
+    <Search size={14} class="search-icon" />
+    <input
+      type="text"
+      bind:value={searchQuery}
+      placeholder="Search bookmarks..."
+      class="search-input"
+    />
+    {#if searchQuery}
+      <button class="clear-btn" onclick={() => searchQuery = ''} title="Clear search">
+        <X size={12} />
+      </button>
+    {/if}
+  </div>
+
   <div class="content">
     <!-- User Bookmarks Section -->
     <div class="section">
@@ -262,7 +314,13 @@
           <Bookmark size={14} class="section-icon" />
           <span class="section-title">Bookmarks</span>
           {#if userBookmarks.length > 0}
-            <span class="count">{userBookmarks.length}</span>
+            <span class="count">
+              {#if searchQuery && filteredBookmarks().length !== userBookmarks.length}
+                {filteredBookmarks().length}/{userBookmarks.length}
+              {:else}
+                {userBookmarks.length}
+              {/if}
+            </span>
           {/if}
         </button>
         <button
@@ -289,9 +347,13 @@
                 <span>Add bookmark</span>
               </button>
             </div>
+          {:else if searchQuery && filteredBookmarks().length === 0}
+            <div class="empty-section">
+              <p>No matches found</p>
+            </div>
           {:else}
             <div class="bookmark-list">
-              {#each userBookmarks as bookmark (bookmark.id)}
+              {#each filteredBookmarks() as bookmark (bookmark.id)}
                 <div class="bookmark-item" class:active={bookmark.page === currentPage}>
                   {#if editingBookmarkId === bookmark.id}
                     <div class="bookmark-edit">
@@ -361,7 +423,13 @@
           <BookMarked size={14} class="section-icon" />
           <span class="section-title">Table of Contents</span>
           {#if outlines.length > 0}
-            <span class="count">{countOutlineItems(outlines)}</span>
+            <span class="count">
+              {#if searchQuery && countOutlineItems(filteredOutlines()) !== countOutlineItems(outlines)}
+                {countOutlineItems(filteredOutlines())}/{countOutlineItems(outlines)}
+              {:else}
+                {countOutlineItems(outlines)}
+              {/if}
+            </span>
           {/if}
         </button>
       </div>
@@ -382,9 +450,13 @@
             <div class="empty-section">
               <p>No table of contents</p>
             </div>
+          {:else if searchQuery && filteredOutlines().length === 0}
+            <div class="empty-section">
+              <p>No matches found</p>
+            </div>
           {:else}
             <div class="outline-list">
-              {@render outlineTree(outlines, 0, '0')}
+              {@render outlineTree(filteredOutlines(), 0, '0')}
             </div>
           {/if}
         </div>
@@ -399,6 +471,59 @@
     flex-direction: column;
     height: 100%;
     overflow: hidden;
+  }
+
+  /* Search styles */
+  .search-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--nord2);
+  }
+
+  .search-container :global(.search-icon) {
+    flex-shrink: 0;
+    opacity: 0.4;
+  }
+
+  .search-input {
+    flex: 1;
+    padding: 0.375rem 0.5rem;
+    background-color: var(--nord0);
+    border: 1px solid var(--nord3);
+    border-radius: 4px;
+    color: var(--nord6);
+    font-size: 0.75rem;
+    outline: none;
+  }
+
+  .search-input:focus {
+    border-color: var(--nord8);
+  }
+
+  .search-input::placeholder {
+    color: var(--nord4);
+    opacity: 0.5;
+  }
+
+  .clear-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    color: var(--nord4);
+    cursor: pointer;
+    opacity: 0.6;
+  }
+
+  .clear-btn:hover {
+    opacity: 1;
+    background-color: var(--nord3);
   }
 
   .content {

@@ -7,7 +7,6 @@
     Trash2,
     ChevronDown,
     ChevronRight,
-    ChevronLeft,
     Type,
     Pencil,
     Square,
@@ -18,6 +17,8 @@
     MoreVertical,
     Palette,
     Navigation,
+    Search,
+    X,
   } from 'lucide-svelte';
   import { ask } from '@tauri-apps/plugin-dialog';
   import type { AnnotationsStore, Annotation } from '$lib/stores/annotations.svelte';
@@ -34,12 +35,31 @@
   let openMenuId = $state<string | null>(null);
   let showColorPicker = $state<string | null>(null);
 
-  // Group annotations by page
+  // Search state
+  let searchQuery = $state('');
+
+  // Filter annotations by search query
+  function matchesSearch(ann: Annotation, query: string): boolean {
+    if (!query.trim()) return true;
+    const lowerQuery = query.toLowerCase();
+    const label = getLabel(ann.type).toLowerCase();
+    const text = (ann.text || '').toLowerCase();
+    const author = (ann.author || '').toLowerCase();
+    const page = ann.page.toString();
+
+    return label.includes(lowerQuery) ||
+           text.includes(lowerQuery) ||
+           author.includes(lowerQuery) ||
+           page.includes(query);
+  }
+
+  // Group annotations by page (with optional filtering)
   const annotationsByPage = $derived(() => {
     const grouped = new Map<number, Annotation[]>();
     const all = store.getAllAnnotations();
 
     for (const ann of all) {
+      if (!matchesSearch(ann, searchQuery)) continue;
       const pageAnns = grouped.get(ann.page) || [];
       pageAnns.push(ann);
       grouped.set(ann.page, pageAnns);
@@ -49,6 +69,13 @@
   });
 
   const totalCount = $derived(store.getAllAnnotations().length);
+  const filteredCount = $derived(() => {
+    let count = 0;
+    for (const anns of annotationsByPage().values()) {
+      count += anns.length;
+    }
+    return count;
+  });
 
   // Collapsed pages state
   let collapsedPages = $state<Set<number>>(new Set());
@@ -161,8 +188,33 @@
       class="text-xs px-2 py-0.5 rounded-full"
       style="background-color: var(--nord2); color: var(--nord4);"
     >
-      {totalCount}
+      {#if searchQuery && filteredCount() !== totalCount}
+        {filteredCount()}/{totalCount}
+      {:else}
+        {totalCount}
+      {/if}
     </span>
+  </div>
+
+  <!-- Search -->
+  <div class="flex items-center gap-2 px-3 py-2 border-b" style="border-color: var(--nord3);">
+    <Search size={14} class="opacity-40 flex-shrink-0" />
+    <input
+      type="text"
+      bind:value={searchQuery}
+      placeholder="Search annotations..."
+      class="flex-1 bg-[var(--nord0)] border border-[var(--nord3)] rounded px-2 py-1 text-xs outline-none focus:border-[var(--nord8)]"
+      style="color: var(--nord6);"
+    />
+    {#if searchQuery}
+      <button
+        onclick={() => searchQuery = ''}
+        class="opacity-60 hover:opacity-100"
+        title="Clear search"
+      >
+        <X size={12} />
+      </button>
+    {/if}
   </div>
 
   <!-- Content -->
@@ -173,6 +225,14 @@
         <p class="text-sm opacity-60">No annotations yet</p>
         <p class="text-xs opacity-40 mt-1">
           Use the annotation tools to add highlights and comments
+        </p>
+      </div>
+    {:else if searchQuery && filteredCount() === 0}
+      <div class="flex flex-col items-center justify-center h-full px-4 text-center">
+        <Search size={32} class="opacity-30 mb-2" />
+        <p class="text-sm opacity-60">No matches found</p>
+        <p class="text-xs opacity-40 mt-1">
+          Try a different search term
         </p>
       </div>
     {:else}
@@ -264,21 +324,22 @@
                           </button>
 
                           <!-- Change color -->
-                          <div class="relative">
+                          <div>
                             <button
                               onclick={(e) => handleChangeColor(e, annotation.id)}
                               class="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--nord2)] transition-colors text-left"
                             >
-                              <ChevronLeft size={10} class="opacity-50" />
                               <Palette size={12} />
                               <span>Change color</span>
+                              {#if showColorPicker === annotation.id}
+                                <ChevronDown size={10} class="ml-auto opacity-50" />
+                              {:else}
+                                <ChevronRight size={10} class="ml-auto opacity-50" />
+                              {/if}
                             </button>
 
                             {#if showColorPicker === annotation.id}
-                              <div
-                                class="absolute right-full top-0 mr-1 rounded-lg shadow-lg p-2 z-50"
-                                style="background-color: var(--nord1); border: 1px solid var(--nord3); width: 120px;"
-                              >
+                              <div class="px-3 py-2" style="border-top: 1px solid var(--nord3);">
                                 <div class="grid grid-cols-4 gap-1.5">
                                   {#each HIGHLIGHT_COLORS as color}
                                     <button
