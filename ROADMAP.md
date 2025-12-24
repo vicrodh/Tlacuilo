@@ -87,11 +87,19 @@ The viewer is usable for daily work. Manipulation tools (merge, split, rotate, c
 
 ## In Progress
 
+### Print Dialog (Before MVP)
+- [ ] Custom print dialog (not depending on external viewers)
+- [ ] Printer selection via CUPS
+- [ ] Page range, copies, orientation options
+- [ ] Print preview (nice to have)
+
 ### Signatures Module
 - [x] Placeholder UI
 - [ ] Graphic signature (draw/load image)
 - [ ] Position signature in document
 - [ ] Saved signatures library
+- [ ] PAdES digital signatures (P12/PFX)
+- [ ] Signature verification
 
 ### Metadata Viewer
 - [x] Show document info (title, author, dates)
@@ -137,7 +145,12 @@ The viewer is usable for daily work. Manipulation tools (merge, split, rotate, c
 
 ---
 
-## Long-term
+## Mid-term
+
+### Protection / Security
+- [x] Unlock PDF (remove restrictions)
+- [ ] Encrypt PDF (add password)
+- [x] Remove password protection
 
 ### Redaction
 - [ ] Mark areas for redaction
@@ -149,11 +162,7 @@ The viewer is usable for daily work. Manipulation tools (merge, split, rotate, c
 - [ ] Remove scripts
 - [ ] Remove hidden objects
 
-### Digital Signatures
-- [ ] PKCS#7 with certificates
-- [ ] PAdES
-- [ ] Timestamp
-- [ ] Signature verification
+## Long-term
 
 ### Office Conversion
 - [ ] DOCX to PDF (LibreOffice)

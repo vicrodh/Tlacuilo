@@ -705,6 +705,151 @@ fn pdf_to_images(
 }
 
 // ============================================================================
+// PDF Security Commands (PythonBridge)
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+struct UnlockResult {
+    success: bool,
+    was_encrypted: bool,
+    had_restrictions: bool,
+    message: String,
+    #[serde(default)]
+    needs_password: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SecurityCheckResult {
+    is_encrypted: bool,
+    needs_password: bool,
+    has_restrictions: bool,
+    #[serde(default)]
+    permissions: std::collections::HashMap<String, bool>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+/// Check PDF security status
+#[tauri::command]
+fn pdf_check_security(app: AppHandle, input: String) -> Result<SecurityCheckResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec!["check", "--input", &input, "--json"];
+
+    let result = bridge
+        .run_script("pdf_security.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+/// Unlock/decrypt a PDF (remove restrictions)
+#[tauri::command]
+fn pdf_unlock(
+    app: AppHandle,
+    input: String,
+    output: Option<String>,
+    password: Option<String>,
+) -> Result<UnlockResult, String> {
+    let output_path = output.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir.join("tlacuilo-unlocked.pdf").to_string_lossy().to_string()
+    });
+
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let mut args: Vec<String> = vec![
+        "unlock".to_string(),
+        "--input".to_string(),
+        input,
+        "--output".to_string(),
+        output_path,
+        "--json".to_string(),
+    ];
+
+    if let Some(pwd) = password {
+        args.push("--password".to_string());
+        args.push(pwd);
+    }
+
+    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+    let result = bridge
+        .run_script("pdf_security.py", &args_refs)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+/// Encrypt a PDF with password and permissions
+#[tauri::command]
+fn pdf_encrypt(
+    app: AppHandle,
+    input: String,
+    output: Option<String>,
+    user_password: Option<String>,
+    owner_password: Option<String>,
+    allow_printing: Option<bool>,
+    allow_copying: Option<bool>,
+    allow_modifying: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    let output_path = output.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir.join("tlacuilo-encrypted.pdf").to_string_lossy().to_string()
+    });
+
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let mut args: Vec<String> = vec![
+        "encrypt".to_string(),
+        "--input".to_string(),
+        input,
+        "--output".to_string(),
+        output_path,
+        "--json".to_string(),
+    ];
+
+    if let Some(pwd) = user_password {
+        args.push("--user-password".to_string());
+        args.push(pwd);
+    }
+
+    if let Some(pwd) = owner_password {
+        args.push("--owner-password".to_string());
+        args.push(pwd);
+    }
+
+    if allow_printing == Some(false) {
+        args.push("--no-print".to_string());
+    }
+
+    if allow_copying == Some(false) {
+        args.push("--no-copy".to_string());
+    }
+
+    if allow_modifying == Some(false) {
+        args.push("--no-modify".to_string());
+    }
+
+    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+    let result = bridge
+        .run_script("pdf_security.py", &args_refs)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+// ============================================================================
 // PDF Attachments Commands (PythonBridge)
 // ============================================================================
 
@@ -1162,7 +1307,11 @@ pub fn run() {
       attachments_extract,
       attachments_extract_all,
       form_fields_list,
-      form_fields_fill
+      form_fields_fill,
+      // PDF Security
+      pdf_check_security,
+      pdf_unlock,
+      pdf_encrypt
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
