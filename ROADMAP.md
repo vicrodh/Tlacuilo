@@ -42,6 +42,7 @@ El viewer es usable para trabajo diario. Las herramientas de manipulacion (merge
 - [x] Imprimir con opciones de anotaciones
 - [x] Panel de anotaciones con busqueda
 - [x] Cambiar color de anotacion existente
+- [x] Stamps (predefinidos, texto personalizado, imagen, con rotacion)
 
 ### Bookmarks
 - [x] Lector de PDF Outlines (Table of Contents)
@@ -109,9 +110,11 @@ El viewer es usable para trabajo diario. Las herramientas de manipulacion (merge
 ## Siguiente (Quick Wins)
 
 ### Stamps
-- [ ] Stamps predefinidos (Approved, Draft, Confidential, etc.)
-- [ ] Stamps personalizados
-- [ ] Posicionar como anotacion
+- [x] Stamps predefinidos (Approved, Draft, Confidential, etc.)
+- [x] Stamps de texto personalizado
+- [x] Stamps de imagen (PNG/JPG)
+- [x] Rotacion configurable (-90°, -45°, 0°, 45°, 90°)
+- [x] Posicionar como anotacion
 
 ---
 
