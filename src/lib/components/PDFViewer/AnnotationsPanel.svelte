@@ -7,6 +7,7 @@
     Trash2,
     ChevronDown,
     ChevronRight,
+    ChevronLeft,
     Type,
     Pencil,
     Square,
@@ -268,14 +269,14 @@
                               onclick={(e) => handleChangeColor(e, annotation.id)}
                               class="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--nord2)] transition-colors text-left"
                             >
+                              <ChevronLeft size={10} class="opacity-50" />
                               <Palette size={12} />
                               <span>Change color</span>
-                              <ChevronRight size={10} class="ml-auto opacity-50" />
                             </button>
 
                             {#if showColorPicker === annotation.id}
                               <div
-                                class="absolute left-full top-0 ml-1 rounded-lg shadow-lg p-2 z-50"
+                                class="absolute right-full top-0 mr-1 rounded-lg shadow-lg p-2 z-50"
                                 style="background-color: var(--nord1); border: 1px solid var(--nord3);"
                               >
                                 <div class="grid grid-cols-4 gap-1">
