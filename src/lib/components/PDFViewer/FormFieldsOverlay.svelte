@@ -27,13 +27,13 @@
   const scaleY = $derived(pageHeight / pdfPageHeight);
 
   // Convert PDF rect to CSS position
-  // PDF rect is [x0, y0, x1, y1] where y is from bottom (in PDF points)
+  // PyMuPDF rect is [x0, y0, x1, y1] where origin is TOP-LEFT (same as CSS)
   function rectToStyle(rect: [number, number, number, number]) {
     const [x0, y0, x1, y1] = rect;
 
-    // Scale from PDF points to rendered pixels
+    // Scale from PDF points to rendered pixels (no Y-flip needed, PyMuPDF uses top-left origin)
     const left = x0 * scaleX;
-    const top = (pdfPageHeight - y1) * scaleY; // Flip Y axis (PDF origin is bottom-left)
+    const top = y0 * scaleY;
     const width = (x1 - x0) * scaleX;
     const height = (y1 - y0) * scaleY;
 

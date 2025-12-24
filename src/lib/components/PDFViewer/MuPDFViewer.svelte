@@ -1593,12 +1593,12 @@
                     />
                   {/if}
 
-                  <!-- Form fields overlay -->
+                  <!-- Form fields overlay - use container dims, not rendered image dims -->
                   {@const pdfSize = pdfInfo?.page_sizes[pageNum - 1] || { width: 612, height: 792 }}
                   <FormFieldsOverlay
                     page={pageNum}
-                    pageWidth={loadedPage.width}
-                    pageHeight={loadedPage.height}
+                    pageWidth={dims.width}
+                    pageHeight={dims.height}
                     pdfPageWidth={pdfSize.width}
                     pdfPageHeight={pdfSize.height}
                     formModeEnabled={formsStore.formModeEnabled}
