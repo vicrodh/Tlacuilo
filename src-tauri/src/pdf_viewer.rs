@@ -438,8 +438,14 @@ pub async fn pdf_search_text(path: String, query: String, max_results: Option<u3
 
 /// Internal blocking search function
 fn search_text_blocking(path: &str, query: &str, max_results: u32) -> Result<Vec<SearchResult>, String> {
+    use std::time::Instant;
+
+    let total_start = Instant::now();
+
+    let open_start = Instant::now();
     let document = Document::open(path)
         .map_err(|e| format!("Failed to load PDF: {:?}", e))?;
+    log::info!("[Search] Document open: {:?}", open_start.elapsed());
 
     let num_pages = document
         .page_count()
@@ -449,19 +455,26 @@ fn search_text_blocking(path: &str, query: &str, max_results: u32) -> Result<Vec
     let mut total_found: u32 = 0;
 
     // Track seen positions for deduplication: (page, y_bucket)
-    // We bucket Y positions to detect duplicates at similar heights
     let mut seen_positions: std::collections::HashSet<(u32, i32)> = std::collections::HashSet::new();
-    const Y_BUCKET_SIZE: f32 = 0.015; // ~1.5% of page height per bucket
+    const Y_BUCKET_SIZE: f32 = 0.015;
+
+    // Timing accumulators
+    let mut load_page_time = std::time::Duration::ZERO;
+    let mut search_time = std::time::Duration::ZERO;
+    let mut text_page_time = std::time::Duration::ZERO;
+    let mut context_time = std::time::Duration::ZERO;
 
     for page_num in 0..num_pages {
         if total_found >= max_results {
             break;
         }
 
+        let load_start = Instant::now();
         let pdf_page = match document.load_page(page_num as i32) {
             Ok(p) => p,
             Err(_) => continue,
         };
+        load_page_time += load_start.elapsed();
 
         let bounds = match pdf_page.bounds() {
             Ok(b) => b,
@@ -472,14 +485,23 @@ fn search_text_blocking(path: &str, query: &str, max_results: u32) -> Result<Vec
         let page_height = bounds.height();
 
         // Use MuPDF's native search
+        let search_start = Instant::now();
         let hits_remaining = (max_results - total_found).min(100);
         let search_results = match pdf_page.search(query, hits_remaining) {
             Ok(r) => r,
             Err(_) => continue,
         };
+        search_time += search_start.elapsed();
 
-        // Get text content for context extraction
-        let text_page = pdf_page.to_text_page(TextPageOptions::empty()).ok();
+        // Only get text page if we have hits (expensive operation)
+        let text_page = if !search_results.is_empty() {
+            let tp_start = Instant::now();
+            let tp = pdf_page.to_text_page(TextPageOptions::empty()).ok();
+            text_page_time += tp_start.elapsed();
+            tp
+        } else {
+            None
+        };
 
         for quad in search_results.iter() {
             // Calculate bounding box from quad
@@ -509,11 +531,13 @@ fn search_text_blocking(path: &str, query: &str, max_results: u32) -> Result<Vec
             };
 
             // Try to get context text around the match
+            let ctx_start = Instant::now();
             let context = if let Some(ref tp) = text_page {
                 extract_context_around_match(tp, query, y0, page_height)
             } else {
                 query.to_string()
             };
+            context_time += ctx_start.elapsed();
 
             results.push(SearchResult {
                 page: current_page, // 1-indexed
@@ -529,6 +553,12 @@ fn search_text_blocking(path: &str, query: &str, max_results: u32) -> Result<Vec
             }
         }
     }
+
+    log::info!(
+        "[Search] Complete: {} pages, {} results in {:?} | load_page: {:?}, search: {:?}, text_page: {:?}, context: {:?}",
+        num_pages, results.len(), total_start.elapsed(),
+        load_page_time, search_time, text_page_time, context_time
+    );
 
     Ok(results)
 }
