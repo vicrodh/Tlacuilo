@@ -408,8 +408,9 @@ pub struct SearchResults {
 
 /// Search for text across all pages of a PDF
 /// Uses MuPDF's native search which is much faster than JavaScript iteration
+/// Runs in a blocking thread to avoid freezing the UI
 #[tauri::command]
-pub fn pdf_search_text(path: String, query: String, max_results: Option<u32>) -> Result<SearchResults, String> {
+pub async fn pdf_search_text(path: String, query: String, max_results: Option<u32>) -> Result<SearchResults, String> {
     let max_results = max_results.unwrap_or(1000);
 
     if query.is_empty() {
@@ -420,7 +421,24 @@ pub fn pdf_search_text(path: String, query: String, max_results: Option<u32>) ->
         });
     }
 
-    let document = Document::open(&path)
+    // Run the heavy search in a blocking thread to not freeze UI
+    let query_clone = query.clone();
+    let results = tauri::async_runtime::spawn_blocking(move || {
+        search_text_blocking(&path, &query_clone, max_results)
+    })
+    .await
+    .map_err(|e| format!("Search task failed: {:?}", e))??;
+
+    Ok(SearchResults {
+        query,
+        total: results.len() as u32,
+        results,
+    })
+}
+
+/// Internal blocking search function
+fn search_text_blocking(path: &str, query: &str, max_results: u32) -> Result<Vec<SearchResult>, String> {
+    let document = Document::open(path)
         .map_err(|e| format!("Failed to load PDF: {:?}", e))?;
 
     let num_pages = document
@@ -429,6 +447,11 @@ pub fn pdf_search_text(path: String, query: String, max_results: Option<u32>) ->
 
     let mut results = Vec::new();
     let mut total_found: u32 = 0;
+
+    // Track last result position for deduplication
+    let mut last_page: u32 = 0;
+    let mut last_y: f32 = -1.0;
+    const Y_THRESHOLD: f32 = 0.02; // 2% of page height threshold for dedup
 
     for page_num in 0..num_pages {
         if total_found >= max_results {
@@ -450,7 +473,7 @@ pub fn pdf_search_text(path: String, query: String, max_results: Option<u32>) ->
 
         // Use MuPDF's native search
         let hits_remaining = (max_results - total_found).min(100);
-        let search_results = match pdf_page.search(&query, hits_remaining) {
+        let search_results = match pdf_page.search(query, hits_remaining) {
             Ok(r) => r,
             Err(_) => continue,
         };
@@ -465,39 +488,46 @@ pub fn pdf_search_text(path: String, query: String, max_results: Option<u32>) ->
             let x1 = quad.ur.x.max(quad.lr.x);
             let y1 = quad.ll.y.max(quad.lr.y);
 
+            let normalized_y = y0 / page_height;
+            let current_page = page_num + 1;
+
+            // Deduplicate: skip if same page and very close Y position
+            if current_page == last_page && (normalized_y - last_y).abs() < Y_THRESHOLD {
+                continue;
+            }
+
             let rect = NormalizedRect {
                 x: x0 / page_width,
-                y: y0 / page_height,
+                y: normalized_y,
                 width: (x1 - x0) / page_width,
                 height: (y1 - y0) / page_height,
             };
 
             // Try to get context text around the match
             let context = if let Some(ref tp) = text_page {
-                extract_context_around_match(tp, &query, y0, page_height)
+                extract_context_around_match(tp, query, y0, page_height)
             } else {
-                query.clone()
+                query.to_string()
             };
 
             results.push(SearchResult {
-                page: page_num + 1, // 1-indexed
-                y: y0 / page_height,
+                page: current_page, // 1-indexed
+                y: normalized_y,
                 rect,
                 context,
             });
 
+            last_page = current_page;
+            last_y = normalized_y;
             total_found += 1;
+
             if total_found >= max_results {
                 break;
             }
         }
     }
 
-    Ok(SearchResults {
-        query,
-        total: total_found,
-        results,
-    })
+    Ok(results)
 }
 
 /// Extract context text around a match position

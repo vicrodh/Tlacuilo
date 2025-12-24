@@ -928,23 +928,55 @@
     // No-op, PagesTab manages its own scroll handling
   }
 
+  // Smooth scroll animation using easeInOutCubic
+  function smoothScrollTo(targetY: number, duration: number = 400) {
+    if (!canvasContainer) return;
+
+    const startY = canvasContainer.scrollTop;
+    const distance = targetY - startY;
+    const startTime = performance.now();
+
+    function easeInOutCubic(t: number): number {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    function animate(currentTime: number) {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = easeInOutCubic(progress);
+
+      canvasContainer!.scrollTop = startY + distance * eased;
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        isScrollingToPage = false;
+        loadVisiblePages();
+      }
+    }
+
+    requestAnimationFrame(animate);
+  }
+
   // Scroll to a specific page
   function scrollToPage(page: number) {
     const element = pageElements.get(page);
     if (element && canvasContainer) {
       // Pre-load the target page and nearby pages BEFORE scrolling
       loadPage(page);
-      if (page > 1) loadPage(page - 1);
-      if (page < totalPages) loadPage(page + 1);
+      for (let i = 1; i <= 3; i++) {
+        if (page - i >= 1) loadPage(page - i);
+        if (page + i <= totalPages) loadPage(page + i);
+      }
 
       isScrollingToPage = true;
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-      // After scroll animation completes, load visible pages and reset flag
-      setTimeout(() => {
-        isScrollingToPage = false;
-        loadVisiblePages();
-      }, 600);
+      // Get target scroll position
+      const containerRect = canvasContainer.getBoundingClientRect();
+      const elementRect = element.getBoundingClientRect();
+      const targetScroll = elementRect.top - containerRect.top + canvasContainer.scrollTop;
+
+      smoothScrollTo(targetScroll, 350);
     }
   }
 
@@ -966,8 +998,10 @@
 
     // Pre-load target page and neighbors
     loadPage(page);
-    if (page > 1) loadPage(page - 1);
-    if (page < totalPages) loadPage(page + 1);
+    for (let i = 1; i <= 3; i++) {
+      if (page - i >= 1) loadPage(page - i);
+      if (page + i <= totalPages) loadPage(page + i);
+    }
 
     const element = pageElements.get(page);
     if (element && canvasContainer) {
@@ -986,17 +1020,8 @@
       const pageTopInContainer = pageRect.top - containerRect.top + canvasContainer.scrollTop;
 
       // Scroll to position the match roughly in the upper third of viewport
-      const targetScroll = pageTopInContainer + yOffset - (containerRect.height / 3);
-      canvasContainer.scrollTo({
-        top: Math.max(0, targetScroll),
-        behavior: 'smooth',
-      });
-
-      // After scroll animation completes, load visible pages
-      setTimeout(() => {
-        isScrollingToPage = false;
-        loadVisiblePages();
-      }, 600);
+      const targetScroll = Math.max(0, pageTopInContainer + yOffset - (containerRect.height / 3));
+      smoothScrollTo(targetScroll, 350);
     }
   }
 
