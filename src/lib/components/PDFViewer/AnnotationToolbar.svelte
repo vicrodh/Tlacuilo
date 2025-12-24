@@ -43,10 +43,13 @@
 
   let showColorPicker = $state(false);
   let showShapesMenu = $state(false);
-  let showLineStyleMenu = $state(false);
-  let showArrowMenu = $state(false);
-  let showFillMenu = $state(false);
+  let showSequenceMenu = $state(false);
   let sequenceInput = $state('');
+
+  // Nested shape options
+  let hoveredShapeTool = $state<ToolMode | null>(null);
+  let showShapeOptions = $state(false);
+  let shapeHoverTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Shape tools for the dropdown
   const shapeTools: { tool: ToolMode; icon: typeof Square; label: string }[] = [
@@ -88,9 +91,10 @@
   function selectTool(tool: ToolMode) {
     store.setActiveTool(tool);
     showColorPicker = false;
-    showLineStyleMenu = false;
-    showArrowMenu = false;
-    showFillMenu = false;
+    showShapesMenu = false;
+    showSequenceMenu = false;
+    hoveredShapeTool = null;
+    showShapeOptions = false;
   }
 
   function selectMarkupType(type: MarkupType) {
@@ -105,55 +109,60 @@
   function toggleColorPicker() {
     showColorPicker = !showColorPicker;
     showShapesMenu = false;
-    showLineStyleMenu = false;
-    showArrowMenu = false;
-    showFillMenu = false;
+    showSequenceMenu = false;
   }
 
   function toggleShapesMenu() {
     showShapesMenu = !showShapesMenu;
     showColorPicker = false;
-    showLineStyleMenu = false;
-    showArrowMenu = false;
-    showFillMenu = false;
+    showSequenceMenu = false;
+    hoveredShapeTool = null;
+    showShapeOptions = false;
+  }
+
+  function toggleSequenceMenu() {
+    showSequenceMenu = !showSequenceMenu;
+    showColorPicker = false;
+    showShapesMenu = false;
   }
 
   function selectShapeTool(tool: ToolMode) {
     store.setActiveTool(tool);
     showShapesMenu = false;
-    showColorPicker = false;
-    showLineStyleMenu = false;
-    showArrowMenu = false;
-    showFillMenu = false;
+    hoveredShapeTool = null;
+    showShapeOptions = false;
   }
 
-  function toggleLineStyleMenu() {
-    showLineStyleMenu = !showLineStyleMenu;
-    showColorPicker = false;
-    showShapesMenu = false;
-    showArrowMenu = false;
-    showFillMenu = false;
+  function handleShapeHover(tool: ToolMode | null) {
+    // Clear any pending timeout
+    if (shapeHoverTimeout) {
+      clearTimeout(shapeHoverTimeout);
+      shapeHoverTimeout = null;
+    }
+
+    if (tool) {
+      // Immediately show submenu for new tool
+      hoveredShapeTool = tool;
+      showShapeOptions = true;
+    } else {
+      // Delay hiding to allow mouse to move to submenu
+      shapeHoverTimeout = setTimeout(() => {
+        hoveredShapeTool = null;
+        showShapeOptions = false;
+      }, 150);
+    }
   }
 
-  function toggleArrowMenu() {
-    showArrowMenu = !showArrowMenu;
-    showColorPicker = false;
-    showShapesMenu = false;
-    showLineStyleMenu = false;
-    showFillMenu = false;
-  }
-
-  function toggleFillMenu() {
-    showFillMenu = !showFillMenu;
-    showColorPicker = false;
-    showShapesMenu = false;
-    showLineStyleMenu = false;
-    showArrowMenu = false;
+  function keepShapeOptionsOpen() {
+    // Clear timeout when mouse enters submenu
+    if (shapeHoverTimeout) {
+      clearTimeout(shapeHoverTimeout);
+      shapeHoverTimeout = null;
+    }
   }
 
   function selectLineStyle(style: LineStyle) {
     store.setActiveLineStyle(style);
-    showLineStyleMenu = false;
   }
 
   function selectStartArrow(style: ArrowHeadStyle) {
@@ -327,7 +336,7 @@
       <Pencil size={16} />
     </button>
 
-    <!-- Shapes dropdown -->
+    <!-- Shapes dropdown with nested options -->
     <div class="relative">
       <button
         onclick={toggleShapesMenu}
@@ -350,18 +359,171 @@
 
       {#if showShapesMenu}
         <div
-          class="absolute top-full left-1/2 mt-1 rounded-lg shadow-lg py-1 z-50"
-          style="background-color: var(--nord1); border: 1px solid var(--nord3); transform: translateX(-50%); min-width: 120px;"
+          class="absolute top-full left-0 mt-1 rounded-lg shadow-lg py-1 z-50"
+          style="background-color: var(--nord1); border: 1px solid var(--nord3); min-width: 140px;"
+          onmouseleave={() => handleShapeHover(null)}
         >
           {#each shapeTools as shape}
-            <button
-              onclick={() => selectShapeTool(shape.tool)}
-              class="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--nord2)] transition-colors"
-              class:bg-[var(--nord3)]={store.activeTool === shape.tool}
-            >
-              <shape.icon size={14} />
-              <span>{shape.label}</span>
-            </button>
+            <div class="relative">
+              <button
+                onclick={() => selectShapeTool(shape.tool)}
+                onmouseenter={() => handleShapeHover(shape.tool)}
+                class="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs hover:bg-[var(--nord2)] transition-colors"
+                class:bg-[var(--nord3)]={store.activeTool === shape.tool}
+              >
+                <div class="flex items-center gap-2">
+                  <shape.icon size={14} />
+                  <span>{shape.label}</span>
+                </div>
+                <ChevronRight size={12} class="opacity-40" />
+              </button>
+
+              <!-- Nested options submenu -->
+              {#if hoveredShapeTool === shape.tool && showShapeOptions}
+                <div
+                  class="absolute left-full top-0 ml-1 rounded-lg shadow-lg p-2 z-50"
+                  style="background-color: var(--nord1); border: 1px solid var(--nord3); min-width: 160px;"
+                  onmouseenter={keepShapeOptionsOpen}
+                  onmouseleave={() => handleShapeHover(null)}
+                >
+                  <!-- Line Style Section -->
+                  <div class="mb-2">
+                    <div class="text-[10px] uppercase opacity-40 mb-1 px-1">Line Style</div>
+                    <div class="flex gap-1">
+                      {#each lineStyles as lineStyle}
+                        <button
+                          onclick={() => selectLineStyle(lineStyle.style)}
+                          class="flex-1 p-1.5 rounded text-[10px] transition-colors flex flex-col items-center gap-1"
+                          class:bg-[var(--nord8)]={store.activeLineStyle === lineStyle.style}
+                          class:text-[var(--nord0)]={store.activeLineStyle === lineStyle.style}
+                          style="background-color: {store.activeLineStyle === lineStyle.style ? '' : 'var(--nord2)'};"
+                          title={lineStyle.label}
+                        >
+                          <svg width="24" height="6" viewBox="0 0 24 6">
+                            {#if lineStyle.style === 'solid'}
+                              <line x1="0" y1="3" x2="24" y2="3" stroke="currentColor" stroke-width="2" />
+                            {:else if lineStyle.style === 'dashed'}
+                              <line x1="0" y1="3" x2="24" y2="3" stroke="currentColor" stroke-width="2" stroke-dasharray="4 2" />
+                            {:else}
+                              <line x1="0" y1="3" x2="24" y2="3" stroke="currentColor" stroke-width="2" stroke-dasharray="1 2" />
+                            {/if}
+                          </svg>
+                        </button>
+                      {/each}
+                    </div>
+                  </div>
+
+                  <!-- Stroke Color Section (for all shapes) -->
+                  <div class="mb-2 pt-2" style="border-top: 1px solid var(--nord3);">
+                    <div class="text-[10px] uppercase opacity-40 mb-1 px-1">Stroke Color</div>
+                    <div class="grid grid-cols-4 gap-1 mb-2">
+                      {#each HIGHLIGHT_COLORS.slice(0, 8) as color}
+                        <button
+                          onclick={() => store.setActiveColor(color.value)}
+                          class="w-5 h-5 rounded border transition-transform hover:scale-110"
+                          style="
+                            background-color: {color.value};
+                            border-color: {store.activeColor === color.value ? 'var(--nord6)' : 'transparent'};
+                          "
+                          title={color.name}
+                        ></button>
+                      {/each}
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-[9px] opacity-50">{Math.round(store.activeOpacity * 100)}%</span>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="1"
+                        step="0.1"
+                        value={store.activeOpacity}
+                        oninput={(e) => store.setActiveOpacity(parseFloat((e.target as HTMLInputElement).value))}
+                        class="flex-1 h-1"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- Arrow Heads Section (only for arrow) -->
+                  {#if shape.tool === 'arrow'}
+                    <div class="mb-2 pt-2" style="border-top: 1px solid var(--nord3);">
+                      <div class="text-[10px] uppercase opacity-40 mb-1 px-1">Start Arrow</div>
+                      <div class="flex gap-1 mb-2">
+                        {#each arrowHeadStyles as arrowStyle}
+                          <button
+                            onclick={() => selectStartArrow(arrowStyle.style)}
+                            class="flex-1 p-1 rounded text-[9px] transition-colors"
+                            class:bg-[var(--nord8)]={store.activeStartArrow === arrowStyle.style}
+                            class:text-[var(--nord0)]={store.activeStartArrow === arrowStyle.style}
+                            style="background-color: {store.activeStartArrow === arrowStyle.style ? '' : 'var(--nord2)'};"
+                          >
+                            {arrowStyle.label}
+                          </button>
+                        {/each}
+                      </div>
+                      <div class="text-[10px] uppercase opacity-40 mb-1 px-1">End Arrow</div>
+                      <div class="flex gap-1">
+                        {#each arrowHeadStyles as arrowStyle}
+                          <button
+                            onclick={() => selectEndArrow(arrowStyle.style)}
+                            class="flex-1 p-1 rounded text-[9px] transition-colors"
+                            class:bg-[var(--nord8)]={store.activeEndArrow === arrowStyle.style}
+                            class:text-[var(--nord0)]={store.activeEndArrow === arrowStyle.style}
+                            style="background-color: {store.activeEndArrow === arrowStyle.style ? '' : 'var(--nord2)'};"
+                          >
+                            {arrowStyle.label}
+                          </button>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+
+                  <!-- Fill Section (only for rectangle and ellipse) -->
+                  {#if shape.tool === 'rectangle' || shape.tool === 'ellipse'}
+                    <div class="pt-2" style="border-top: 1px solid var(--nord3);">
+                      <div class="flex items-center gap-2 mb-2">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={store.activeFillEnabled}
+                            onchange={(e) => store.setActiveFillEnabled((e.target as HTMLInputElement).checked)}
+                            class="w-3 h-3 rounded"
+                          />
+                          <span class="text-[10px]" style="color: var(--nord4);">Fill</span>
+                        </label>
+                      </div>
+
+                      {#if store.activeFillEnabled}
+                        <div class="grid grid-cols-4 gap-1 mb-2">
+                          {#each HIGHLIGHT_COLORS.slice(0, 8) as color}
+                            <button
+                              onclick={() => store.setActiveFillColor(color.value)}
+                              class="w-5 h-5 rounded border transition-transform hover:scale-110"
+                              style="
+                                background-color: {color.value};
+                                border-color: {store.activeFillColor === color.value ? 'var(--nord6)' : 'transparent'};
+                              "
+                              title={color.name}
+                            ></button>
+                          {/each}
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <span class="text-[9px] opacity-50">{Math.round(store.activeFillOpacity * 100)}%</span>
+                          <input
+                            type="range"
+                            min="0.1"
+                            max="1"
+                            step="0.1"
+                            value={store.activeFillOpacity}
+                            oninput={(e) => store.setActiveFillOpacity(parseFloat((e.target as HTMLInputElement).value))}
+                            class="flex-1 h-1"
+                          />
+                        </div>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+            </div>
           {/each}
         </div>
       {/if}
@@ -453,238 +615,63 @@
     {/if}
   </div>
 
-  <!-- Separator -->
-  <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
-
-  <!-- Sequence number controls (only when tool is active) -->
+  <!-- Sequence number dropdown (only when tool is active) -->
   {#if store.activeTool === 'sequenceNumber'}
-    <div class="flex items-center gap-1 px-1 py-0.5 rounded" style="background-color: var(--nord3);">
-      <span class="text-xs px-1" style="color: var(--nord4);">Next:</span>
-      <input
-        type="number"
-        min="1"
-        value={store.sequenceCounter}
-        oninput={handleSequenceInputChange}
-        class="w-12 px-1 py-0.5 text-xs rounded text-center"
-        style="background-color: var(--nord2); color: var(--nord6); border: 1px solid var(--nord3);"
-      />
-      <button
-        onclick={handleResetSequence}
-        class="p-1 rounded transition-colors hover:bg-[var(--nord2)]"
-        title="Reset to 1"
-        style="color: var(--nord4);"
-      >
-        <RotateCcw size={12} />
-      </button>
-    </div>
-
     <!-- Separator -->
     <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
-  {/if}
 
-  <!-- Line style controls (for line, arrow, rectangle, ellipse) -->
-  {#if store.activeTool === 'line' || store.activeTool === 'arrow' || store.activeTool === 'rectangle' || store.activeTool === 'ellipse'}
     <div class="relative">
       <button
-        onclick={toggleLineStyleMenu}
-        class="p-2 rounded transition-colors hover:bg-[var(--nord3)] flex items-center gap-1"
-        title="Line style: {store.activeLineStyle}"
+        onclick={toggleSequenceMenu}
+        class="p-2 rounded transition-colors hover:bg-[var(--nord3)] flex items-center gap-1.5"
+        title="Sequence settings"
       >
-        <!-- Visual representation of line style -->
-        <svg width="16" height="8" viewBox="0 0 16 8" class="opacity-80">
-          {#if store.activeLineStyle === 'solid'}
-            <line x1="0" y1="4" x2="16" y2="4" stroke="currentColor" stroke-width="2" />
-          {:else if store.activeLineStyle === 'dashed'}
-            <line x1="0" y1="4" x2="16" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="4 2" />
-          {:else}
-            <line x1="0" y1="4" x2="16" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="1 2" />
-          {/if}
-        </svg>
+        <span class="text-sm font-medium" style="color: var(--nord8); min-width: 20px;">{store.sequenceCounter}</span>
+        <ChevronRight size={12} class="rotate-90 opacity-60" />
       </button>
 
-      {#if showLineStyleMenu}
-        <div
-          class="absolute top-full left-1/2 mt-1 rounded-lg shadow-lg py-1 z-50"
-          style="background-color: var(--nord1); border: 1px solid var(--nord3); transform: translateX(-50%); min-width: 100px;"
-        >
-          {#each lineStyles as lineStyle}
-            <button
-              onclick={() => selectLineStyle(lineStyle.style)}
-              class="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--nord2)] transition-colors"
-              class:bg-[var(--nord3)]={store.activeLineStyle === lineStyle.style}
-            >
-              <svg width="24" height="8" viewBox="0 0 24 8">
-                {#if lineStyle.style === 'solid'}
-                  <line x1="0" y1="4" x2="24" y2="4" stroke="currentColor" stroke-width="2" />
-                {:else if lineStyle.style === 'dashed'}
-                  <line x1="0" y1="4" x2="24" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="4 2" />
-                {:else}
-                  <line x1="0" y1="4" x2="24" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="1 2" />
-                {/if}
-              </svg>
-              <span>{lineStyle.label}</span>
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </div>
-
-    <!-- Separator -->
-    <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
-  {/if}
-
-  <!-- Arrow head controls (only for arrow tool) -->
-  {#if store.activeTool === 'arrow'}
-    <div class="relative">
-      <button
-        onclick={toggleArrowMenu}
-        class="p-2 rounded transition-colors hover:bg-[var(--nord3)] flex items-center gap-1"
-        title="Arrow heads"
-      >
-        <svg width="20" height="12" viewBox="0 0 20 12" class="opacity-80">
-          <!-- Start arrow indicator -->
-          {#if store.activeStartArrow !== 'none'}
-            <polygon points="0,6 4,3 4,9" fill="currentColor" />
-          {/if}
-          <line x1="4" y1="6" x2="16" y2="6" stroke="currentColor" stroke-width="2" />
-          <!-- End arrow indicator -->
-          {#if store.activeEndArrow !== 'none'}
-            <polygon points="20,6 16,3 16,9" fill="currentColor" />
-          {/if}
-        </svg>
-      </button>
-
-      {#if showArrowMenu}
-        <div
-          class="absolute top-full left-1/2 mt-1 rounded-lg shadow-lg p-2 z-50"
-          style="background-color: var(--nord1); border: 1px solid var(--nord3); transform: translateX(-50%); min-width: 140px;"
-        >
-          <!-- Start arrow -->
-          <div class="mb-2">
-            <div class="text-[10px] uppercase opacity-50 mb-1 px-1">Start</div>
-            <div class="flex gap-1">
-              {#each arrowHeadStyles as arrowStyle}
-                <button
-                  onclick={() => selectStartArrow(arrowStyle.style)}
-                  class="p-1.5 rounded text-[10px] transition-colors"
-                  class:bg-[var(--nord8)]={store.activeStartArrow === arrowStyle.style}
-                  class:text-[var(--nord0)]={store.activeStartArrow === arrowStyle.style}
-                  title={arrowStyle.label}
-                  style="background-color: {store.activeStartArrow === arrowStyle.style ? '' : 'var(--nord3)'};"
-                >
-                  {arrowStyle.label}
-                </button>
-              {/each}
-            </div>
-          </div>
-
-          <!-- End arrow -->
-          <div>
-            <div class="text-[10px] uppercase opacity-50 mb-1 px-1">End</div>
-            <div class="flex gap-1">
-              {#each arrowHeadStyles as arrowStyle}
-                <button
-                  onclick={() => selectEndArrow(arrowStyle.style)}
-                  class="p-1.5 rounded text-[10px] transition-colors"
-                  class:bg-[var(--nord8)]={store.activeEndArrow === arrowStyle.style}
-                  class:text-[var(--nord0)]={store.activeEndArrow === arrowStyle.style}
-                  title={arrowStyle.label}
-                  style="background-color: {store.activeEndArrow === arrowStyle.style ? '' : 'var(--nord3)'};"
-                >
-                  {arrowStyle.label}
-                </button>
-              {/each}
-            </div>
-          </div>
-        </div>
-      {/if}
-    </div>
-
-    <!-- Separator -->
-    <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
-  {/if}
-
-  <!-- Fill controls (for rectangle and ellipse) -->
-  {#if store.activeTool === 'rectangle' || store.activeTool === 'ellipse'}
-    <div class="relative">
-      <button
-        onclick={toggleFillMenu}
-        class="p-2 rounded transition-colors hover:bg-[var(--nord3)] flex items-center gap-1"
-        title="Fill settings"
-      >
-        <!-- Fill indicator -->
-        <svg width="16" height="16" viewBox="0 0 16 16" class="opacity-80">
-          <rect
-            x="2" y="2" width="12" height="12"
-            rx="2"
-            fill={store.activeFillEnabled ? store.activeFillColor : 'none'}
-            fill-opacity={store.activeFillEnabled ? store.activeFillOpacity : 0}
-            stroke="currentColor"
-            stroke-width="1.5"
-          />
-          {#if !store.activeFillEnabled}
-            <line x1="3" y1="13" x2="13" y2="3" stroke="currentColor" stroke-width="1" />
-          {/if}
-        </svg>
-      </button>
-
-      {#if showFillMenu}
+      {#if showSequenceMenu}
         <div
           class="absolute top-full left-1/2 mt-1 rounded-lg shadow-lg p-3 z-50"
-          style="background-color: var(--nord1); border: 1px solid var(--nord3); transform: translateX(-50%); min-width: 180px;"
+          style="background-color: var(--nord1); border: 1px solid var(--nord3); transform: translateX(-50%); min-width: 140px;"
         >
-          <!-- Fill toggle -->
+          <div class="text-[10px] uppercase opacity-40 mb-2 px-1">Next Number</div>
           <div class="flex items-center gap-2 mb-3">
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={store.activeFillEnabled}
-                onchange={(e) => store.setActiveFillEnabled((e.target as HTMLInputElement).checked)}
-                class="w-4 h-4 rounded"
-              />
-              <span class="text-xs" style="color: var(--nord4);">Enable fill</span>
-            </label>
+            <button
+              onclick={() => { if (store.sequenceCounter > 1) store.setSequenceCounter(store.sequenceCounter - 1); }}
+              class="w-8 h-8 rounded flex items-center justify-center text-lg font-medium transition-colors hover:bg-[var(--nord3)]"
+              style="background-color: var(--nord2);"
+              disabled={store.sequenceCounter <= 1}
+            >
+              −
+            </button>
+            <input
+              type="number"
+              min="1"
+              value={store.sequenceCounter}
+              oninput={handleSequenceInputChange}
+              class="w-14 px-2 py-1.5 text-sm rounded text-center font-medium"
+              style="background-color: var(--nord2); color: var(--nord6); border: 1px solid var(--nord3);"
+            />
+            <button
+              onclick={() => store.setSequenceCounter(store.sequenceCounter + 1)}
+              class="w-8 h-8 rounded flex items-center justify-center text-lg font-medium transition-colors hover:bg-[var(--nord3)]"
+              style="background-color: var(--nord2);"
+            >
+              +
+            </button>
           </div>
-
-          {#if store.activeFillEnabled}
-            <!-- Fill color -->
-            <div class="mb-3">
-              <div class="text-[10px] uppercase opacity-50 mb-1">Fill Color</div>
-              <div class="grid grid-cols-4 gap-1">
-                {#each HIGHLIGHT_COLORS as color}
-                  <button
-                    onclick={() => store.setActiveFillColor(color.value)}
-                    class="w-6 h-6 rounded border transition-transform hover:scale-110"
-                    style="
-                      background-color: {color.value};
-                      border-color: {store.activeFillColor === color.value ? 'var(--nord6)' : (color.value === '#FFFFFF' ? 'var(--nord3)' : 'transparent')};
-                    "
-                    title={color.name}
-                  ></button>
-                {/each}
-              </div>
-            </div>
-
-            <!-- Fill opacity -->
-            <div>
-              <div class="text-[10px] uppercase opacity-50 mb-1">Fill Opacity: {Math.round(store.activeFillOpacity * 100)}%</div>
-              <input
-                type="range"
-                min="0.1"
-                max="1"
-                step="0.1"
-                value={store.activeFillOpacity}
-                oninput={(e) => store.setActiveFillOpacity(parseFloat((e.target as HTMLInputElement).value))}
-                class="w-full"
-              />
-            </div>
-          {/if}
+          <button
+            onclick={handleResetSequence}
+            class="w-full flex items-center justify-center gap-2 py-1.5 rounded text-xs transition-colors hover:bg-[var(--nord2)]"
+            style="background-color: var(--nord3); color: var(--nord4);"
+          >
+            <RotateCcw size={12} />
+            <span>Reset to 1</span>
+          </button>
         </div>
       {/if}
     </div>
-
-    <!-- Separator -->
-    <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
   {/if}
 
   <!-- Clear all -->
