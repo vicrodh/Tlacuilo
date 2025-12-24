@@ -8,6 +8,8 @@
     type InkPath,
     type LineStyle,
     type Point,
+    type StampType,
+    STAMP_PRESETS,
   } from '$lib/stores/annotations.svelte';
   import { getAuthorString } from '$lib/stores/settings.svelte';
 
@@ -470,6 +472,19 @@
             sequenceNumber: store.getNextSequenceNumber(),
             author,
           });
+        } else if (store.activeTool === 'stamp') {
+          store.addAnnotation({
+            type: 'stamp',
+            page,
+            rect: drawRect,
+            color: store.activeColor,
+            opacity: store.activeOpacity,
+            stampType: store.activeStampType,
+            stampText: store.activeStampType === 'Custom' ? store.customStampText : undefined,
+            stampImageData: store.activeStampType === 'Image' ? store.stampImageData : undefined,
+            stampRotation: store.stampRotation,
+            author,
+          });
         }
       }
     }
@@ -582,8 +597,18 @@
     if (store.activeTool === 'rectangle' || store.activeTool === 'ellipse') return 'crosshair';
     if (store.activeTool === 'line' || store.activeTool === 'arrow') return 'crosshair';
     if (store.activeTool === 'sequenceNumber') return 'crosshair';
+    if (store.activeTool === 'stamp') return 'crosshair';
     return 'crosshair';
   });
+
+  // Helper to get stamp display info
+  function getStampInfo(stampType: StampType, customText?: string) {
+    if (stampType === 'Custom' && customText) {
+      return { label: customText.toUpperCase(), color: '#FFFFFF', bgColor: '#607D8B' };
+    }
+    const preset = STAMP_PRESETS.find(s => s.type === stampType);
+    return preset || { label: stampType.toUpperCase(), color: '#FFFFFF', bgColor: '#607D8B' };
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -912,6 +937,71 @@
           {annotation.sequenceNumber || 1}
         </text>
       </g>
+    {:else if annotation.type === 'stamp'}
+      <!-- Stamp annotation -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_mouse_events_have_key_events -->
+      {@const stampInfo = getStampInfo(annotation.stampType || 'Approved', annotation.stampText)}
+      {@const centerX = pixelRect.x + pixelRect.width / 2}
+      {@const centerY = pixelRect.y + pixelRect.height / 2}
+      {@const rotation = annotation.stampRotation || 0}
+      <g
+        class="cursor-pointer"
+        onclick={(e) => handleAnnotationClick(e, annotation)}
+        onmouseenter={(e) => handleAnnotationMouseEnter(e, annotation)}
+        onmousemove={handleAnnotationMouseMove}
+        onmouseleave={handleAnnotationMouseLeave}
+        transform="rotate({rotation} {centerX} {centerY})"
+      >
+        {#if annotation.stampType === 'Image' && annotation.stampImageData}
+          <!-- Image stamp -->
+          <image
+            x={pixelRect.x}
+            y={pixelRect.y}
+            width={pixelRect.width}
+            height={pixelRect.height}
+            href={annotation.stampImageData}
+            preserveAspectRatio="xMidYMid meet"
+            opacity={annotation.opacity}
+          />
+        {:else}
+          <!-- Text stamp -->
+          {@const fontSize = Math.min(pixelRect.width / (stampInfo.label.length * 0.6), pixelRect.height * 0.6)}
+          <rect
+            x={pixelRect.x}
+            y={pixelRect.y}
+            width={pixelRect.width}
+            height={pixelRect.height}
+            rx="4"
+            fill={stampInfo.bgColor}
+            opacity={annotation.opacity}
+          />
+          <rect
+            x={pixelRect.x + 2}
+            y={pixelRect.y + 2}
+            width={pixelRect.width - 4}
+            height={pixelRect.height - 4}
+            rx="2"
+            fill="none"
+            stroke={stampInfo.color}
+            stroke-width="2"
+            opacity={annotation.opacity * 0.5}
+          />
+          <text
+            x={centerX}
+            y={centerY}
+            text-anchor="middle"
+            dominant-baseline="central"
+            fill={stampInfo.color}
+            font-size="{fontSize}px"
+            font-weight="bold"
+            font-family="Helvetica, Arial, sans-serif"
+          >
+            {stampInfo.label}
+          </text>
+        {/if}
+      </g>
     {/if}
   {/each}
 
@@ -1076,6 +1166,46 @@
         >
           {store.sequenceCounter}
         </text>
+      {:else if store.activeTool === 'stamp'}
+        {@const stampInfo = getStampInfo(store.activeStampType, store.customStampText)}
+        {@const centerX = previewRect.x + previewRect.width / 2}
+        {@const centerY = previewRect.y + previewRect.height / 2}
+        <g transform="rotate({store.stampRotation} {centerX} {centerY})">
+          {#if store.activeStampType === 'Image' && store.stampImageData}
+            <image
+              x={previewRect.x}
+              y={previewRect.y}
+              width={previewRect.width}
+              height={previewRect.height}
+              href={store.stampImageData}
+              preserveAspectRatio="xMidYMid meet"
+              opacity="0.7"
+            />
+          {:else}
+            {@const fontSize = Math.min(previewRect.width / (stampInfo.label.length * 0.6), previewRect.height * 0.6)}
+            <rect
+              x={previewRect.x}
+              y={previewRect.y}
+              width={previewRect.width}
+              height={previewRect.height}
+              rx="4"
+              fill={stampInfo.bgColor}
+              opacity="0.7"
+            />
+            <text
+              x={centerX}
+              y={centerY}
+              text-anchor="middle"
+              dominant-baseline="central"
+              fill={stampInfo.color}
+              font-size="{fontSize}px"
+              font-weight="bold"
+              font-family="Helvetica, Arial, sans-serif"
+            >
+              {stampInfo.label}
+            </text>
+          {/if}
+        </g>
       {/if}
     {/if}
   {/if}

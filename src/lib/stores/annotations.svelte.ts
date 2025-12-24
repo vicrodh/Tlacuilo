@@ -10,7 +10,7 @@ import { getContext, setContext } from 'svelte';
 // Base annotation types + new shape/drawing types
 export type AnnotationType =
   | 'highlight' | 'comment' | 'underline' | 'strikethrough' | 'freetext'
-  | 'ink' | 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'sequenceNumber';
+  | 'ink' | 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'sequenceNumber' | 'stamp';
 
 // Markup types that can be applied via text or area selection
 export type MarkupType = 'highlight' | 'underline' | 'strikethrough';
@@ -27,8 +27,15 @@ export type ToolMode =
   | 'line'          // Line
   | 'arrow'         // Arrow
   | 'sequenceNumber' // Numbered circles
+  | 'stamp'         // Stamp annotations
   | 'move'          // Move/drag annotations
   | null;           // No tool active (pointer mode)
+
+// Predefined stamp types
+export type StampType =
+  | 'Approved' | 'NotApproved' | 'Draft' | 'Final'
+  | 'Confidential' | 'ForReview' | 'Rejected' | 'Void'
+  | 'Custom' | 'Image';
 
 // Line style options
 export type LineStyle = 'solid' | 'dashed' | 'dotted';
@@ -88,6 +95,11 @@ export interface Annotation {
   endPoint?: Point;
   // Sequence number specific
   sequenceNumber?: number;      // The number to display
+  // Stamp specific
+  stampType?: StampType;        // Type of stamp
+  stampText?: string;           // Custom stamp text (for Custom type)
+  stampImageData?: string;      // Base64 image data (for Image type)
+  stampRotation?: number;       // Rotation in degrees (0, 45, -45, 90, etc.)
 }
 
 export interface AnnotationsState {
@@ -108,6 +120,11 @@ export interface AnnotationsState {
   activeFillEnabled: boolean;
   activeFillColor: string;
   activeFillOpacity: number;
+  // Stamp settings
+  activeStampType: StampType;
+  customStampText: string;
+  stampImageData: string;
+  stampRotation: number;
 }
 
 // History action types for undo/redo
@@ -135,6 +152,10 @@ export function createAnnotationsStore() {
     activeFillEnabled: false, // Default no fill
     activeFillColor: '#FFEB3B', // Default fill color (same as stroke)
     activeFillOpacity: 0.3, // Default fill opacity
+    activeStampType: 'Approved', // Default stamp type
+    customStampText: '', // Custom stamp text
+    stampImageData: '', // Image stamp data
+    stampRotation: 0, // Stamp rotation
   });
 
   // Undo/Redo history
@@ -397,6 +418,22 @@ export function createAnnotationsStore() {
     state.activeFillOpacity = Math.max(0, Math.min(1, opacity));
   }
 
+  function setActiveStampType(stampType: StampType): void {
+    state.activeStampType = stampType;
+  }
+
+  function setCustomStampText(text: string): void {
+    state.customStampText = text;
+  }
+
+  function setStampImageData(data: string): void {
+    state.stampImageData = data;
+  }
+
+  function setStampRotation(degrees: number): void {
+    state.stampRotation = degrees;
+  }
+
   function clearAnnotations(page?: number): void {
     // Collect all annotations that will be deleted for undo support
     const deletedAnnotations: Annotation[] = [];
@@ -463,6 +500,10 @@ export function createAnnotationsStore() {
     get activeFillEnabled() { return state.activeFillEnabled; },
     get activeFillColor() { return state.activeFillColor; },
     get activeFillOpacity() { return state.activeFillOpacity; },
+    get activeStampType() { return state.activeStampType; },
+    get customStampText() { return state.customStampText; },
+    get stampImageData() { return state.stampImageData; },
+    get stampRotation() { return state.stampRotation; },
 
     addAnnotation,
     updateAnnotation,
@@ -482,6 +523,10 @@ export function createAnnotationsStore() {
     setActiveFillEnabled,
     setActiveFillColor,
     setActiveFillOpacity,
+    setActiveStampType,
+    setCustomStampText,
+    setStampImageData,
+    setStampRotation,
     clearAnnotations,
     getAllAnnotations,
     exportAnnotations,
@@ -521,4 +566,16 @@ export const COMMENT_COLORS = [
   { name: 'Blue', value: '#03A9F4' },
   { name: 'Green', value: '#8BC34A' },
   { name: 'Red', value: '#F44336' },
+];
+
+// Predefined stamps with display text and colors
+export const STAMP_PRESETS: { type: StampType; label: string; color: string; bgColor: string }[] = [
+  { type: 'Approved', label: 'APPROVED', color: '#FFFFFF', bgColor: '#4CAF50' },
+  { type: 'NotApproved', label: 'NOT APPROVED', color: '#FFFFFF', bgColor: '#F44336' },
+  { type: 'Draft', label: 'DRAFT', color: '#000000', bgColor: '#FFC107' },
+  { type: 'Final', label: 'FINAL', color: '#FFFFFF', bgColor: '#2196F3' },
+  { type: 'Confidential', label: 'CONFIDENTIAL', color: '#FFFFFF', bgColor: '#9C27B0' },
+  { type: 'ForReview', label: 'FOR REVIEW', color: '#000000', bgColor: '#FF9800' },
+  { type: 'Rejected', label: 'REJECTED', color: '#FFFFFF', bgColor: '#E91E63' },
+  { type: 'Void', label: 'VOID', color: '#FFFFFF', bgColor: '#607D8B' },
 ];

@@ -21,15 +21,19 @@
     Eye,
     EyeOff,
     Move,
+    Stamp,
   } from 'lucide-svelte';
-  import { ask } from '@tauri-apps/plugin-dialog';
+  import { ask, open } from '@tauri-apps/plugin-dialog';
+  import { readFile } from '@tauri-apps/plugin-fs';
   import {
     type AnnotationsStore,
     type MarkupType,
     type ToolMode,
     type LineStyle,
     type ArrowHeadStyle,
+    type StampType,
     HIGHLIGHT_COLORS,
+    STAMP_PRESETS,
   } from '$lib/stores/annotations.svelte';
 
   interface Props {
@@ -44,7 +48,9 @@
   let showColorPicker = $state(false);
   let showShapesMenu = $state(false);
   let showSequenceMenu = $state(false);
+  let showStampsMenu = $state(false);
   let sequenceInput = $state('');
+  let customStampInput = $state('');
 
   // Nested shape options
   let hoveredShapeTool = $state<ToolMode | null>(null);
@@ -93,6 +99,7 @@
     showColorPicker = false;
     showShapesMenu = false;
     showSequenceMenu = false;
+    showStampsMenu = false;
     hoveredShapeTool = null;
     showShapeOptions = false;
   }
@@ -110,12 +117,14 @@
     showColorPicker = !showColorPicker;
     showShapesMenu = false;
     showSequenceMenu = false;
+    showStampsMenu = false;
   }
 
   function toggleShapesMenu() {
     showShapesMenu = !showShapesMenu;
     showColorPicker = false;
     showSequenceMenu = false;
+    showStampsMenu = false;
     hoveredShapeTool = null;
     showShapeOptions = false;
   }
@@ -124,7 +133,52 @@
     showSequenceMenu = !showSequenceMenu;
     showColorPicker = false;
     showShapesMenu = false;
+    showStampsMenu = false;
   }
+
+  function toggleStampsMenu() {
+    showStampsMenu = !showStampsMenu;
+    showColorPicker = false;
+    showShapesMenu = false;
+    showSequenceMenu = false;
+  }
+
+  function selectStampType(stampType: StampType) {
+    store.setActiveStampType(stampType);
+    store.setActiveTool('stamp');
+    showStampsMenu = false;
+  }
+
+  async function loadStampImage() {
+    const file = await open({
+      multiple: false,
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+      title: 'Select stamp image',
+    });
+
+    if (file) {
+      try {
+        const data = await readFile(file);
+        const base64 = btoa(String.fromCharCode(...data));
+        const ext = file.split('.').pop()?.toLowerCase() || 'png';
+        const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png';
+        store.setStampImageData(`data:${mimeType};base64,${base64}`);
+        store.setActiveStampType('Image');
+        store.setActiveTool('stamp');
+        showStampsMenu = false;
+      } catch (e) {
+        console.error('Failed to load stamp image:', e);
+      }
+    }
+  }
+
+  const rotationOptions = [
+    { value: 0, label: '0°' },
+    { value: -45, label: '-45°' },
+    { value: 45, label: '45°' },
+    { value: 90, label: '90°' },
+    { value: -90, label: '-90°' },
+  ];
 
   function selectShapeTool(tool: ToolMode) {
     store.setActiveTool(tool);
@@ -319,6 +373,121 @@
   >
     <Type size={16} />
   </button>
+
+  <!-- Stamp tool with dropdown -->
+  <div class="relative">
+    <button
+      onclick={toggleStampsMenu}
+      class="p-2 rounded transition-colors flex items-center gap-0.5"
+      class:bg-[var(--nord8)]={store.activeTool === 'stamp'}
+      style="color: {store.activeTool === 'stamp' ? 'var(--nord0)' : 'var(--nord4)'};"
+      title="Stamp"
+    >
+      <Stamp size={16} />
+      <ChevronRight size={12} class="rotate-90 opacity-60" />
+    </button>
+
+    {#if showStampsMenu}
+      <div
+        class="absolute top-full left-0 mt-1 rounded-lg shadow-lg py-1 z-50"
+        style="background-color: var(--nord1); border: 1px solid var(--nord3); min-width: 160px;"
+      >
+        {#each STAMP_PRESETS as stamp}
+          <button
+            onclick={() => selectStampType(stamp.type)}
+            class="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--nord2)] transition-colors"
+            class:bg-[var(--nord3)]={store.activeStampType === stamp.type && store.activeTool === 'stamp'}
+          >
+            <span
+              class="px-2 py-0.5 rounded text-[10px] font-bold"
+              style="background-color: {stamp.bgColor}; color: {stamp.color};"
+            >
+              {stamp.label}
+            </span>
+          </button>
+        {/each}
+
+        <!-- Custom text stamp -->
+        <div class="px-3 py-2 mt-1" style="border-top: 1px solid var(--nord3);">
+          <div class="text-[10px] uppercase opacity-40 mb-1">Custom Text</div>
+          <div class="flex gap-1">
+            <input
+              type="text"
+              bind:value={customStampInput}
+              placeholder="Custom text..."
+              class="flex-1 px-2 py-1 text-xs rounded"
+              style="background-color: var(--nord2); color: var(--nord6); border: 1px solid var(--nord3);"
+              onkeydown={(e) => {
+                if (e.key === 'Enter' && customStampInput.trim()) {
+                  store.setCustomStampText(customStampInput.trim());
+                  selectStampType('Custom');
+                }
+              }}
+            />
+            <button
+              onclick={() => {
+                if (customStampInput.trim()) {
+                  store.setCustomStampText(customStampInput.trim());
+                  selectStampType('Custom');
+                }
+              }}
+              class="px-2 py-1 rounded text-xs"
+              style="background-color: var(--nord10); color: var(--nord6);"
+              disabled={!customStampInput.trim()}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+
+        <!-- Image stamp -->
+        <div class="px-3 py-2" style="border-top: 1px solid var(--nord3);">
+          <div class="text-[10px] uppercase opacity-40 mb-1">Image Stamp</div>
+          <button
+            onclick={loadStampImage}
+            class="w-full flex items-center justify-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-[var(--nord2)] transition-colors"
+            style="background-color: var(--nord3);"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="m21 15-5-5L5 21" />
+            </svg>
+            <span>Load PNG/JPG...</span>
+          </button>
+          {#if store.stampImageData}
+            <div class="mt-2 flex items-center gap-2">
+              <img
+                src={store.stampImageData}
+                alt="Stamp preview"
+                class="h-8 w-auto rounded"
+                style="max-width: 60px; object-fit: contain;"
+              />
+              <span class="text-[10px] opacity-40">Ready</span>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Rotation -->
+        <div class="px-3 py-2" style="border-top: 1px solid var(--nord3);">
+          <div class="text-[10px] uppercase opacity-40 mb-1">Rotation</div>
+          <div class="flex gap-1">
+            {#each rotationOptions as opt}
+              <button
+                onclick={() => store.setStampRotation(opt.value)}
+                class="flex-1 p-1 rounded text-[10px] transition-colors"
+                class:bg-[var(--nord8)]={store.stampRotation === opt.value}
+                class:text-[var(--nord0)]={store.stampRotation === opt.value}
+                style="background-color: {store.stampRotation === opt.value ? '' : 'var(--nord2)'};"
+              >
+                {opt.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+      </div>
+    {/if}
+  </div>
 
   <!-- Separator -->
   <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
