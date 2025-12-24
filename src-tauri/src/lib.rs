@@ -836,6 +836,134 @@ fn attachments_extract_all(
         .collect())
 }
 
+// ============================================================================
+// Form Fields (AcroForms)
+// ============================================================================
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct FormField {
+    name: String,
+    field_type: String,
+    type_id: u32,
+    value: serde_json::Value,
+    page: u32,
+    rect: Vec<f64>,
+    read_only: bool,
+    choices: Option<Vec<String>>,
+    checked: Option<bool>,
+    on_state: Option<serde_json::Value>,
+    max_length: Option<u32>,
+    multiline: Option<bool>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct FormFieldsResult {
+    is_form: bool,
+    fields: Vec<FormField>,
+    field_count: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct FormFillResult {
+    success: bool,
+    filled_count: u32,
+    errors: Option<Vec<String>>,
+    output_path: String,
+}
+
+/// List all form fields in a PDF
+#[tauri::command]
+fn form_fields_list(app: AppHandle, input: String) -> Result<FormFieldsResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec!["list", &input];
+
+    let result = bridge
+        .run_script("pdf_forms.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    let parsed: serde_json::Value = serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))?;
+
+    if let Some(error) = parsed.get("error") {
+        return Err(error.as_str().unwrap_or("Unknown error").to_string());
+    }
+
+    let is_form = parsed["is_form"].as_bool().unwrap_or(false);
+    let field_count = parsed["field_count"].as_u64().unwrap_or(0) as u32;
+
+    let fields: Vec<FormField> = parsed["fields"]
+        .as_array()
+        .unwrap_or(&vec![])
+        .iter()
+        .map(|f| FormField {
+            name: f["name"].as_str().unwrap_or("").to_string(),
+            field_type: f["type"].as_str().unwrap_or("unknown").to_string(),
+            type_id: f["type_id"].as_u64().unwrap_or(0) as u32,
+            value: f["value"].clone(),
+            page: f["page"].as_u64().unwrap_or(0) as u32,
+            rect: f["rect"]
+                .as_array()
+                .map(|arr| arr.iter().filter_map(|v| v.as_f64()).collect())
+                .unwrap_or_default(),
+            read_only: f["read_only"].as_bool().unwrap_or(false),
+            choices: f["choices"].as_array().map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            }),
+            checked: f["checked"].as_bool(),
+            on_state: f.get("on_state").cloned(),
+            max_length: f["max_length"].as_u64().map(|v| v as u32),
+            multiline: f["multiline"].as_bool(),
+        })
+        .collect();
+
+    Ok(FormFieldsResult {
+        is_form,
+        fields,
+        field_count,
+    })
+}
+
+/// Fill form fields and save to output path
+#[tauri::command]
+fn form_fields_fill(
+    app: AppHandle,
+    input: String,
+    output: String,
+    field_values: std::collections::HashMap<String, serde_json::Value>,
+) -> Result<FormFillResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let values_json = serde_json::to_string(&field_values)
+        .map_err(|e| format!("Failed to serialize field values: {}", e))?;
+
+    let args: Vec<&str> = vec!["fill", &input, &output, &values_json];
+
+    let result = bridge
+        .run_script("pdf_forms.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    let parsed: serde_json::Value = serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))?;
+
+    if let Some(error) = parsed.get("error") {
+        return Err(error.as_str().unwrap_or("Unknown error").to_string());
+    }
+
+    Ok(FormFillResult {
+        success: parsed["success"].as_bool().unwrap_or(false),
+        filled_count: parsed["filled_count"].as_u64().unwrap_or(0) as u32,
+        errors: parsed["errors"].as_array().map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        }),
+        output_path: parsed["output_path"].as_str().unwrap_or("").to_string(),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   // On Linux/Wayland (especially KDE), prefer XDG Desktop Portal file dialogs.
@@ -1031,7 +1159,9 @@ pub fn run() {
       // Attachments
       attachments_list,
       attachments_extract,
-      attachments_extract_all
+      attachments_extract_all,
+      form_fields_list,
+      form_fields_fill
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
