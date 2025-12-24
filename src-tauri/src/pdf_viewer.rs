@@ -8,7 +8,7 @@
 
 use base64::Engine;
 use mupdf::text_page::TextPageOptions;
-use mupdf::{Colorspace, Document, Matrix};
+use mupdf::{Colorspace, Document, Matrix, Outline as MuOutline};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 
@@ -380,4 +380,69 @@ pub fn pdf_get_text_blocks(path: String, page: u32) -> Result<PageTextContent, S
     }
 
     Ok(PageTextContent { page, blocks })
+}
+
+/// PDF outline (table of contents) entry
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OutlineEntry {
+    /// Title of the outline entry
+    pub title: String,
+    /// Target page number (1-indexed), if available
+    pub page: Option<u32>,
+    /// Y position on the page (normalized 0-1)
+    pub y: Option<f32>,
+    /// Child entries (sub-sections)
+    pub children: Vec<OutlineEntry>,
+}
+
+/// Convert MuPDF Outline to our OutlineEntry, fetching page dimensions for normalization
+fn convert_outline(outline: &MuOutline, document: &Document) -> OutlineEntry {
+    let (page, normalized_y) = if let Some(p) = outline.page {
+        // Page is 0-indexed in the outline
+        let page_num = p + 1; // Convert to 1-indexed
+
+        // Normalize Y coordinate if we have a valid page
+        let norm_y = if outline.y > 0.0 {
+            if let Ok(pdf_page) = document.load_page(p as i32) {
+                if let Ok(bounds) = pdf_page.bounds() {
+                    Some(outline.y / bounds.height())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        (Some(page_num), norm_y)
+    } else {
+        (None, None)
+    };
+
+    OutlineEntry {
+        title: outline.title.clone(),
+        page,
+        y: normalized_y,
+        children: outline.down.iter().map(|c| convert_outline(c, document)).collect(),
+    }
+}
+
+/// Get PDF outline (table of contents)
+#[tauri::command]
+pub fn pdf_get_outlines(path: String) -> Result<Vec<OutlineEntry>, String> {
+    let document = Document::open(&path)
+        .map_err(|e| format!("Failed to load PDF: {:?}", e))?;
+
+    let outlines = document
+        .outlines()
+        .map_err(|e| format!("Failed to get outlines: {:?}", e))?;
+
+    let entries: Vec<OutlineEntry> = outlines
+        .iter()
+        .map(|o| convert_outline(o, &document))
+        .collect();
+
+    Ok(entries)
 }

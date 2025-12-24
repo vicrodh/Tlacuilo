@@ -882,6 +882,7 @@ pub fn run() {
       pdf_viewer::pdf_render_thumbnails,
       pdf_viewer::pdf_close,
       pdf_viewer::pdf_get_text_blocks,
+      pdf_viewer::pdf_get_outlines,
       // Annotations (JSON file-based)
       annotations::annotations_save,
       annotations::annotations_load,

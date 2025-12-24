@@ -109,7 +109,12 @@
           {onNavigateToPage}
         />
       {:else if activeTab === 'bookmarks'}
-        <BookmarksTab />
+        <BookmarksTab
+          {filePath}
+          {fileReloadVersion}
+          {onNavigateToPage}
+          {onFocusOnResult}
+        />
       {:else if activeTab === 'search'}
         <SearchTab
           {filePath}
