@@ -704,6 +704,138 @@ fn pdf_to_images(
     }
 }
 
+// ============================================================================
+// PDF Attachments Commands (PythonBridge)
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+struct AttachmentInfo {
+    index: u32,
+    name: String,
+    filename: String,
+    size: u64,
+    length: u64,
+    created: String,
+    modified: String,
+    description: String,
+}
+
+/// List all embedded files in a PDF
+#[tauri::command]
+fn attachments_list(app: AppHandle, input: String) -> Result<Vec<AttachmentInfo>, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec!["list", "--input", &input];
+
+    let result = bridge
+        .run_script("pdf_attachments.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    let attachments: Vec<serde_json::Value> = serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))?;
+
+    Ok(attachments
+        .iter()
+        .map(|a| AttachmentInfo {
+            index: a["index"].as_u64().unwrap_or(0) as u32,
+            name: a["name"].as_str().unwrap_or("").to_string(),
+            filename: a["filename"].as_str().unwrap_or("").to_string(),
+            size: a["size"].as_u64().unwrap_or(0),
+            length: a["length"].as_u64().unwrap_or(0),
+            created: a["created"].as_str().unwrap_or("").to_string(),
+            modified: a["modified"].as_str().unwrap_or("").to_string(),
+            description: a["description"].as_str().unwrap_or("").to_string(),
+        })
+        .collect())
+}
+
+#[derive(Debug, Serialize)]
+struct AttachmentExtractResult {
+    success: bool,
+    path: String,
+    name: String,
+    size: u64,
+}
+
+/// Extract a single embedded file
+#[tauri::command]
+fn attachments_extract(
+    app: AppHandle,
+    input: String,
+    name: String,
+    output: Option<String>,
+) -> Result<AttachmentExtractResult, String> {
+    let output_path = output.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir
+            .join("attachments")
+            .join(&name)
+            .to_string_lossy()
+            .to_string()
+    });
+
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec!["extract", "--input", &input, "--name", &name, "--output", &output_path];
+
+    let result = bridge
+        .run_script("pdf_attachments.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    let parsed: serde_json::Value = serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))?;
+
+    Ok(AttachmentExtractResult {
+        success: parsed["success"].as_bool().unwrap_or(false),
+        path: parsed["path"].as_str().unwrap_or("").to_string(),
+        name: parsed["name"].as_str().unwrap_or("").to_string(),
+        size: parsed["size"].as_u64().unwrap_or(0),
+    })
+}
+
+/// Extract all embedded files to a directory
+#[tauri::command]
+fn attachments_extract_all(
+    app: AppHandle,
+    input: String,
+    output_dir: Option<String>,
+) -> Result<Vec<AttachmentExtractResult>, String> {
+    let out_dir = output_dir.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir
+            .join("attachments")
+            .to_string_lossy()
+            .to_string()
+    });
+
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec!["extract-all", "--input", &input, "--output-dir", &out_dir];
+
+    let result = bridge
+        .run_script("pdf_attachments.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))?;
+
+    Ok(parsed
+        .iter()
+        .map(|a| AttachmentExtractResult {
+            success: a["success"].as_bool().unwrap_or(false),
+            path: a["path"].as_str().unwrap_or("").to_string(),
+            name: a["name"].as_str().unwrap_or("").to_string(),
+            size: a["size"].as_u64().unwrap_or(0),
+        })
+        .collect())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   // On Linux/Wayland (especially KDE), prefer XDG Desktop Portal file dialogs.
@@ -895,7 +1027,11 @@ pub fn run() {
       annotations_import_xfdf,
       // Print commands
       print_prepare_pdf,
-      print_pdf
+      print_pdf,
+      // Attachments
+      attachments_list,
+      attachments_extract,
+      attachments_extract_all
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

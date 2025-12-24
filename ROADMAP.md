@@ -1,118 +1,210 @@
-# Tlacuilo Development Roadmap
+# Tlacuilo - Roadmap
 
-## Current Status
-- **Viewer**: Complete (MuPDF-based)
-- **Merge**: Complete
-- **Split**: Complete
-- **Rotate**: Complete
+**Ultima actualizacion:** 2024-12-24
 
 ---
 
-## Phase A: Core Manipulation (Rust/MuPDF)
+## Estado Actual: PDF Viewer/Annotator Funcional
 
-| Tool | Status | Technology | Notes |
-|------|--------|------------|-------|
-| Viewer | ✅ Done | MuPDF/Rust | Continuous scroll, fit modes |
-| Merge | ✅ Done | MuPDF/Rust | |
-| Split | ✅ Done | MuPDF/Rust | |
-| Rotate | ✅ Done | MuPDF/Rust | |
-| Compress | ✅ Done | MuPDF/Rust | 3 compression levels |
+El viewer es usable para trabajo diario. Las herramientas de manipulacion (merge, split, rotate, compress, convert) estan funcionales.
 
 ---
 
-## Phase B: Python Integration
+## Completado
 
-### Prerequisites
-- [x] Build `python_bridge.rs` module for subprocess management
-- [x] Implement dependency checking and virtual environment support
+### Core Viewer
+- [x] Renderizado PDF de alta calidad con MuPDF (Rust bindings)
+- [x] Visor multi-tab
+- [x] Controles de zoom (fit-width, fit-page, custom)
+- [x] Rotacion de vista
+- [x] Navegacion de paginas
+- [x] Seleccion de texto con menu contextual
+- [x] Copiar texto seleccionado
+- [x] Busqueda con highlight y navegacion
 
-| Tool | Status | Technology | Notes |
-|------|--------|------------|-------|
-| OCR | ✅ Done | OCRmyPDF (Python) | Requires tesseract-data-* |
-| Images → PDF | ⬜ Pending | MuPDF or Python | |
-| PDF → Images | ⬜ Pending | MuPDF | |
+### Annotations
+- [x] Highlight (resaltado)
+- [x] Underline (subrayado)
+- [x] Strikethrough (tachado)
+- [x] Comments (notas adhesivas)
+- [x] Freetext (texto libre/typewriter)
+- [x] Ink (dibujo libre)
+- [x] Rectangle
+- [x] Ellipse
+- [x] Line
+- [x] Arrow (con puntas configurables)
+- [x] Sequence Numbers (numeracion)
+- [x] Colores y opacidad configurables
+- [x] Estilos de linea (solid, dashed, dotted)
+- [x] Fill para shapes
+- [x] Guardar anotaciones en PDF
+- [x] Exportar como XFDF
+- [x] Imprimir con opciones de anotaciones
+- [x] Panel de anotaciones con busqueda
+- [x] Cambiar color de anotacion existente
 
----
+### Bookmarks
+- [x] Lector de PDF Outlines (Table of Contents)
+- [x] Navegacion a seccion con scroll preciso
+- [x] Outlines jerarquicos expandibles
+- [x] User bookmarks (marcadores de usuario)
+- [x] Persistencia de bookmarks por archivo
+- [x] Agregar/editar/eliminar bookmarks
+- [x] Busqueda en bookmarks y outlines
 
-## Phase C: Protection & Annotation
+### OCR
+- [x] Deteccion automatica de documentos escaneados
+- [x] OCR con Tesseract via ocrmypdf
+- [x] Soporte multi-idioma
+- [x] Indicador de progreso
+- [x] Manejo de archivos temporales OCR
+- [x] Flujo: archivo original -> OCR -> temp -> Save As
 
-| Tool | Status | Technology | Notes |
-|------|--------|------------|-------|
-| Encrypt | ⬜ Pending | MuPDF/Rust | |
-| Decrypt | ⬜ Pending | MuPDF/Rust | |
-| Watermark | ⬜ Pending | MuPDF/Rust | |
-| Page Numbers | ⬜ Pending | MuPDF/Rust | |
-| Redact | ⬜ Pending | MuPDF/Rust | |
+### PDF Operations
+- [x] Merge PDFs (unir)
+- [x] Split PDFs (dividir)
+- [x] Rotate pages (rotar)
+- [x] Compress PDFs (comprimir con Ghostscript)
 
----
+### Conversion
+- [x] Images to PDF (JPG, PNG, WEBP, TIFF, BMP)
+- [x] PDF to Images (PNG, JPG, WEBP, TIFF)
+- [x] Configuracion de DPI
+- [x] Per-image transforms
 
-## Phase D: Viewer Annotations (Bridge to Editor)
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Text Highlights | ✅ Done | Yellow, green, blue, pink, orange, purple |
-| Comments/Notes | ✅ Done | Sticky note style with text |
-| Underline | ✅ Done | |
-| Strikethrough | ✅ Done | |
-| Annotations Panel | ✅ Done | Right sidebar showing all annotations |
-| Save/Load Annotations | ✅ Done | Sidecar JSON file (.filename.pdf.annotations.json) |
-| Virtual Scrolling | ✅ Done | Only loads visible pages + buffer for large docs |
-| Freehand Drawing | ⬜ Pending | |
-| Stamps | ⬜ Pending | |
-| Embed in PDF | ⬜ Pending | Save annotations directly into PDF file |
-
----
-
-## Phase E: Editor MVP
-
-> **Inflection Point**: Start Editor when Phase A + B are stable and viewer has basic annotations.
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Text Editing | ⬜ Pending | Consider Skia integration |
-| Image Insertion | ⬜ Pending | |
-| Form Fields | ⬜ Pending | |
-| Digital Signatures | ⬜ Pending | |
-
----
-
-## Phase F: Code Consolidation & Refactoring
-
-> **Goal**: Eliminate duplicated code patterns and consolidate similar implementations.
-
-| Task | Status | Description |
-|------|--------|-------------|
-| Migrate PDF ops to python_bridge | ⬜ Pending | Refactor merge_pdfs, split_pdf, rotate_pdf to use PythonBridge |
-| Unify error handling | ⬜ Pending | Standardize error types across all Tauri commands |
-| Extract common UI patterns | ⬜ Pending | Create reusable Svelte components for file selection, progress, etc. |
-| Consolidate i18n | ⬜ Pending | Ensure all user-facing strings use translation system |
-
----
-
-## External Dependencies
-
-### Python Tools (via python_bridge.rs)
-- **OCRmyPDF**: Tesseract wrapper for OCR (MPL-2.0)
-- **KittenTTS**: Text-to-speech for accessibility (Apache 2.0)
-
-### Future Considerations
-- **Skia**: 2D graphics library for Editor (use `skia-safe` Rust crate)
+### UI/UX
+- [x] Tema Nord
+- [x] Sidebar con favoritos personalizables
+- [x] Archivos recientes
+- [x] Configuracion persistente (tauri-plugin-store)
+- [x] Atajos de teclado
+- [x] Sistema de tabs
+- [x] Menu de aplicacion (File, Edit, View, Help)
+- [x] Dialogo de confirmacion para cambios no guardados
 
 ---
 
-## Commit Strategy
-- Minimum one commit per feature
-- Multiple commits for complex tasks
-- Checkpoint commits before major refactors
+## En Progreso
+
+### Signatures Module
+- [x] Placeholder UI
+- [ ] Firma grafica (dibujar/cargar imagen)
+- [ ] Posicionar firma en documento
+- [ ] Biblioteca de firmas guardadas
+
+### Metadata Viewer
+- [x] Mostrar info del documento (titulo, autor, fechas)
+- [x] Propiedades del PDF (version, encriptacion)
+- [x] Estadisticas (paginas, tamano)
+- [x] Copiar campos al portapapeles
+
+### Attachments Viewer
+- [x] Listar archivos embebidos con metadata
+- [x] Extraer attachment individual (Save As dialog)
+- [x] Extraer todos los attachments
+- [ ] Preview de attachments (imagenes, texto)
 
 ---
 
-## Backlog
+## Siguiente (Quick Wins)
 
-| Item | Priority | Notes |
-|------|----------|-------|
-| Interactive Help system | Medium | Detect distro, show real package commands (pacman/apt/dnf) |
-| GPU acceleration | Medium | WebGL or wgpu for faster rendering |
-| Performance benchmarking | Low | CPU/memory/GPU diagnostics panel |
-| "Open with Tlacuilo" system registration | Low | Register as PDF handler in desktop |
-| Splash screen with loading indicator | Low | Show during app initialization |
+### Stamps
+- [ ] Stamps predefinidos (Approved, Draft, Confidential, etc.)
+- [ ] Stamps personalizados
+- [ ] Posicionar como anotacion
+
+---
+
+## Medio Plazo
+
+### AcroForms
+- [ ] Detectar campos de formulario
+- [ ] Llenar campos (text, checkbox, radio, dropdown)
+- [ ] Guardar formulario llenado
+- [ ] Validaciones basicas
+
+### Callouts
+- [ ] Freetext con linea conectora
+- [ ] Posicionamiento automatico
+
+### Layers
+- [ ] Detectar layers del PDF
+- [ ] Toggle visibilidad
+
+---
+
+## Largo Plazo
+
+### Redaction
+- [ ] Marcar areas para redactar
+- [ ] Eliminar contenido real (no solo cubrir)
+- [ ] Verificacion de redaccion
+
+### Sanitization
+- [ ] Limpiar metadata
+- [ ] Eliminar scripts
+- [ ] Remover objetos ocultos
+
+### Digital Signatures
+- [ ] PKCS#7 con certificados
+- [ ] PAdES
+- [ ] Timestamp
+- [ ] Verificacion de firmas
+
+### Office Conversion
+- [ ] DOCX a PDF (LibreOffice)
+- [ ] XLSX a PDF
+- [ ] PPTX a PDF
+
+---
+
+## Nice to Have (Needs Research)
+
+- [ ] Cloud Storage Integration (OneDrive, Google Drive, Dropbox, iCloud)
+- [ ] Escanear a PDF (SANE)
+- [ ] Comparar PDFs
+- [ ] Reparar PDFs danados
+- [ ] PKCS#11 (hardware tokens)
+
+---
+
+## Arquitectura Actual
+
+```
+ihpdf/
+├── src-tauri/           # Rust (Tauri + MuPDF bindings)
+│   ├── src/
+│   │   ├── lib.rs       # Commands y menu
+│   │   ├── pdf_viewer.rs # MuPDF operations
+│   │   ├── pdf_ocr.rs   # OCR wrapper
+│   │   └── ...
+│
+├── src/                 # Frontend (Svelte 5 + TypeScript)
+│   ├── lib/
+│   │   ├── components/
+│   │   │   ├── PDFViewer/    # Viewer components
+│   │   │   ├── Sidebar/      # Navigation
+│   │   │   └── ...
+│   │   ├── stores/           # Svelte stores
+│   │   └── views/            # Page views
+│
+├── backend/             # Python scripts
+│   ├── pdf_ops.py       # Merge, split, rotate
+│   ├── pdf_compress.py  # Compression
+│   ├── pdf_convert.py   # Image conversion
+│   └── ...
+```
+
+---
+
+## Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | Svelte 5 (runes) + Vite |
+| Desktop | Tauri 2.x (Rust) |
+| PDF Rendering | MuPDF via Rust bindings |
+| PDF Processing | PyMuPDF, pikepdf, pypdf |
+| OCR | ocrmypdf + Tesseract |
+| Styling | Tailwind CSS + Nord theme |
+| Icons | Lucide |

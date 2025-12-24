@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { LayoutList, MessageSquare, Bookmark, Search, Info, ChevronRight, ChevronLeft } from 'lucide-svelte';
+  import { LayoutList, MessageSquare, Bookmark, Search, Info, Paperclip, ChevronRight, ChevronLeft } from 'lucide-svelte';
   import type { AnnotationsStore } from '$lib/stores/annotations.svelte';
   import PagesTab from './sidebar/PagesTab.svelte';
   import AnnotationsTab from './sidebar/AnnotationsTab.svelte';
   import BookmarksTab from './sidebar/BookmarksTab.svelte';
   import SearchTab from './sidebar/SearchTab.svelte';
   import MetadataTab from './sidebar/MetadataTab.svelte';
+  import AttachmentsTab from './sidebar/AttachmentsTab.svelte';
 
   interface RenderedPage {
     data: string;
@@ -53,7 +54,7 @@
   // State for passing search query to SearchTab
   let externalSearchQuery = $state('');
 
-  type TabId = 'pages' | 'annotations' | 'bookmarks' | 'search' | 'info';
+  type TabId = 'pages' | 'annotations' | 'bookmarks' | 'search' | 'info' | 'attachments';
 
   let activeTab = $state<TabId>('pages');
   let isCollapsed = $state(false);
@@ -64,6 +65,7 @@
     { id: 'bookmarks', icon: Bookmark, label: 'Bookmarks' },
     { id: 'search', icon: Search, label: 'Search' },
     { id: 'info', icon: Info, label: 'Document Info' },
+    { id: 'attachments', icon: Paperclip, label: 'Attachments' },
   ];
 
   function handleTabClick(tabId: TabId) {
@@ -132,6 +134,11 @@
         />
       {:else if activeTab === 'info'}
         <MetadataTab
+          {filePath}
+          {fileReloadVersion}
+        />
+      {:else if activeTab === 'attachments'}
+        <AttachmentsTab
           {filePath}
           {fileReloadVersion}
         />
