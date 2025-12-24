@@ -112,9 +112,10 @@
   }
 </script>
 
-{#if formModeEnabled && pageFields.length > 0}
+{#if pageFields.length > 0}
   <div
-    class="absolute inset-0 pointer-events-none"
+    class="absolute inset-0"
+    class:pointer-events-none={!formModeEnabled}
     style="z-index: 20;"
   >
     {#each pageFields as field (field.name)}
@@ -123,28 +124,35 @@
           <!-- Text Field -->
           {#if field.multiline}
             <textarea
-              class="form-field-input pointer-events-auto resize-none"
+              class="form-field-input resize-none"
+              class:pointer-events-auto={formModeEnabled}
+              class:form-field-readonly={!formModeEnabled}
               style={getInputStyle(field)}
               value={getDisplayValue(field)}
               oninput={(e) => handleTextChange(field, e)}
               maxlength={field.max_length || undefined}
               placeholder=""
+              readonly={!formModeEnabled}
             ></textarea>
           {:else}
             <input
               type="text"
-              class="form-field-input pointer-events-auto"
+              class="form-field-input"
+              class:pointer-events-auto={formModeEnabled}
+              class:form-field-readonly={!formModeEnabled}
               style={getInputStyle(field)}
               value={getDisplayValue(field)}
               oninput={(e) => handleTextChange(field, e)}
               maxlength={field.max_length || undefined}
+              readonly={!formModeEnabled}
             />
           {/if}
         {:else if field.field_type === 'checkbox'}
           <!-- Checkbox -->
           {@const pos = rectToStyle(field.rect)}
           <div
-            class="absolute flex items-center justify-center pointer-events-auto"
+            class="absolute flex items-center justify-center"
+            class:pointer-events-auto={formModeEnabled}
             style="left: {pos.left}; top: {pos.top}; width: {pos.width}; height: {pos.height};"
           >
             <input
@@ -152,14 +160,16 @@
               class="form-field-checkbox"
               checked={isChecked(field)}
               onchange={(e) => handleCheckboxChange(field, e)}
-              style="width: 100%; height: 100%; cursor: pointer; accent-color: var(--nord8);"
+              disabled={!formModeEnabled}
+              style="width: 100%; height: 100%; cursor: {formModeEnabled ? 'pointer' : 'default'}; accent-color: var(--nord8);"
             />
           </div>
         {:else if field.field_type === 'radiobutton'}
           <!-- Radio Button -->
           {@const pos = rectToStyle(field.rect)}
           <div
-            class="absolute flex items-center justify-center pointer-events-auto"
+            class="absolute flex items-center justify-center"
+            class:pointer-events-auto={formModeEnabled}
             style="left: {pos.left}; top: {pos.top}; width: {pos.width}; height: {pos.height};"
           >
             <input
@@ -168,50 +178,75 @@
               name={field.name.split('.')[0]}
               checked={isChecked(field)}
               onchange={(e) => handleCheckboxChange(field, e)}
-              style="width: 100%; height: 100%; cursor: pointer; accent-color: var(--nord8);"
+              disabled={!formModeEnabled}
+              style="width: 100%; height: 100%; cursor: {formModeEnabled ? 'pointer' : 'default'}; accent-color: var(--nord8);"
             />
           </div>
         {:else if field.field_type === 'combobox' || field.field_type === 'listbox'}
           <!-- Dropdown / List -->
           {@const pos = rectToStyle(field.rect)}
-          <select
-            class="form-field-select pointer-events-auto"
-            style="
-              position: absolute;
-              left: {pos.left};
-              top: {pos.top};
-              width: {pos.width};
-              height: {pos.height};
-              font-family: {getWebFont((field as any).text_font)};
-              border: none;
-              outline: none;
-              background-color: transparent;
-              cursor: pointer;
-            "
-            value={getDisplayValue(field)}
-            onchange={(e) => handleSelectChange(field, e)}
-          >
-            <option value="">-- Select --</option>
-            {#each field.choices || [] as choice}
-              <option value={choice}>{choice}</option>
-            {/each}
-          </select>
+          {#if formModeEnabled}
+            <select
+              class="form-field-select pointer-events-auto"
+              style="
+                position: absolute;
+                left: {pos.left};
+                top: {pos.top};
+                width: {pos.width};
+                height: {pos.height};
+                font-family: {getWebFont((field as any).text_font)};
+                border: none;
+                outline: none;
+                background-color: transparent;
+                cursor: pointer;
+              "
+              value={getDisplayValue(field)}
+              onchange={(e) => handleSelectChange(field, e)}
+            >
+              <option value="">-- Select --</option>
+              {#each field.choices || [] as choice}
+                <option value={choice}>{choice}</option>
+              {/each}
+            </select>
+          {:else}
+            <!-- Show as text when not editable -->
+            <div
+              class="form-field-readonly-text"
+              style="
+                position: absolute;
+                left: {pos.left};
+                top: {pos.top};
+                width: {pos.width};
+                height: {pos.height};
+                font-family: {getWebFont((field as any).text_font)};
+                display: flex;
+                align-items: center;
+                padding: 0 4px;
+              "
+            >
+              {getDisplayValue(field)}
+            </div>
+          {/if}
         {/if}
       {:else}
-        <!-- Read-only field indicator -->
+        <!-- Read-only field - show value -->
         {@const pos = rectToStyle(field.rect)}
         <div
-          class="absolute opacity-30 pointer-events-none"
+          class="form-field-readonly-text"
           style="
+            position: absolute;
             left: {pos.left};
             top: {pos.top};
             width: {pos.width};
             height: {pos.height};
-            background-color: var(--nord3);
-            border-radius: 2px;
+            display: flex;
+            align-items: center;
+            padding: 0 4px;
+            font-family: {getWebFont((field as any).text_font)};
           "
-          title="Read-only field"
-        ></div>
+        >
+          {getDisplayValue(field)}
+        </div>
       {/if}
     {/each}
   </div>
@@ -227,8 +262,22 @@
     background-color: rgba(136, 192, 208, 0.1) !important;
   }
 
-  .form-field-input:hover:not(:focus) {
+  .form-field-input:hover:not(:focus):not(.form-field-readonly) {
     background-color: rgba(136, 192, 208, 0.05) !important;
+  }
+
+  .form-field-readonly {
+    cursor: default;
+    user-select: text;
+    pointer-events: auto;
+  }
+
+  .form-field-readonly-text {
+    cursor: default;
+    user-select: text;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .form-field-select:focus {
