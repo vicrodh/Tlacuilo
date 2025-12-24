@@ -166,6 +166,46 @@
   --nord15: #cba6f7; /* mauve */
 }
 
+/* Catppuccin Latte palette - light variant */
+:root[data-palette="catppuccin-latte"] {
+  --nord0: #eff1f5; /* base */
+  --nord1: #e6e9ef; /* mantle */
+  --nord2: #dce0e8; /* crust */
+  --nord3: #ccd0da; /* surface0 */
+  --nord4: #6c6f85; /* subtext0 (muted) */
+  --nord5: #5c5f77; /* subtext1 */
+  --nord6: #4c4f69; /* text */
+  --nord7: #179299; /* teal */
+  --nord8: #1e66f5; /* blue (primary) */
+  --nord9: #209fb5; /* sapphire */
+  --nord10: #7287fd; /* lavender */
+  --nord11: #d20f39; /* red */
+  --nord12: #fe640b; /* peach */
+  --nord13: #df8e1d; /* yellow */
+  --nord14: #40a02b; /* green */
+  --nord15: #8839ef; /* mauve */
+}
+
+/* Rosé Pine Dawn palette - rosepinetheme.com */
+:root[data-palette="rose-pine-dawn"] {
+  --nord0: #faf4ed; /* base */
+  --nord1: #fffaf3; /* surface */
+  --nord2: #f2e9e1; /* overlay */
+  --nord3: #dfdad9; /* highlight med */
+  --nord4: #9893a5; /* muted */
+  --nord5: #797593; /* subtle */
+  --nord6: #575279; /* text */
+  --nord7: #56949f; /* foam (cyan) */
+  --nord8: #907aa9; /* iris (primary - purple) */
+  --nord9: #286983; /* pine (blue) */
+  --nord10: #d7827e; /* rose */
+  --nord11: #b4637a; /* love (red) */
+  --nord12: #ea9d34; /* gold (orange) */
+  --nord13: #ea9d34; /* gold (yellow) */
+  --nord14: #286983; /* pine (green substitute) */
+  --nord15: #907aa9; /* iris */
+}
+
 * {
   box-sizing: border-box;
 }

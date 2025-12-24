@@ -42,6 +42,8 @@ export type PaletteId =
   | 'tokyo-night'
   | 'monokai'
   | 'catppuccin-mocha'
+  | 'catppuccin-latte'
+  | 'rose-pine-dawn'
   | 'solarized-dark'
   | 'gruvbox-dark';
 
@@ -80,6 +82,16 @@ export const PALETTES: {
     id: 'catppuccin-mocha',
     label: 'Catppuccin Mocha',
     colors: { bg: '#11111b', panel: '#181825', accent: '#89b4fa', text: '#cdd6f4', red: '#f38ba8', green: '#a6e3a1' },
+  },
+  {
+    id: 'catppuccin-latte',
+    label: 'Catppuccin Latte (Light)',
+    colors: { bg: '#eff1f5', panel: '#e6e9ef', accent: '#1e66f5', text: '#4c4f69', red: '#d20f39', green: '#40a02b' },
+  },
+  {
+    id: 'rose-pine-dawn',
+    label: 'Rosé Pine Dawn (Light)',
+    colors: { bg: '#faf4ed', panel: '#fffaf3', accent: '#907aa9', text: '#575279', red: '#b4637a', green: '#286983' },
   },
   {
     id: 'solarized-dark',
