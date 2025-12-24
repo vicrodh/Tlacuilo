@@ -44,9 +44,16 @@
   }
 
   // Handle open-pdf-file event from MuPDFViewer toolbar
-  function handleOpenPdfFile(e: CustomEvent<{ path: string }>) {
+  function handleOpenPdfFile(e: CustomEvent<{ path: string; replaceTab?: string }>) {
     if (e.detail.path) {
-      openFileInNewTab(e.detail.path);
+      if (e.detail.replaceTab) {
+        // Replace the specified tab's file (used for OCR'd versions)
+        console.log('[TabContainer] Replacing tab file:', e.detail.replaceTab, 'with:', e.detail.path);
+        tabsStore.setTabFile(e.detail.replaceTab, e.detail.path);
+      } else {
+        // Open in new tab
+        openFileInNewTab(e.detail.path);
+      }
     }
   }
 

@@ -131,6 +131,30 @@
   let ocrMessage = $state('Processing OCR...');
   // Track if OCR was completed for this session (persists across reloads)
   let ocrCompletedForSession = $state(false);
+  // Store the original file path before OCR (for Save As default directory)
+  let originalFilePath = $state<string | null>(null);
+  // Store the OCR temp file path for cleanup
+  let ocrTempFilePath = $state<string | null>(null);
+
+  // Cleanup OCR temp files
+  async function cleanupOcrTempFile() {
+    if (!ocrTempFilePath) return;
+
+    try {
+      // Get the parent directory (session UUID dir) to delete the whole session
+      const sessionDir = ocrTempFilePath.substring(0, ocrTempFilePath.lastIndexOf('/'));
+      console.log('[OCR] Cleaning up temp session:', sessionDir);
+
+      // Use Tauri fs to remove the directory
+      const { remove } = await import('@tauri-apps/plugin-fs');
+      await remove(sessionDir, { recursive: true });
+
+      console.log('[OCR] Temp session cleaned up');
+      ocrTempFilePath = null;
+    } catch (err) {
+      console.warn('[OCR] Failed to cleanup temp file:', err);
+    }
+  }
 
   // Analyze document for OCR need (called after PDF loads)
   async function analyzeForOcr() {
@@ -190,15 +214,24 @@
 
   // Run OCR on the current document (in-place, then reload)
   async function runOcrOnDocument() {
+    console.log('[OCR] Starting runOcrOnDocument...');
+
+    // Store the original file path before OCR for Save As default
+    originalFilePath = filePath;
+
     // Set state first
     isRunningOcr = true;
     ocrMessage = 'Processing OCR...';
 
-    // Force UI update before starting heavy work
+    // Force UI update and ensure browser paints before heavy work
     await tick();
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    await new Promise(resolve => setTimeout(resolve, 100)); // Extra delay to ensure paint
+
+    console.log('[OCR] Splash should be visible now, starting invoke...');
 
     try {
-      debugLog('MuPDFViewer', 'Running OCR on document...', { filePath });
+      console.log('[OCR] Invoking ocr_run...', { filePath });
 
       const result = await invoke<{ success: boolean; output_path?: string; error?: string }>('ocr_run', {
         input: filePath,
@@ -216,9 +249,11 @@
         },
       });
 
-      if (result.success) {
-        debugLog('MuPDFViewer', 'OCR completed successfully');
-        ocrMessage = 'OCR complete! Reloading document...';
+      console.log('[OCR] invoke completed, result:', result);
+
+      if (result.success && result.output_path) {
+        console.log('[OCR] Success! output_path:', result.output_path);
+        ocrMessage = 'OCR complete! Loading processed document...';
 
         // Mark OCR as completed for this session - prevents re-prompting
         ocrCompletedForSession = true;
@@ -229,17 +264,33 @@
         await tick();
 
         // Small delay to show success message
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 300));
 
-        // Reload the PDF to show the new text layer
-        await loadPDF();
+        // Load the OCR'd file instead of the original
+        // This is a temp file - user can save it later if they want
+        const ocrFilePath = result.output_path;
+        ocrTempFilePath = ocrFilePath; // Store for cleanup later
+        console.log('[OCR] Loading OCR file:', ocrFilePath);
 
-        await message('OCR processing completed successfully. The document now has searchable text.', {
+        // Update filePath to the OCR'd version and reload
+        // We dispatch an event to open this in a new tab or replace current
+        window.dispatchEvent(new CustomEvent('open-pdf-file', { detail: { path: ocrFilePath, replaceTab: tabId } }));
+
+        console.log('[OCR] Dispatched open-pdf-file event');
+
+        await message('OCR processing completed. You are now viewing the processed document.\n\nThe original file was not modified. Use "Save As" to keep the OCR version.', {
           title: 'OCR Complete',
           kind: 'info',
         });
+      } else if (result.success) {
+        // Success but no output path - shouldn't happen
+        console.warn('[OCR] Success but no output_path');
+        await message('OCR completed but no output file was created.', {
+          title: 'OCR Warning',
+          kind: 'warning',
+        });
       } else {
-        debugLog('MuPDFViewer', 'OCR failed:', result.error, 'error');
+        console.error('[OCR] Failed:', result.error);
         await message(`OCR processing failed: ${result.error}`, {
           title: 'OCR Failed',
           kind: 'error',
@@ -247,7 +298,7 @@
         showOcrButton = true;
       }
     } catch (err) {
-      debugLog('MuPDFViewer', 'OCR error:', err, 'error');
+      console.error('[OCR] Exception:', err);
       await message(`OCR processing failed: ${err}`, {
         title: 'OCR Error',
         kind: 'error',
@@ -255,6 +306,7 @@
       showOcrButton = true;
     } finally {
       isRunningOcr = false;
+      console.log('[OCR] runOcrOnDocument finished, isRunningOcr:', isRunningOcr);
     }
   }
 
@@ -336,11 +388,16 @@
     return JSON.stringify(serialized);
   }
 
-  // Embed annotations into PDF (overwrite same file)
-  async function saveAnnotationsToPdf() {
-    const annotationCount = annotationsStore.getAllAnnotations().length;
+  // Check if current file is in cache/temp directory
+  function isWorkingOnTempFile(): boolean {
+    return ocrTempFilePath !== null || filePath.includes('/ocr-sessions/');
+  }
 
-    if (!confirm(`Save ${annotationCount} annotation${annotationCount !== 1 ? 's' : ''} to PDF?\n\nThis will overwrite the current file.`)) {
+  // Embed annotations into PDF (overwrite same file, or Save As if temp file)
+  async function saveAnnotationsToPdf() {
+    // If working on a temp/cache file, redirect to Save As
+    if (isWorkingOnTempFile()) {
+      await saveAnnotationsToPdfAs();
       return;
     }
 
@@ -354,18 +411,21 @@
       );
 
       if (result.errors.length > 0) {
-        console.warn('[MuPDFViewer] Some annotations failed:', result.errors);
-        alert(`Saved ${result.total} annotations. ${result.errors.length} failed.`);
+        console.warn('[MuPDFViewer] Some items failed to save:', result.errors);
+        await message(`Some changes could not be saved:\n${result.errors.slice(0, 3).join('\n')}${result.errors.length > 3 ? `\n...and ${result.errors.length - 3} more` : ''}`, {
+          title: 'Warning',
+          kind: 'warning',
+        });
       }
 
-      // Clear dirty flag since annotations are now in PDF
+      // Clear dirty flag
       annotationsDirty = false;
 
-      // Reload the PDF to show embedded annotations
+      // Reload the PDF
       await loadPDF();
     } catch (err) {
-      console.error('[MuPDFViewer] Failed to save annotations to PDF:', err);
-      alert(`Failed to save annotations to PDF: ${err}`);
+      console.error('[MuPDFViewer] Failed to save:', err);
+      await message(`Failed to save: ${err}`, { title: 'Error', kind: 'error' });
     } finally {
       isExporting = false;
     }
@@ -373,9 +433,13 @@
 
   // Embed annotations into PDF (Save As...)
   async function saveAnnotationsToPdfAs() {
+    // Use original file path for default if available (for OCR'd files in temp dir)
+    const basePath = originalFilePath || filePath;
+    const defaultSavePath = basePath.replace('.pdf', '-annotated.pdf');
+
     const outputPath = await save({
       title: 'Save PDF with Annotations',
-      defaultPath: filePath.replace('.pdf', '-annotated.pdf'),
+      defaultPath: defaultSavePath,
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
     });
     if (!outputPath) return;
@@ -389,12 +453,25 @@
       );
       if (result.errors.length > 0) {
         console.warn('[MuPDFViewer] Some annotations failed:', result.errors);
-        alert(`Saved ${result.total} annotations. ${result.errors.length} failed.`);
+        await message(`Some annotations could not be saved:\n${result.errors.slice(0, 3).join('\n')}${result.errors.length > 3 ? `\n...and ${result.errors.length - 3} more` : ''}`, {
+          title: 'Warning',
+          kind: 'warning',
+        });
       }
-      // No success alert needed - file was saved
+
+      // Switch tab to the saved file
+      console.log('[Save] Switching tab to saved file:', outputPath);
+      window.dispatchEvent(new CustomEvent('open-pdf-file', { detail: { path: outputPath, replaceTab: tabId } }));
+
+      // Cleanup OCR temp file since we saved successfully
+      await cleanupOcrTempFile();
+
+      // Clear original file path tracking - we're now on the saved file
+      originalFilePath = null;
+
     } catch (err) {
-      console.error('[MuPDFViewer] Failed to embed annotations:', err);
-      alert(`Failed to save annotations to PDF: ${err}`);
+      console.error('[MuPDFViewer] Failed to save:', err);
+      await message(`Failed to save: ${err}`, { title: 'Error', kind: 'error' });
     } finally {
       isExporting = false;
     }
@@ -1174,6 +1251,9 @@
     unlistenExportXfdf?.();
     unlistenImportXfdf?.();
     unlistenPrint?.();
+
+    // Cleanup OCR temp files when tab is closed
+    cleanupOcrTempFile();
   });
 
   // Load when file path changes (or on initial mount)
@@ -1216,7 +1296,7 @@
           class:opacity-40={!annotationsDirty}
           class:cursor-not-allowed={!annotationsDirty}
           class:animate-pulse={isExporting}
-          title={annotationsDirty ? "Save annotations to PDF (Ctrl+S)" : "No changes to save"}
+          title={annotationsDirty ? "Save (Ctrl+S)" : "No changes to save"}
         >
           <Save size={16} />
           {#if annotationsDirty}

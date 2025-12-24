@@ -138,8 +138,22 @@ fn ocr_run(
             .path()
             .app_cache_dir()
             .unwrap_or_else(|_| std::env::temp_dir());
-        cache_dir
-            .join("tlacuilo-ocr.pdf")
+
+        // Create a session directory with UUID to avoid conflicts
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let session_dir = cache_dir.join("ocr-sessions").join(&session_id);
+
+        // Create the session directory if it doesn't exist
+        let _ = std::fs::create_dir_all(&session_dir);
+
+        // Preserve original filename
+        let original_filename = std::path::Path::new(&input)
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_else(|| "document.pdf".to_string());
+
+        session_dir
+            .join(&original_filename)
             .to_string_lossy()
             .to_string()
     });
@@ -730,13 +744,13 @@ pub fn run() {
         )
         .separator()
         .item(
-          &MenuItemBuilder::new("Save Annotations")
+          &MenuItemBuilder::new("Save")
             .id("save")
             .accelerator("CmdOrCtrl+S")
             .build(app)?,
         )
         .item(
-          &MenuItemBuilder::new("Save Annotations As...")
+          &MenuItemBuilder::new("Save As...")
             .id("save-as")
             .accelerator("CmdOrCtrl+Shift+S")
             .build(app)?,
