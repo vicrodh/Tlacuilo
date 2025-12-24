@@ -276,44 +276,44 @@
     white-space: nowrap;
   }
 
-  /* Custom styled select */
+  /* Custom styled select - Light theme for PDF forms */
   .form-field-select {
     appearance: none;
     -webkit-appearance: none;
-    background-color: var(--nord1);
-    color: var(--nord4);
-    border: 1px solid var(--nord3);
+    background-color: #fafafa;
+    color: #2e3440;
+    border: 1px solid #b0b0b0;
     border-radius: 4px;
     padding: 2px 24px 2px 8px;
     font-size: inherit;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2381A1C1' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23606060' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 6px center;
     transition: border-color 0.15s, box-shadow 0.15s;
   }
 
   .form-field-select:hover {
-    border-color: var(--nord8);
+    border-color: #5e81ac;
   }
 
   .form-field-select:focus {
     outline: none;
-    border-color: var(--nord8);
-    box-shadow: 0 0 0 2px rgba(136, 192, 208, 0.3);
+    border-color: #5e81ac;
+    box-shadow: 0 0 0 2px rgba(94, 129, 172, 0.3);
   }
 
   .form-field-select option {
-    background-color: var(--nord1);
-    color: var(--nord4);
+    background-color: #ffffff;
+    color: #2e3440;
     padding: 8px;
   }
 
-  /* Custom styled checkbox */
+  /* Custom styled checkbox - Light theme */
   .form-field-checkbox {
     appearance: none;
     -webkit-appearance: none;
-    background-color: var(--nord1);
-    border: 2px solid var(--nord3);
+    background-color: #ffffff;
+    border: 2px solid #a0a0a0;
     border-radius: 3px;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -321,12 +321,12 @@
   }
 
   .form-field-checkbox:hover:not(:disabled) {
-    border-color: var(--nord8);
+    border-color: #5e81ac;
   }
 
   .form-field-checkbox:checked {
-    background-color: var(--nord8);
-    border-color: var(--nord8);
+    background-color: #5e81ac;
+    border-color: #5e81ac;
   }
 
   .form-field-checkbox:checked::after {
@@ -336,7 +336,7 @@
     left: 50%;
     width: 35%;
     height: 60%;
-    border: solid var(--nord0);
+    border: solid #ffffff;
     border-width: 0 2px 2px 0;
     transform: translate(-50%, -50%) rotate(45deg);
   }
@@ -346,12 +346,12 @@
     cursor: default;
   }
 
-  /* Custom styled radio */
+  /* Custom styled radio - Light theme */
   .form-field-radio {
     appearance: none;
     -webkit-appearance: none;
-    background-color: var(--nord1);
-    border: 2px solid var(--nord3);
+    background-color: #ffffff;
+    border: 2px solid #a0a0a0;
     border-radius: 50%;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -359,11 +359,11 @@
   }
 
   .form-field-radio:hover:not(:disabled) {
-    border-color: var(--nord8);
+    border-color: #5e81ac;
   }
 
   .form-field-radio:checked {
-    border-color: var(--nord8);
+    border-color: #5e81ac;
   }
 
   .form-field-radio:checked::after {
@@ -373,7 +373,7 @@
     left: 50%;
     width: 50%;
     height: 50%;
-    background-color: var(--nord8);
+    background-color: #5e81ac;
     border-radius: 50%;
     transform: translate(-50%, -50%);
   }
