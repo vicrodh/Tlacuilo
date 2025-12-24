@@ -10,6 +10,10 @@ Tlacuilo is a full-featured offline PDF toolkit for Linux built with Tauri (Rust
 - Theme: Nord color palette
 - License: AGPL-3.0 (required by MuPDF)
 
+## Contributing
+We are not accepting pull requests right now. Please open an issue if you have a suggestion.
+See `CONTRIBUTING.md` for details.
+
 ## Prerequisites
 - Node.js 18+ and npm
 - Rust toolchain (for Tauri)
