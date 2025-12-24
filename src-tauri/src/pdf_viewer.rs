@@ -382,6 +382,159 @@ pub fn pdf_get_text_blocks(path: String, page: u32) -> Result<PageTextContent, S
     Ok(PageTextContent { page, blocks })
 }
 
+/// Search result with page and position info
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchResult {
+    /// Page number (1-indexed)
+    pub page: u32,
+    /// Normalized Y position of the match (0-1)
+    pub y: f32,
+    /// Match rectangle (normalized coordinates)
+    pub rect: NormalizedRect,
+    /// Text context around the match
+    pub context: String,
+}
+
+/// Search results for the entire document
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchResults {
+    /// Search query
+    pub query: String,
+    /// Total number of matches
+    pub total: u32,
+    /// List of results
+    pub results: Vec<SearchResult>,
+}
+
+/// Search for text across all pages of a PDF
+/// Uses MuPDF's native search which is much faster than JavaScript iteration
+#[tauri::command]
+pub fn pdf_search_text(path: String, query: String, max_results: Option<u32>) -> Result<SearchResults, String> {
+    let max_results = max_results.unwrap_or(1000);
+
+    if query.is_empty() {
+        return Ok(SearchResults {
+            query,
+            total: 0,
+            results: Vec::new(),
+        });
+    }
+
+    let document = Document::open(&path)
+        .map_err(|e| format!("Failed to load PDF: {:?}", e))?;
+
+    let num_pages = document
+        .page_count()
+        .map_err(|e| format!("Failed to get page count: {:?}", e))? as u32;
+
+    let mut results = Vec::new();
+    let mut total_found: u32 = 0;
+
+    for page_num in 0..num_pages {
+        if total_found >= max_results {
+            break;
+        }
+
+        let pdf_page = match document.load_page(page_num as i32) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+
+        let bounds = match pdf_page.bounds() {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+
+        let page_width = bounds.width();
+        let page_height = bounds.height();
+
+        // Use MuPDF's native search
+        let hits_remaining = (max_results - total_found).min(100);
+        let search_results = match pdf_page.search(&query, hits_remaining) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+
+        // Get text content for context extraction
+        let text_page = pdf_page.to_text_page(TextPageOptions::empty()).ok();
+
+        for quad in search_results.iter() {
+            // Calculate bounding box from quad
+            let x0 = quad.ul.x.min(quad.ll.x);
+            let y0 = quad.ul.y.min(quad.ur.y);
+            let x1 = quad.ur.x.max(quad.lr.x);
+            let y1 = quad.ll.y.max(quad.lr.y);
+
+            let rect = NormalizedRect {
+                x: x0 / page_width,
+                y: y0 / page_height,
+                width: (x1 - x0) / page_width,
+                height: (y1 - y0) / page_height,
+            };
+
+            // Try to get context text around the match
+            let context = if let Some(ref tp) = text_page {
+                extract_context_around_match(tp, &query, y0, page_height)
+            } else {
+                query.clone()
+            };
+
+            results.push(SearchResult {
+                page: page_num + 1, // 1-indexed
+                y: y0 / page_height,
+                rect,
+                context,
+            });
+
+            total_found += 1;
+            if total_found >= max_results {
+                break;
+            }
+        }
+    }
+
+    Ok(SearchResults {
+        query,
+        total: total_found,
+        results,
+    })
+}
+
+/// Extract context text around a match position
+fn extract_context_around_match(text_page: &mupdf::TextPage, query: &str, match_y: f32, page_height: f32) -> String {
+    let query_lower = query.to_lowercase();
+
+    for block in text_page.blocks() {
+        for line in block.lines() {
+            let line_bounds = line.bounds();
+            // Check if this line is near the match position
+            if (line_bounds.y0 - match_y).abs() < 5.0 ||
+               (line_bounds.y1 - match_y).abs() < 5.0 ||
+               (match_y >= line_bounds.y0 && match_y <= line_bounds.y1) {
+
+                let mut line_text = String::new();
+                for char_info in line.chars() {
+                    if let Some(c) = char_info.char() {
+                        line_text.push(c);
+                    }
+                }
+
+                // Check if this line contains the query
+                if line_text.to_lowercase().contains(&query_lower) {
+                    // Return a trimmed context
+                    let trimmed = line_text.trim();
+                    if trimmed.len() > 100 {
+                        return format!("{}...", &trimmed[..100]);
+                    }
+                    return trimmed.to_string();
+                }
+            }
+        }
+    }
+
+    query.to_string()
+}
+
 /// PDF outline (table of contents) entry
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OutlineEntry {

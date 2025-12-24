@@ -29,12 +29,26 @@
     error?: string;
   }
 
-  // Search result type
+  // Search result type (frontend)
   interface SearchResult {
     page: number;
     text: string;
     context: string;
     normalizedY: number; // Y position on page (0-1)
+  }
+
+  // Native search result from Rust
+  interface NativeSearchResult {
+    page: number;
+    y: number;
+    rect: { x: number; y: number; width: number; height: number };
+    context: string;
+  }
+
+  interface NativeSearchResults {
+    query: string;
+    total: number;
+    results: NativeSearchResult[];
   }
 
   // State machine
@@ -228,11 +242,6 @@
     }
   }
 
-  interface TextBlockInfo {
-    rect: { x: number; y: number; width: number; height: number };
-    lines: { text: string; rect: { x: number; y: number; width: number; height: number } }[];
-  }
-
   async function handleSearch() {
     if (!searchQuery.trim()) {
       searchResults = [];
@@ -243,43 +252,20 @@
     searchResults = [];
 
     try {
-      const results: SearchResult[] = [];
-      const query = searchQuery.toLowerCase();
+      // Use MuPDF's native search - much faster than iterating pages
+      const nativeResults = await invoke<NativeSearchResults>('pdf_search_text', {
+        path: filePath,
+        query: searchQuery,
+        maxResults: 1000,
+      });
 
-      // Search through each page
-      for (let page = 1; page <= totalPages; page++) {
-        try {
-          const textContent = await invoke<{ page: number; blocks: TextBlockInfo[] }>(
-            'pdf_get_text_blocks',
-            { path: filePath, page }
-          );
-
-          // Search through blocks and lines to find matches with position
-          for (const block of textContent.blocks) {
-            for (const line of block.lines) {
-              const lineText = line.text.toLowerCase();
-              if (lineText.includes(query)) {
-                // Find context around match
-                const matchIndex = lineText.indexOf(query);
-                const start = Math.max(0, matchIndex - 30);
-                const end = Math.min(line.text.length, matchIndex + query.length + 30);
-                const context = (start > 0 ? '...' : '') +
-                  line.text.slice(start, end).trim() +
-                  (end < line.text.length ? '...' : '');
-
-                results.push({
-                  page,
-                  text: searchQuery,
-                  context,
-                  normalizedY: line.rect.y, // Normalized Y position (0-1)
-                });
-              }
-            }
-          }
-        } catch {
-          // Skip pages that fail to extract
-        }
-      }
+      // Map native results to frontend format
+      const results: SearchResult[] = nativeResults.results.map((r) => ({
+        page: r.page,
+        text: searchQuery,
+        context: r.context,
+        normalizedY: r.y,
+      }));
 
       searchResults = results;
       // Auto-select first result
