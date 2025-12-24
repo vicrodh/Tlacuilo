@@ -584,10 +584,11 @@ fn extract_context_around_match(text_page: &mupdf::TextPage, query: &str, match_
 
                 // Check if this line contains the query
                 if line_text.to_lowercase().contains(&query_lower) {
-                    // Return a trimmed context
+                    // Return a trimmed context (UTF-8 safe)
                     let trimmed = line_text.trim();
-                    if trimmed.len() > 100 {
-                        return format!("{}...", &trimmed[..100]);
+                    if trimmed.chars().count() > 100 {
+                        let truncated: String = trimmed.chars().take(100).collect();
+                        return format!("{}...", truncated);
                     }
                     return trimmed.to_string();
                 }

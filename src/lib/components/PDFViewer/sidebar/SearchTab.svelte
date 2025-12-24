@@ -72,7 +72,8 @@
   let currentResultIndex = $state(-1);
   let searchTimeout: ReturnType<typeof setTimeout>;
   let currentSearchId = 0; // Used to cancel stale searches
-  const SEARCH_DEBOUNCE_MS = 600;
+  let searchInProgress = $state(false); // Prevent concurrent searches
+  const SEARCH_DEBOUNCE_MS = 1000; // 1 second delay
   const MIN_QUERY_LENGTH = 3;
 
   // Cache analysis by file path
@@ -125,13 +126,15 @@
   });
 
   // Debounced search - triggers when searchQuery changes
+  // Also re-triggers when a search completes if query changed during search
   $effect(() => {
     const query = searchQuery;
+    const inProgress = searchInProgress;
     if (searchState !== 'searchable') return;
 
     clearTimeout(searchTimeout);
 
-    if (query.length >= MIN_QUERY_LENGTH) {
+    if (query.length >= MIN_QUERY_LENGTH && !inProgress) {
       searchTimeout = setTimeout(() => {
         handleSearch();
       }, SEARCH_DEBOUNCE_MS);
@@ -252,10 +255,17 @@
       return;
     }
 
+    // Don't start a new search while one is in progress
+    if (searchInProgress) {
+      console.log(`[Search] Skipping "${query}" - search already in progress`);
+      return;
+    }
+
     // Increment search ID to invalidate any previous search
     const thisSearchId = ++currentSearchId;
 
     isSearching = true;
+    searchInProgress = true;
     console.time(`[Search] "${query}"`);
 
     try {
@@ -263,7 +273,7 @@
       const nativeResults = await invoke<NativeSearchResults>('pdf_search_text', {
         path: filePath,
         query: query,
-        maxResults: 500, // Reduced for faster response
+        maxResults: 500,
       });
 
       console.timeEnd(`[Search] "${query}"`);
@@ -291,6 +301,7 @@
       console.error('Search failed:', err);
       console.timeEnd(`[Search] "${query}"`);
     } finally {
+      searchInProgress = false;
       // Only clear isSearching if this is still the current search
       if (thisSearchId === currentSearchId) {
         isSearching = false;
