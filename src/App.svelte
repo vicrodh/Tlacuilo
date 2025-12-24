@@ -5,8 +5,9 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { Activity, ChevronUp, ChevronDown, CheckCircle, AlertCircle, AlertTriangle, Info, Trash2 } from 'lucide-svelte';
-  import { open } from '@tauri-apps/plugin-dialog';
+  import { open, confirm as tauriConfirm } from '@tauri-apps/plugin-dialog';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import Sidebar from './lib/components/Sidebar.svelte';
   import Dashboard from './lib/views/Dashboard.svelte';
   import MergePDF from './lib/views/MergePDF.svelte';
@@ -16,26 +17,113 @@
   import OCRPDF from './lib/views/OCRPDF.svelte';
   import ConvertToPDF from './lib/views/ConvertToPDF.svelte';
   import ConvertFromPDF from './lib/views/ConvertFromPDF.svelte';
-  import ViewerPage from './lib/views/ViewerPage.svelte';
+  import TabViewerContainer from './lib/components/TabViewerContainer.svelte';
   import Settings from './lib/views/Settings.svelte';
   import PlaceholderPage from './lib/views/PlaceholderPage.svelte';
   import { getStatus, toggleExpanded, clearLogs, setPendingOpenFile, type LogLevel } from './lib/stores/status.svelte';
+  import { getGlobalTabsStore } from './lib/stores/tabs.svelte';
 
   let sidebarExpanded = $state(true);
   let currentPage = $state('home');
 
   const status = getStatus();
+  const tabsStore = getGlobalTabsStore();
 
   let unlistenMenuOpen: UnlistenFn | null = null;
+  let unlistenWindowClose: (() => void) | null = null;
 
   onMount(async () => {
     // Listen for File > Open from native menu
     unlistenMenuOpen = await listen('menu-open', handleMenuOpen);
+
+    // Listen for keyboard shortcuts
+    window.addEventListener('keydown', handleKeyDown);
+
+    // Listen for window close to check unsaved changes
+    const appWindow = getCurrentWindow();
+    unlistenWindowClose = await appWindow.onCloseRequested(async (event) => {
+      if (tabsStore.hasUnsavedChanges) {
+        const unsavedTabs = tabsStore.getUnsavedTabs();
+        const fileNames = unsavedTabs.map(t => t.fileName).join(', ');
+
+        const confirmed = await tauriConfirm(
+          `You have unsaved changes in: ${fileNames}\n\nClose anyway?`,
+          {
+            title: 'Unsaved Changes',
+            kind: 'warning',
+            okLabel: 'Close',
+            cancelLabel: 'Cancel',
+          }
+        );
+
+        if (!confirmed) {
+          event.preventDefault();
+        }
+      }
+    });
   });
 
   onDestroy(() => {
     unlistenMenuOpen?.();
+    unlistenWindowClose?.();
+    window.removeEventListener('keydown', handleKeyDown);
   });
+
+  function handleKeyDown(e: KeyboardEvent) {
+    // Only handle tab shortcuts when on viewer page
+    if (currentPage !== 'viewer') {
+      // Ctrl+T anywhere goes to viewer with new tab
+      if (e.ctrlKey && e.key === 't') {
+        e.preventDefault();
+        navigate('viewer');
+        tabsStore.createTab();
+        return;
+      }
+      return;
+    }
+
+    const isCtrl = e.ctrlKey || e.metaKey;
+
+    // Ctrl+T: New tab
+    if (isCtrl && e.key === 't') {
+      e.preventDefault();
+      tabsStore.createTab();
+      return;
+    }
+
+    // Ctrl+W: Close current tab
+    if (isCtrl && e.key === 'w') {
+      e.preventDefault();
+      const activeTab = tabsStore.activeTab;
+      if (activeTab) {
+        // Let TabViewerContainer handle the close with confirmation
+        const event = new CustomEvent('close-active-tab');
+        window.dispatchEvent(event);
+      }
+      return;
+    }
+
+    // Ctrl+Tab: Next tab
+    if (isCtrl && e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+      tabsStore.nextTab();
+      return;
+    }
+
+    // Ctrl+Shift+Tab: Previous tab
+    if (isCtrl && e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault();
+      tabsStore.prevTab();
+      return;
+    }
+
+    // Ctrl+1-9: Switch to tab by index
+    if (isCtrl && e.key >= '1' && e.key <= '9') {
+      e.preventDefault();
+      tabsStore.switchToTabIndex(parseInt(e.key));
+      return;
+    }
+  }
 
   function navigate(page: string) {
     currentPage = page;
@@ -54,6 +142,8 @@
       if (selected && typeof selected === 'string') {
         setPendingOpenFile(selected);
         navigate('viewer');
+        // Dispatch event for TabViewerContainer to handle the pending file
+        window.dispatchEvent(new CustomEvent('pending-file-ready'));
       }
     } catch (err) {
       console.error('[App] File dialog error:', err);
@@ -78,14 +168,14 @@
   }
 
   // Get file display text
-  const fileDisplayText = $derived(() => {
+  const fileDisplayText = $derived.by(() => {
     if (status.fileCount === 0) return 'No file selected';
     if (status.fileCount === 1) return status.openFiles[0].name;
     return `${status.fileCount} files open`;
   });
 
   // Get tooltip for files
-  const fileTooltip = $derived(() => {
+  const fileTooltip = $derived.by(() => {
     if (status.fileCount <= 1) return '';
     return status.openFiles.map(f => `${f.module}: ${f.name}`).join('\n');
   });
@@ -102,6 +192,9 @@
     />
 
     <main class="flex-1 flex flex-col overflow-hidden">
+      <!-- TabViewerContainer is always mounted but hidden when not on viewer page -->
+      <TabViewerContainer visible={currentPage === 'viewer'} />
+
       {#if currentPage === 'home'}
         <Dashboard onNavigate={navigate} />
       {:else if currentPage === 'merge'}
@@ -118,11 +211,9 @@
         <ConvertToPDF onOpenInViewer={(path) => { setPendingOpenFile(path); navigate('viewer'); }} />
       {:else if currentPage === 'export'}
         <ConvertFromPDF />
-      {:else if currentPage === 'viewer'}
-        <ViewerPage />
       {:else if currentPage === 'settings'}
         <Settings />
-      {:else}
+      {:else if currentPage !== 'viewer'}
         <PlaceholderPage pageName={currentPage} />
       {/if}
     </main>
@@ -202,7 +293,7 @@
       </button>
     </div>
     <div class="flex items-center gap-4 opacity-60">
-      <span title={fileTooltip()}>{fileDisplayText()}</span>
+      <span title={fileTooltip}>{fileDisplayText}</span>
       <span>•</span>
       <span>{currentDate}</span>
     </div>

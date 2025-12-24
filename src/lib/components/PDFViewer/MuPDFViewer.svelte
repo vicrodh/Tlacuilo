@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, onDestroy, tick, untrack } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import {
@@ -23,14 +23,17 @@
   } from 'lucide-svelte';
   import { save, open } from '@tauri-apps/plugin-dialog';
   import { createAnnotationsStore } from '$lib/stores/annotations.svelte';
+  import { debugLog } from '$lib/stores/debugLog.svelte';
   import AnnotationToolbar from './AnnotationToolbar.svelte';
   import AnnotationOverlay from './AnnotationOverlay.svelte';
-  import AnnotationsPanel from './AnnotationsPanel.svelte';
+  import ViewerRightSidebar from './ViewerRightSidebar.svelte';
   import TextLayer from './TextLayer.svelte';
   import PrintDialog from './PrintDialog.svelte';
 
   interface Props {
     filePath: string;
+    tabId?: string;           // Tab identifier for multi-tab support
+    isActive?: boolean;       // Whether this tab is currently active
     showToolbar?: boolean;
     showSidebar?: boolean;
     initialPage?: number;
@@ -38,10 +41,13 @@
     onClose?: () => void;
     onSave?: () => void;
     onSaveAs?: () => void;
+    onAnnotationsDirtyChange?: (dirty: boolean) => void;
   }
 
   let {
     filePath,
+    tabId,
+    isActive = true,
     showToolbar = true,
     showSidebar = true,
     initialPage = 1,
@@ -49,6 +55,7 @@
     onClose,
     onSave,
     onSaveAs,
+    onAnnotationsDirtyChange,
   }: Props = $props();
 
   // Types from Rust backend
@@ -374,9 +381,40 @@
     }
   });
 
+  // Notify parent of dirty state changes
+  // Use untrack to prevent the callback reference from being tracked
+  // (callbacks are recreated on each parent render, causing infinite loops if tracked)
+  $effect(() => {
+    const dirty = annotationsDirty;
+    untrack(() => {
+      onAnnotationsDirtyChange?.(dirty);
+    });
+  });
+
+  // Track previous isActive state for detecting transitions
+  // Using a regular variable (not $state) to avoid effect loop
+  let wasActive = isActive;
+
+  // Handle tab activation/deactivation for resource management
+  $effect(() => {
+    const currentIsActive = isActive; // Read once
+    if (currentIsActive && !wasActive) {
+      // Tab was re-activated - reload visible pages if they were cleared
+      console.log('[MuPDFViewer] Tab activated, reloading visible content');
+      if (pdfInfo && loadedPages.size === 0) {
+        tick().then(() => {
+          loadVisiblePages();
+          loadVisibleThumbnails();
+        });
+      }
+    }
+    // Update outside of reactive tracking - this doesn't trigger the effect
+    // because wasActive is not a $state
+    wasActive = currentIsActive;
+  });
+
   // Sidebar state
   let sidebarCollapsed = $state(false);
-  let thumbnailsContainer: HTMLDivElement;
 
   // Virtual thumbnails: only load visible ones
   let loadedThumbnails = $state<Map<number, RenderedPage>>(new Map());
@@ -404,42 +442,54 @@
 
   // Load PDF info
   async function loadPDF() {
+    debugLog('MuPDFViewer', 'loadPDF() called', { filePath });
     isLoading = true;
     error = null;
 
     try {
-      console.log('[MuPDFViewer] Opening PDF:', filePath);
+      debugLog('MuPDFViewer', 'Invoking pdf_open...');
       pdfInfo = await invoke<PdfInfo>('pdf_open', { path: filePath });
+      debugLog('MuPDFViewer', 'pdf_open completed', { pages: pdfInfo.num_pages });
+
       totalPages = pdfInfo.num_pages;
       currentPage = Math.min(initialPage, totalPages);
       fileName = filePath.split('/').pop() || 'Document';
       pageInputValue = String(currentPage);
 
-      console.log('[MuPDFViewer] PDF loaded:', pdfInfo.num_pages, 'pages');
-
-      // Clear any previously loaded pages
+      debugLog('MuPDFViewer', 'Clearing loaded pages...');
       loadedPages = new Map();
       loadingPages = new Set();
 
       isLoading = false;
+      debugLog('MuPDFViewer', 'isLoading set to false');
 
       // Clear thumbnails for new document
+      debugLog('MuPDFViewer', 'Clearing thumbnails...');
       loadedThumbnails = new Map();
       loadingThumbnails = new Set();
 
       // Wait for DOM to render, then load visible content
+      debugLog('MuPDFViewer', 'Awaiting tick()...');
       await tick();
+      debugLog('MuPDFViewer', 'tick() completed, loading visible pages...');
       loadVisiblePages();
+      debugLog('MuPDFViewer', 'loadVisiblePages() completed');
       loadVisibleThumbnails();
+      debugLog('MuPDFViewer', 'loadVisibleThumbnails() completed');
 
       // Load saved annotations
+      debugLog('MuPDFViewer', 'Loading annotations...');
       await loadAnnotations();
+      debugLog('MuPDFViewer', 'Annotations loaded');
 
       if (initialPage > 1) {
+        debugLog('MuPDFViewer', 'Scrolling to initial page', { initialPage });
         scrollToPage(initialPage);
       }
+
+      debugLog('MuPDFViewer', 'loadPDF() completed successfully');
     } catch (err) {
-      console.error('[MuPDFViewer] Failed to load PDF:', err);
+      debugLog('MuPDFViewer', 'loadPDF() FAILED', err, 'error');
       error = String(err);
       isLoading = false;
     }
@@ -562,31 +612,15 @@
     }
   }
 
-  // Load visible thumbnails based on sidebar scroll position
+  // Load visible thumbnails - now handled by PagesTab component
   function loadVisibleThumbnails() {
-    if (!thumbnailsContainer || !pdfInfo || sidebarCollapsed) return;
-
-    const containerRect = thumbnailsContainer.getBoundingClientRect();
-    const scrollTop = thumbnailsContainer.scrollTop;
-    const containerHeight = containerRect.height;
-
-    // Estimate thumbnail height (aspect ratio 3:4, ~100px width + spacing)
-    const thumbHeight = 140;
-
-    const firstVisible = Math.floor(scrollTop / thumbHeight);
-    const lastVisible = Math.ceil((scrollTop + containerHeight) / thumbHeight);
-
-    const startPage = Math.max(1, firstVisible - THUMBNAIL_BUFFER);
-    const endPage = Math.min(totalPages, lastVisible + THUMBNAIL_BUFFER + 1);
-
-    for (let page = startPage; page <= endPage; page++) {
-      loadThumbnail(page);
-    }
+    // This is now a no-op as PagesTab handles its own thumbnail loading
+    // The function is kept for compatibility with initial load calls
   }
 
-  // Handle sidebar scroll
+  // Handle sidebar scroll - now handled by PagesTab component
   function handleThumbnailScroll() {
-    loadVisibleThumbnails();
+    // No-op, PagesTab manages its own scroll handling
   }
 
   // Scroll to a specific page
@@ -894,8 +928,11 @@
     }
   }
 
+  // Track if we've already loaded to prevent double-loading
+  let hasLoadedFile = '';
+
   onMount(async () => {
-    loadPDF();
+    debugLog('MuPDFViewer', 'onMount() called', { filePath, tabId });
     window.addEventListener('keydown', handleKeydown);
     document.addEventListener('mouseup', handlePanEnd);
     document.addEventListener('click', handleClickOutside);
@@ -906,18 +943,23 @@
         saveAnnotationsToPdf();
       }
     });
+
+    debugLog('MuPDFViewer', 'onMount() completed');
   });
 
   onDestroy(() => {
+    debugLog('MuPDFViewer', 'onDestroy() called', { filePath, tabId });
     window.removeEventListener('keydown', handleKeydown);
     document.removeEventListener('mouseup', handlePanEnd);
     document.removeEventListener('click', handleClickOutside);
     unlistenSave?.();
   });
 
-  // Reload when file path changes
+  // Load when file path changes (or on initial mount)
   $effect(() => {
-    if (filePath) {
+    if (filePath && filePath !== hasLoadedFile) {
+      debugLog('MuPDFViewer', '$effect: filePath changed, loading PDF', { from: hasLoadedFile, to: filePath });
+      hasLoadedFile = filePath;
       loadPDF();
     }
   });
@@ -1136,88 +1178,6 @@
   {/if}
 
   <div class="flex-1 flex overflow-hidden">
-    <!-- Sidebar with thumbnails -->
-    {#if showSidebar && !sidebarCollapsed}
-      <div
-        class="w-40 flex flex-col border-r overflow-hidden"
-        style="background-color: var(--nord1); border-color: var(--nord3);"
-      >
-        <div
-          class="flex items-center justify-between px-3 py-2 border-b"
-          style="border-color: var(--nord3);"
-        >
-          <span class="text-xs uppercase opacity-60">Pages</span>
-          <button
-            onclick={() => sidebarCollapsed = true}
-            class="p-1 rounded hover:bg-[var(--nord2)] transition-colors"
-            title="Hide thumbnails"
-          >
-            <ChevronLeft size={14} />
-          </button>
-        </div>
-
-        <div
-          bind:this={thumbnailsContainer}
-          class="flex-1 overflow-y-auto p-2 space-y-2"
-          onscroll={handleThumbnailScroll}
-        >
-          {#each Array.from({ length: totalPages }, (_, i) => i + 1) as pageNum (pageNum)}
-            {@const thumb = loadedThumbnails.get(pageNum)}
-            {@const isLoading = loadingThumbnails.has(pageNum)}
-            <button
-              onclick={() => goToPage(pageNum)}
-              class="w-full relative group"
-            >
-              <div
-                class="relative rounded overflow-hidden transition-all"
-                style="border: 2px solid {currentPage === pageNum ? 'var(--nord8)' : 'var(--nord3)'};"
-              >
-                <div class="aspect-[3/4] flex items-center justify-center bg-white">
-                  {#if thumb}
-                    <img
-                      src="data:image/png;base64,{thumb.data}"
-                      alt="Page {pageNum}"
-                      class="max-w-full max-h-full object-contain"
-                    />
-                  {:else if isLoading}
-                    <div class="w-4 h-4 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
-                  {:else}
-                    <span class="text-xs opacity-30">{pageNum}</span>
-                  {/if}
-                </div>
-
-                {#if currentPage === pageNum}
-                  <div
-                    class="absolute bottom-0 left-0 right-0 h-0.5"
-                    style="background-color: var(--nord8);"
-                  ></div>
-                {/if}
-              </div>
-
-              <p
-                class="mt-1 text-xs text-center"
-                style="color: {currentPage === pageNum ? 'var(--nord8)' : 'var(--nord4)'};"
-              >
-                {pageNum}
-              </p>
-            </button>
-          {/each}
-        </div>
-      </div>
-    {/if}
-
-    <!-- Sidebar toggle when collapsed -->
-    {#if showSidebar && sidebarCollapsed}
-      <button
-        onclick={() => sidebarCollapsed = false}
-        class="w-8 flex items-center justify-center border-r hover:bg-[var(--nord2)] transition-colors"
-        style="background-color: var(--nord1); border-color: var(--nord3);"
-        title="Show thumbnails"
-      >
-        <ChevronRight size={16} />
-      </button>
-    {/if}
-
     <!-- Main canvas - Continuous scroll view -->
     <div class="flex-1 overflow-hidden flex">
       {#if isLoading}
@@ -1322,20 +1282,24 @@
           </div>
         </div>
 
-        <!-- Annotations Panel (right sidebar) -->
-        {#if showAnnotationTools}
-          <div
-            class="w-56 border-l flex-shrink-0"
-            style="border-color: var(--nord3);"
-          >
-            <AnnotationsPanel
-              store={annotationsStore}
-              onNavigateToPage={goToPage}
-            />
-          </div>
-        {/if}
       {/if}
     </div>
+
+    <!-- Right Sidebar with tabs -->
+    {#if showSidebar}
+      <ViewerRightSidebar
+        {filePath}
+        {currentPage}
+        {totalPages}
+        annotationsStore={annotationsStore}
+        {loadedThumbnails}
+        {loadingThumbnails}
+        onNavigateToPage={goToPage}
+        onLoadThumbnail={loadThumbnail}
+        onThumbnailScroll={handleThumbnailScroll}
+        onFileReload={loadPDF}
+      />
+    {/if}
   </div>
 
   <!-- Bottom status bar -->
