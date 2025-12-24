@@ -73,6 +73,7 @@
   let searchTimeout: ReturnType<typeof setTimeout>;
   let currentSearchId = 0; // Used to cancel stale searches
   let searchInProgress = $state(false); // Prevent concurrent searches
+  let lastSearchedQuery = ''; // Track what we already searched for
   const SEARCH_DEBOUNCE_MS = 1000; // 1 second delay
   const MIN_QUERY_LENGTH = 3;
 
@@ -126,7 +127,7 @@
   });
 
   // Debounced search - triggers when searchQuery changes
-  // Also re-triggers when a search completes if query changed during search
+  // Only re-triggers after search completes if query actually changed
   $effect(() => {
     const query = searchQuery;
     const inProgress = searchInProgress;
@@ -134,13 +135,15 @@
 
     clearTimeout(searchTimeout);
 
-    if (query.length >= MIN_QUERY_LENGTH && !inProgress) {
+    // Only search if query changed and not currently searching
+    if (query.length >= MIN_QUERY_LENGTH && !inProgress && query !== lastSearchedQuery) {
       searchTimeout = setTimeout(() => {
         handleSearch();
       }, SEARCH_DEBOUNCE_MS);
     } else if (query.length === 0) {
       searchResults = [];
       currentResultIndex = -1;
+      lastSearchedQuery = '';
     }
   });
 
@@ -263,6 +266,7 @@
 
     // Increment search ID to invalidate any previous search
     const thisSearchId = ++currentSearchId;
+    lastSearchedQuery = query; // Track what we're searching for
 
     isSearching = true;
     searchInProgress = true;
@@ -835,6 +839,8 @@
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
+    word-break: break-word;
+    max-width: 100%;
   }
 
   .no-results {

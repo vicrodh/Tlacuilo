@@ -222,17 +222,17 @@
         <!-- Arrow -->
         <div
           class="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rotate-45"
-          style="background: rgba(59, 66, 82, 0.95);"
+          style="background: var(--nord1);"
         ></div>
 
         <!-- Dropdown content -->
         <div
           class="relative rounded-xl overflow-hidden shadow-2xl"
           style="
-            background: rgba(59, 66, 82, 0.95);
+            background: var(--nord1);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(136, 192, 208, 0.2);
+            border: 1px solid var(--nord3);
             min-width: 200px;
           "
         >
@@ -240,18 +240,19 @@
             {#each group.children as child, index}
               <button
                 onclick={() => handleToolClick(child.page)}
-                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all hover:bg-[rgba(136,192,208,0.15)] text-left group"
+                class="dropdown-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-left"
+                style="color: var(--nord5);"
               >
                 <div
-                  class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
-                  style="background-color: rgba(136, 192, 208, 0.1);"
+                  class="w-8 h-8 rounded-lg flex items-center justify-center"
+                  style="background-color: var(--nord2);"
                 >
                   <child.icon size={16} style="color: var(--nord8);" />
                 </div>
-                <span class="text-sm" style="color: var(--nord5);">{child.label}</span>
+                <span class="text-sm">{child.label}</span>
               </button>
               {#if index < group.children.length - 1}
-                <div class="mx-3 my-1 h-px" style="background: rgba(136, 192, 208, 0.1);"></div>
+                <div class="mx-3 my-1 h-px" style="background: var(--nord3);"></div>
               {/if}
             {/each}
           </div>
@@ -359,5 +360,9 @@
   .tool-button:hover,
   .tool-group:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .dropdown-item:hover {
+    background-color: var(--nord2);
   }
 </style>
