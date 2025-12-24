@@ -1594,10 +1594,13 @@
                   {/if}
 
                   <!-- Form fields overlay -->
+                  {@const pdfSize = pdfInfo?.page_sizes[pageNum - 1] || { width: 612, height: 792 }}
                   <FormFieldsOverlay
                     page={pageNum}
                     pageWidth={loadedPage.width}
                     pageHeight={loadedPage.height}
+                    pdfPageWidth={pdfSize.width}
+                    pdfPageHeight={pdfSize.height}
                     formModeEnabled={formsStore.formModeEnabled}
                   />
                 {:else}

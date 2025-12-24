@@ -9,26 +9,33 @@
   } from '$lib/stores/forms.svelte';
 
   interface Props {
-    page: number;
-    pageWidth: number;
-    pageHeight: number;
-    scale?: number;
+    page: number;              // 1-indexed page number from viewer
+    pageWidth: number;         // Rendered width in pixels
+    pageHeight: number;        // Rendered height in pixels
+    pdfPageWidth: number;      // Original PDF width in points
+    pdfPageHeight: number;     // Original PDF height in points
     formModeEnabled: boolean;
   }
 
-  let { page, pageWidth, pageHeight, scale = 1, formModeEnabled }: Props = $props();
+  let { page, pageWidth, pageHeight, pdfPageWidth, pdfPageHeight, formModeEnabled }: Props = $props();
 
-  // Get fields for this page
-  const pageFields = $derived(getFieldsForPage(page));
+  // Get fields for this page (Python uses 0-indexed pages)
+  const pageFields = $derived(getFieldsForPage(page - 1));
+
+  // Scale factor from PDF points to rendered pixels
+  const scaleX = $derived(pageWidth / pdfPageWidth);
+  const scaleY = $derived(pageHeight / pdfPageHeight);
 
   // Convert PDF rect to CSS position
-  // PDF rect is [x0, y0, x1, y1] where y is from bottom
+  // PDF rect is [x0, y0, x1, y1] where y is from bottom (in PDF points)
   function rectToStyle(rect: [number, number, number, number]) {
     const [x0, y0, x1, y1] = rect;
-    const left = x0;
-    const top = pageHeight - y1; // Flip Y axis
-    const width = x1 - x0;
-    const height = y1 - y0;
+
+    // Scale from PDF points to rendered pixels
+    const left = x0 * scaleX;
+    const top = (pdfPageHeight - y1) * scaleY; // Flip Y axis (PDF origin is bottom-left)
+    const width = (x1 - x0) * scaleX;
+    const height = (y1 - y0) * scaleY;
 
     return {
       left: `${left}px`,
@@ -61,12 +68,12 @@
       box-sizing: border-box;
     `;
 
-    // Auto or fixed font size
+    // Auto or fixed font size (scale from PDF points to pixels)
     if (fontSize > 0) {
-      style += `font-size: ${fontSize}px;`;
+      style += `font-size: ${fontSize * scaleY}px;`;
     } else {
       // Auto-size based on height
-      const height = field.rect[3] - field.rect[1];
+      const height = (field.rect[3] - field.rect[1]) * scaleY;
       style += `font-size: ${Math.max(10, height * 0.7)}px;`;
     }
 
