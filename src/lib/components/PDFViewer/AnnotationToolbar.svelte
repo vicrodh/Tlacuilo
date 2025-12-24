@@ -529,16 +529,104 @@
       {/if}
     </div>
 
-    <!-- Sequence Number -->
-    <button
-      onclick={() => selectTool('sequenceNumber')}
-      class="p-2 rounded transition-colors"
-      class:bg-[var(--nord8)]={store.activeTool === 'sequenceNumber'}
-      style="color: {store.activeTool === 'sequenceNumber' ? 'var(--nord0)' : 'var(--nord4)'};"
-      title="Sequence Number"
-    >
-      <Hash size={16} />
-    </button>
+    <!-- Sequence Number with dropdown -->
+    <div class="relative">
+      <button
+        onclick={toggleSequenceMenu}
+        class="p-2 rounded transition-colors flex items-center gap-0.5"
+        class:bg-[var(--nord8)]={store.activeTool === 'sequenceNumber'}
+        style="color: {store.activeTool === 'sequenceNumber' ? 'var(--nord0)' : 'var(--nord4)'};"
+        title="Sequence Number"
+      >
+        <Hash size={16} />
+        <ChevronRight size={12} class="rotate-90 opacity-60" />
+      </button>
+
+      {#if showSequenceMenu}
+        <div
+          class="absolute top-full left-0 mt-1 rounded-lg shadow-lg p-2 z-50"
+          style="background-color: var(--nord1); border: 1px solid var(--nord3); min-width: 160px;"
+        >
+          <!-- Quick select button -->
+          <button
+            onclick={() => { selectTool('sequenceNumber'); showSequenceMenu = false; }}
+            class="w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-[var(--nord2)] transition-colors mb-2"
+            class:bg-[var(--nord3)]={store.activeTool === 'sequenceNumber'}
+          >
+            <Hash size={14} />
+            <span>Use Sequence Numbers</span>
+          </button>
+
+          <!-- Next Number -->
+          <div class="pt-2" style="border-top: 1px solid var(--nord3);">
+            <div class="text-[10px] uppercase opacity-40 mb-1 px-1">Next Number</div>
+            <div class="flex items-center gap-2 mb-3">
+              <button
+                onclick={() => { if (store.sequenceCounter > 1) store.setSequenceCounter(store.sequenceCounter - 1); }}
+                class="w-7 h-7 rounded flex items-center justify-center text-sm font-medium transition-colors hover:bg-[var(--nord3)]"
+                style="background-color: var(--nord2);"
+                disabled={store.sequenceCounter <= 1}
+              >
+                −
+              </button>
+              <input
+                type="number"
+                min="1"
+                value={store.sequenceCounter}
+                oninput={handleSequenceInputChange}
+                class="w-12 px-2 py-1 text-xs rounded text-center font-medium"
+                style="background-color: var(--nord2); color: var(--nord6); border: 1px solid var(--nord3);"
+              />
+              <button
+                onclick={() => store.setSequenceCounter(store.sequenceCounter + 1)}
+                class="w-7 h-7 rounded flex items-center justify-center text-sm font-medium transition-colors hover:bg-[var(--nord3)]"
+                style="background-color: var(--nord2);"
+              >
+                +
+              </button>
+            </div>
+            <button
+              onclick={handleResetSequence}
+              class="w-full flex items-center justify-center gap-2 py-1.5 rounded text-xs transition-colors hover:bg-[var(--nord2)]"
+              style="background-color: var(--nord3); color: var(--nord4);"
+            >
+              <RotateCcw size={12} />
+              <span>Reset to 1</span>
+            </button>
+          </div>
+
+          <!-- Color Section -->
+          <div class="mt-2 pt-2" style="border-top: 1px solid var(--nord3);">
+            <div class="text-[10px] uppercase opacity-40 mb-1 px-1">Color</div>
+            <div class="grid grid-cols-4 gap-1 mb-2">
+              {#each HIGHLIGHT_COLORS.slice(0, 8) as color}
+                <button
+                  onclick={() => store.setActiveColor(color.value)}
+                  class="w-5 h-5 rounded border transition-transform hover:scale-110"
+                  style="
+                    background-color: {color.value};
+                    border-color: {store.activeColor === color.value ? 'var(--nord6)' : 'transparent'};
+                  "
+                  title={color.name}
+                ></button>
+              {/each}
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[9px] opacity-50">{Math.round(store.activeOpacity * 100)}%</span>
+              <input
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.1"
+                value={store.activeOpacity}
+                oninput={(e) => store.setActiveOpacity(parseFloat((e.target as HTMLInputElement).value))}
+                class="flex-1 h-1"
+              />
+            </div>
+          </div>
+        </div>
+      {/if}
+    </div>
   </div>
 
   <!-- Separator -->
@@ -614,65 +702,6 @@
       </div>
     {/if}
   </div>
-
-  <!-- Sequence number dropdown (only when tool is active) -->
-  {#if store.activeTool === 'sequenceNumber'}
-    <!-- Separator -->
-    <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
-
-    <div class="relative">
-      <button
-        onclick={toggleSequenceMenu}
-        class="p-2 rounded transition-colors hover:bg-[var(--nord3)] flex items-center gap-1.5"
-        title="Sequence settings"
-      >
-        <span class="text-sm font-medium" style="color: var(--nord8); min-width: 20px;">{store.sequenceCounter}</span>
-        <ChevronRight size={12} class="rotate-90 opacity-60" />
-      </button>
-
-      {#if showSequenceMenu}
-        <div
-          class="absolute top-full left-1/2 mt-1 rounded-lg shadow-lg p-3 z-50"
-          style="background-color: var(--nord1); border: 1px solid var(--nord3); transform: translateX(-50%); min-width: 140px;"
-        >
-          <div class="text-[10px] uppercase opacity-40 mb-2 px-1">Next Number</div>
-          <div class="flex items-center gap-2 mb-3">
-            <button
-              onclick={() => { if (store.sequenceCounter > 1) store.setSequenceCounter(store.sequenceCounter - 1); }}
-              class="w-8 h-8 rounded flex items-center justify-center text-lg font-medium transition-colors hover:bg-[var(--nord3)]"
-              style="background-color: var(--nord2);"
-              disabled={store.sequenceCounter <= 1}
-            >
-              −
-            </button>
-            <input
-              type="number"
-              min="1"
-              value={store.sequenceCounter}
-              oninput={handleSequenceInputChange}
-              class="w-14 px-2 py-1.5 text-sm rounded text-center font-medium"
-              style="background-color: var(--nord2); color: var(--nord6); border: 1px solid var(--nord3);"
-            />
-            <button
-              onclick={() => store.setSequenceCounter(store.sequenceCounter + 1)}
-              class="w-8 h-8 rounded flex items-center justify-center text-lg font-medium transition-colors hover:bg-[var(--nord3)]"
-              style="background-color: var(--nord2);"
-            >
-              +
-            </button>
-          </div>
-          <button
-            onclick={handleResetSequence}
-            class="w-full flex items-center justify-center gap-2 py-1.5 rounded text-xs transition-colors hover:bg-[var(--nord2)]"
-            style="background-color: var(--nord3); color: var(--nord4);"
-          >
-            <RotateCcw size={12} />
-            <span>Reset to 1</span>
-          </button>
-        </div>
-      {/if}
-    </div>
-  {/if}
 
   <!-- Clear all -->
   <button
