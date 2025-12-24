@@ -34,6 +34,17 @@ export const LANGUAGES: { id: Language; label: string; native: string }[] = [
   { id: 'de', label: 'German', native: 'Deutsch' },
 ];
 
+// Supported color palettes
+export type PaletteId = 'nord' | 'catppuccin-mocha' | 'dracula' | 'solarized-dark' | 'gruvbox-dark';
+
+export const PALETTES: { id: PaletteId; label: string }[] = [
+  { id: 'nord', label: 'Nord (default)' },
+  { id: 'catppuccin-mocha', label: 'Catppuccin Mocha' },
+  { id: 'dracula', label: 'Dracula' },
+  { id: 'solarized-dark', label: 'Solarized Dark' },
+  { id: 'gruvbox-dark', label: 'Gruvbox Dark' },
+];
+
 // Author settings for annotation attribution
 export interface AuthorSettings {
   name: string;
@@ -51,6 +62,7 @@ export interface AppSettings {
   showRecentFilesInHome: boolean;
   maxRecentFiles: number;
   theme: 'dark' | 'light' | 'system';
+  palette: PaletteId;
   language: Language;
   author: AuthorSettings;
 }
@@ -72,6 +84,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   showRecentFilesInHome: true,
   maxRecentFiles: 10,
   theme: 'dark',
+  palette: 'nord',
   language: 'en',
   author: { ...DEFAULT_AUTHOR },
 };
@@ -139,6 +152,7 @@ async function initStore(): Promise<void> {
     const showRecentFilesInHome = await store.get<boolean>('showRecentFilesInHome');
     const maxRecentFiles = await store.get<number>('maxRecentFiles');
     const theme = await store.get<'dark' | 'light' | 'system'>('theme');
+    const palette = await store.get<PaletteId>('palette');
     const language = await store.get<Language>('language');
     const author = await store.get<AuthorSettings>('author');
 
@@ -149,6 +163,7 @@ async function initStore(): Promise<void> {
       showRecentFilesInHome: showRecentFilesInHome ?? DEFAULT_SETTINGS.showRecentFilesInHome,
       maxRecentFiles: maxRecentFiles ?? DEFAULT_SETTINGS.maxRecentFiles,
       theme: theme ?? DEFAULT_SETTINGS.theme,
+      palette: palette ?? DEFAULT_SETTINGS.palette,
       language: language ?? DEFAULT_SETTINGS.language,
       author: author ?? { ...DEFAULT_AUTHOR },
     };
@@ -222,6 +237,10 @@ export async function setTheme(theme: 'dark' | 'light' | 'system'): Promise<void
   await saveSetting('theme', theme);
 }
 
+export async function setPalette(palette: PaletteId): Promise<void> {
+  await saveSetting('palette', palette);
+}
+
 // Author settings management
 export async function setAuthor(author: AuthorSettings): Promise<void> {
   await saveSetting('author', author);
@@ -270,6 +289,7 @@ export function getSettings() {
     get showRecentFilesInHome() { return settings.showRecentFilesInHome; },
     get maxRecentFiles() { return settings.maxRecentFiles; },
     get theme() { return settings.theme; },
+    get palette() { return settings.palette; },
     get language() { return settings.language; },
     get author() { return settings.author; },
     get isLoaded() { return isLoaded; },

@@ -6,18 +6,22 @@
     Trash2,
     HardDrive,
     ChevronRight,
-    User
+    User,
+    Palette
   } from 'lucide-svelte';
   import {
     getSettings,
     setLanguage,
+    setPalette,
     setShowRecentFilesInHome,
     setFavorites,
     clearRecentFiles,
     updateAuthorField,
     LANGUAGES,
+    PALETTES,
     TOOL_CATALOG,
     type Language,
+    type PaletteId,
     type AuthorSettings
   } from '$lib/stores/settings.svelte';
 
@@ -38,6 +42,11 @@
   // Handle language change
   async function handleLanguageChange(lang: Language) {
     await setLanguage(lang);
+  }
+
+  // Handle palette change
+  async function handlePaletteChange(palette: PaletteId) {
+    await setPalette(palette);
   }
 
   // Handle favorite toggle
@@ -78,6 +87,7 @@
   // Sections for better organization
   const sections = [
     { id: 'author', label: 'Author Info', icon: User },
+    { id: 'appearance', label: 'Appearance', icon: Palette },
     { id: 'language', label: 'Language', icon: Globe },
     { id: 'favorites', label: 'Quick Tools', icon: Star },
     { id: 'recent', label: 'Recent Files', icon: Clock },
@@ -231,6 +241,47 @@
             </p>
           </div>
         </div>
+      </div>
+
+    {:else if activeSection === 'appearance'}
+      <!-- Appearance Section -->
+      <div class="max-w-2xl">
+        <h2 class="text-lg font-medium mb-1" style="color: var(--nord6);">Appearance</h2>
+        <p class="text-sm opacity-60 mb-6">Choose your preferred color palette for the interface.</p>
+
+        <div class="space-y-2">
+          {#each PALETTES as palette}
+            <button
+              onclick={() => handlePaletteChange(palette.id)}
+              class="w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors"
+              style="background-color: {settings.palette === palette.id ? 'var(--nord2)' : 'var(--nord1)'};
+                     border: 1px solid {settings.palette === palette.id ? 'var(--nord8)' : 'var(--nord3)'};"
+            >
+              <div class="flex items-center gap-3">
+                <div class="text-left">
+                  <p class="text-sm font-medium">{palette.label}</p>
+                </div>
+              </div>
+              {#if settings.palette === palette.id}
+                <div
+                  class="w-5 h-5 rounded-full flex items-center justify-center"
+                  style="background-color: var(--nord8);"
+                >
+                  <div class="w-2 h-2 rounded-full" style="background-color: var(--nord0);"></div>
+                </div>
+              {:else}
+                <div
+                  class="w-5 h-5 rounded-full border-2"
+                  style="border-color: var(--nord3);"
+                ></div>
+              {/if}
+            </button>
+          {/each}
+        </div>
+
+        <p class="text-xs opacity-40 mt-4">
+          Color changes apply immediately. Your preference is saved automatically.
+        </p>
       </div>
 
     {:else if activeSection === 'language'}

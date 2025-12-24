@@ -23,12 +23,20 @@
   import SignaturesPDF from './lib/views/SignaturesPDF.svelte';
   import { getStatus, toggleExpanded, clearLogs, setPendingOpenFile, type LogLevel } from './lib/stores/status.svelte';
   import { getGlobalTabsStore } from './lib/stores/tabs.svelte';
+  import { getSettings } from '$lib/stores/settings.svelte';
 
   let sidebarExpanded = $state(true);
   let currentPage = $state('home');
 
   const status = getStatus();
   const tabsStore = getGlobalTabsStore();
+  const appSettings = getSettings();
+
+  // Apply palette reactively when settings load or change
+  $effect(() => {
+    if (!appSettings.isLoaded) return;
+    document.documentElement.dataset.palette = appSettings.palette;
+  });
 
   let unlistenMenuOpen: UnlistenFn | null = null;
   let unlistenWindowClose: (() => void) | null = null;

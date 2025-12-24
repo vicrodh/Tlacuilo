@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Default palette (Nord) */
 :root {
   /* Nord Theme - Polar Night */
   --nord0: #2e3440;
@@ -23,6 +24,86 @@
   --nord13: #ebcb8b;
   --nord14: #a3be8c;
   --nord15: #b48ead;
+}
+
+/* Dracula palette */
+:root[data-palette="dracula"] {
+  --nord0: #282A36; /* background */
+  --nord1: #44475A; /* current line / panels */
+  --nord2: #44475A; /* selection */
+  --nord3: #6272A4; /* comments / subtle borders */
+  --nord4: #6272A4; /* muted text */
+  --nord5: #F8F8F2; /* text */
+  --nord6: #F8F8F2; /* bright text */
+  --nord7: #8BE9FD; /* cyan */
+  --nord8: #8BE9FD; /* primary accent */
+  --nord9: #BD93F9; /* purple */
+  --nord10: #FF79C6; /* pink */
+  --nord11: #FF5555; /* red */
+  --nord12: #FFB86C; /* orange */
+  --nord13: #F1FA8C; /* yellow */
+  --nord14: #50FA7B; /* green */
+  --nord15: #BD93F9; /* violet/purple */
+}
+
+/* Solarized Dark palette */
+:root[data-palette="solarized-dark"] {
+  --nord0: #002b36; /* base03 */
+  --nord1: #073642; /* base02 */
+  --nord2: #073642; /* selection */
+  --nord3: #586e75; /* base01 */
+  --nord4: #839496; /* base0 (muted) */
+  --nord5: #93a1a1; /* base1 */
+  --nord6: #eee8d5; /* base2 (bright) */
+  --nord7: #2aa198; /* cyan */
+  --nord8: #268bd2; /* blue (primary) */
+  --nord9: #2aa198; /* cyan (secondary) */
+  --nord10: #6c71c4; /* violet */
+  --nord11: #dc322f; /* red */
+  --nord12: #cb4b16; /* orange */
+  --nord13: #b58900; /* yellow */
+  --nord14: #859900; /* green */
+  --nord15: #d33682; /* magenta */
+}
+
+/* Gruvbox Dark palette */
+:root[data-palette="gruvbox-dark"] {
+  --nord0: #282828; /* bg0 */
+  --nord1: #3c3836; /* bg1 */
+  --nord2: #504945; /* bg2 */
+  --nord3: #665c54; /* bg3 */
+  --nord4: #a89984; /* fg4 (muted) */
+  --nord5: #d5c4a1; /* fg2 */
+  --nord6: #fbf1c7; /* fg0 (bright) */
+  --nord7: #8ec07c; /* aqua */
+  --nord8: #83a598; /* blue (primary) */
+  --nord9: #d3869b; /* purple */
+  --nord10: #8ec07c; /* aqua */
+  --nord11: #fb4934; /* red */
+  --nord12: #fe8019; /* orange */
+  --nord13: #fabd2f; /* yellow */
+  --nord14: #b8bb26; /* green */
+  --nord15: #d3869b; /* purple */
+}
+
+/* Catppuccin Mocha palette */
+:root[data-palette="catppuccin-mocha"] {
+  --nord0: #11111b; /* crust */
+  --nord1: #181825; /* mantle */
+  --nord2: #1e1e2e; /* base */
+  --nord3: #313244; /* surface0 */
+  --nord4: #6c7086; /* overlay0 (muted) */
+  --nord5: #bac2de; /* subtext1 */
+  --nord6: #cdd6f4; /* text */
+  --nord7: #94e2d5; /* teal */
+  --nord8: #89b4fa; /* blue (primary) */
+  --nord9: #74c7ec; /* sapphire */
+  --nord10: #b4befe; /* lavender */
+  --nord11: #f38ba8; /* red */
+  --nord12: #fab387; /* peach */
+  --nord13: #f9e2af; /* yellow */
+  --nord14: #a6e3a1; /* green */
+  --nord15: #cba6f7; /* mauve */
 }
 
 * {
