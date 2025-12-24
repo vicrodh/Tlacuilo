@@ -22,6 +22,7 @@
     EyeOff,
     Move,
     Stamp,
+    PenTool,
   } from 'lucide-svelte';
   import { ask, open } from '@tauri-apps/plugin-dialog';
   import { readFile } from '@tauri-apps/plugin-fs';
@@ -35,6 +36,9 @@
     HIGHLIGHT_COLORS,
     STAMP_PRESETS,
   } from '$lib/stores/annotations.svelte';
+  import { getSignaturesStore } from '$lib/stores/signatures.svelte';
+
+  const signaturesStore = getSignaturesStore();
 
   interface Props {
     store: AnnotationsStore;
@@ -170,6 +174,13 @@
         console.error('Failed to load stamp image:', e);
       }
     }
+  }
+
+  function selectSignature(dataUrl: string) {
+    store.setStampImageData(dataUrl);
+    store.setActiveStampType('Image');
+    store.setActiveTool('stamp');
+    showStampsMenu = false;
   }
 
   const rotationOptions = [
@@ -467,6 +478,36 @@
             </div>
           {/if}
         </div>
+
+        <!-- Saved Signatures -->
+        {#if signaturesStore.signatures.length > 0}
+          <div class="px-3 py-2" style="border-top: 1px solid var(--nord3);">
+            <div class="text-[10px] uppercase opacity-40 mb-1 flex items-center gap-1">
+              <PenTool size={10} />
+              Saved Signatures
+            </div>
+            <div class="flex flex-wrap gap-1">
+              {#each signaturesStore.signatures.slice(0, 4) as sig}
+                <button
+                  onclick={() => selectSignature(sig.dataUrl)}
+                  class="p-1 rounded transition-colors hover:bg-[var(--nord2)]"
+                  style="background-color: var(--nord6);"
+                  title={sig.name}
+                >
+                  <img
+                    src={sig.thumbnail}
+                    alt={sig.name}
+                    class="h-6 w-auto"
+                    style="max-width: 40px; object-fit: contain;"
+                  />
+                </button>
+              {/each}
+            </div>
+            {#if signaturesStore.signatures.length > 4}
+              <p class="text-[9px] opacity-40 mt-1">+{signaturesStore.signatures.length - 4} more in Signatures view</p>
+            {/if}
+          </div>
+        {/if}
 
         <!-- Rotation -->
         <div class="px-3 py-2" style="border-top: 1px solid var(--nord3);">

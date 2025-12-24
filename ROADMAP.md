@@ -97,7 +97,7 @@ The viewer is usable for daily work. Manipulation tools (merge, split, rotate, c
 - [x] Placeholder UI
 - [x] Graphic signature (draw/load image)
 - [x] Saved signatures library
-- [ ] Position signature in document (interactive placement)
+- [x] Position signature in document (via stamps tool)
 - [ ] PAdES digital signatures (P12/PFX)
 - [ ] Signature verification
 
