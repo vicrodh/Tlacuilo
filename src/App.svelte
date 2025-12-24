@@ -20,6 +20,7 @@
   import TabViewerContainer from './lib/components/TabViewerContainer.svelte';
   import Settings from './lib/views/Settings.svelte';
   import PlaceholderPage from './lib/views/PlaceholderPage.svelte';
+  import SignaturesPDF from './lib/views/SignaturesPDF.svelte';
   import { getStatus, toggleExpanded, clearLogs, setPendingOpenFile, type LogLevel } from './lib/stores/status.svelte';
   import { getGlobalTabsStore } from './lib/stores/tabs.svelte';
 
@@ -223,6 +224,8 @@
         <ConvertFromPDF />
       {:else if currentPage === 'settings'}
         <Settings />
+      {:else if currentPage === 'sign-draw' || currentPage === 'sign-upload' || currentPage === 'sign-cert' || currentPage === 'signatures'}
+        <SignaturesPDF onNavigate={navigate} />
       {:else if currentPage !== 'viewer'}
         <PlaceholderPage pageName={currentPage} />
       {/if}
