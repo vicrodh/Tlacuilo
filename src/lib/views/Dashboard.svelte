@@ -137,6 +137,8 @@
   function handleRecentFileClick(file: RecentFile) {
     setPendingOpenFile(file.path);
     onNavigate?.('viewer');
+    // Dispatch event for TabViewerContainer to handle the pending file
+    window.dispatchEvent(new CustomEvent('pending-file-ready'));
   }
 
   function handleClickOutside(event: MouseEvent) {

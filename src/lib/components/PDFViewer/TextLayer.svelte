@@ -323,6 +323,127 @@
       };
     }
   });
+
+  // Custom double-click handler for precise word selection
+  function handleDoubleClick(e: MouseEvent) {
+    // Prevent browser's native double-click word selection immediately
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!textContent) return;
+
+    // Get click position relative to the text layer
+    const textLayer = document.querySelector(`[data-text-layer-page="${page}"]`);
+    if (!textLayer) return;
+
+    const layerRect = textLayer.getBoundingClientRect();
+    const clickX = (e.clientX - layerRect.left) / (pageWidth * scale);
+    const clickY = (e.clientY - layerRect.top) / (pageHeight * scale);
+
+    // Find the character at click position
+    let foundLine: TextLineInfo | null = null;
+    let foundCharIndex = -1;
+
+    for (const block of textContent.blocks) {
+      for (const line of block.lines) {
+        // Check if click is within line bounds (with some tolerance)
+        if (clickY >= line.rect.y - 0.005 && clickY <= line.rect.y + line.rect.height + 0.005) {
+          // Search through characters in this line
+          for (let i = 0; i < line.chars.length; i++) {
+            const char = line.chars[i];
+            // Quad: [x0,y0, x1,y1, x2,y2, x3,y3] - corners of the character
+            const minX = Math.min(char.quad[0], char.quad[2], char.quad[4], char.quad[6]);
+            const maxX = Math.max(char.quad[0], char.quad[2], char.quad[4], char.quad[6]);
+            const minY = Math.min(char.quad[1], char.quad[3], char.quad[5], char.quad[7]);
+            const maxY = Math.max(char.quad[1], char.quad[3], char.quad[5], char.quad[7]);
+
+            if (clickX >= minX && clickX <= maxX && clickY >= minY && clickY <= maxY) {
+              foundLine = line;
+              foundCharIndex = i;
+              break;
+            }
+          }
+          if (foundLine) break;
+
+          // If we're in the line but didn't find exact char, find closest
+          if (clickX >= line.rect.x && clickX <= line.rect.x + line.rect.width) {
+            foundLine = line;
+            // Find closest character by X position
+            let closestDist = Infinity;
+            for (let i = 0; i < line.chars.length; i++) {
+              const char = line.chars[i];
+              const charCenterX = (char.quad[0] + char.quad[2]) / 2;
+              const dist = Math.abs(clickX - charCenterX);
+              if (dist < closestDist) {
+                closestDist = dist;
+                foundCharIndex = i;
+              }
+            }
+            break;
+          }
+        }
+      }
+      if (foundLine) break;
+    }
+
+    if (!foundLine || foundCharIndex < 0) return;
+
+    // Find word boundaries (like Okular does)
+    const text = foundLine.text;
+
+    // Expand backwards to find start of word
+    let startIndex = foundCharIndex;
+    while (startIndex > 0) {
+      const prevChar = text[startIndex - 1];
+      if (/\s/.test(prevChar)) break;
+      startIndex--;
+    }
+
+    // Expand forwards to find end of word
+    let endIndex = foundCharIndex;
+    while (endIndex < text.length - 1) {
+      const nextChar = text[endIndex + 1];
+      if (/\s/.test(nextChar)) break;
+      endIndex++;
+    }
+
+    // Get the word
+    const word = text.slice(startIndex, endIndex + 1);
+    if (!word.trim()) return;
+
+    // Find the span element for this line and select the word
+    const spans = textLayer.querySelectorAll('.text-span');
+    let targetSpan: Element | null = null;
+
+    // Find the span that contains this line's text
+    for (const span of spans) {
+      if (span.textContent === text) {
+        targetSpan = span;
+        break;
+      }
+    }
+
+    if (!targetSpan) return;
+
+    // Create a range for the word
+    const range = document.createRange();
+    const textNode = targetSpan.firstChild;
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
+
+    try {
+      range.setStart(textNode, startIndex);
+      range.setEnd(textNode, endIndex + 1);
+
+      // Set the selection
+      const selection = window.getSelection();
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    } catch {
+      // If range setting fails, silently ignore
+    }
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -339,6 +460,7 @@
   "
   onmouseup={handleMouseUp}
   oncontextmenu={handleContextMenu}
+  ondblclick={handleDoubleClick}
 >
   {#if textContent}
     {#each textContent.blocks as block}

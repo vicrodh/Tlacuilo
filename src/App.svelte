@@ -42,23 +42,28 @@
     // Listen for window close to check unsaved changes
     const appWindow = getCurrentWindow();
     unlistenWindowClose = await appWindow.onCloseRequested(async (event) => {
-      if (tabsStore.hasUnsavedChanges) {
-        const unsavedTabs = tabsStore.getUnsavedTabs();
-        const fileNames = unsavedTabs.map(t => t.fileName).join(', ');
+      try {
+        if (tabsStore.hasUnsavedChanges) {
+          const unsavedTabs = tabsStore.getUnsavedTabs();
+          const fileNames = unsavedTabs.map(t => t.fileName).join(', ');
 
-        const confirmed = await tauriConfirm(
-          `You have unsaved changes in: ${fileNames}\n\nClose anyway?`,
-          {
-            title: 'Unsaved Changes',
-            kind: 'warning',
-            okLabel: 'Close',
-            cancelLabel: 'Cancel',
+          const confirmed = await tauriConfirm(
+            `You have unsaved changes in: ${fileNames}\n\nClose anyway?`,
+            {
+              title: 'Unsaved Changes',
+              kind: 'warning',
+              okLabel: 'Close',
+              cancelLabel: 'Cancel',
+            }
+          );
+
+          if (!confirmed) {
+            event.preventDefault();
           }
-        );
-
-        if (!confirmed) {
-          event.preventDefault();
         }
+      } catch (e) {
+        // If dialog fails, allow close anyway
+        console.error('Error in close handler:', e);
       }
     });
   });
