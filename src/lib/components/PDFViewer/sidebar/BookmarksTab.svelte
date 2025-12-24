@@ -247,30 +247,32 @@
   <div class="content">
     <!-- User Bookmarks Section -->
     <div class="section">
-      <button
-        class="section-header"
-        onclick={() => bookmarksExpanded = !bookmarksExpanded}
-      >
-        <span class="section-toggle">
-          {#if bookmarksExpanded}
-            <ChevronDown size={14} />
-          {:else}
-            <ChevronRight size={14} />
+      <div class="section-header">
+        <button
+          class="section-toggle-btn"
+          onclick={() => bookmarksExpanded = !bookmarksExpanded}
+        >
+          <span class="section-toggle">
+            {#if bookmarksExpanded}
+              <ChevronDown size={14} />
+            {:else}
+              <ChevronRight size={14} />
+            {/if}
+          </span>
+          <Bookmark size={14} class="section-icon" />
+          <span class="section-title">Bookmarks</span>
+          {#if userBookmarks.length > 0}
+            <span class="count">{userBookmarks.length}</span>
           {/if}
-        </span>
-        <Bookmark size={14} class="section-icon" />
-        <span class="section-title">Bookmarks</span>
-        {#if userBookmarks.length > 0}
-          <span class="count">{userBookmarks.length}</span>
-        {/if}
+        </button>
         <button
           class="add-btn"
-          onclick={(e) => { e.stopPropagation(); handleAddBookmark(); }}
+          onclick={handleAddBookmark}
           title="Add bookmark for current page"
         >
           <Plus size={14} />
         </button>
-      </button>
+      </div>
 
       {#if bookmarksExpanded}
         <div class="section-content">
@@ -344,23 +346,25 @@
 
     <!-- PDF Outlines Section -->
     <div class="section">
-      <button
-        class="section-header"
-        onclick={() => outlinesExpanded = !outlinesExpanded}
-      >
-        <span class="section-toggle">
-          {#if outlinesExpanded}
-            <ChevronDown size={14} />
-          {:else}
-            <ChevronRight size={14} />
+      <div class="section-header">
+        <button
+          class="section-toggle-btn"
+          onclick={() => outlinesExpanded = !outlinesExpanded}
+        >
+          <span class="section-toggle">
+            {#if outlinesExpanded}
+              <ChevronDown size={14} />
+            {:else}
+              <ChevronRight size={14} />
+            {/if}
+          </span>
+          <BookMarked size={14} class="section-icon" />
+          <span class="section-title">Table of Contents</span>
+          {#if outlines.length > 0}
+            <span class="count">{countOutlineItems(outlines)}</span>
           {/if}
-        </span>
-        <BookMarked size={14} class="section-icon" />
-        <span class="section-title">Table of Contents</span>
-        {#if outlines.length > 0}
-          <span class="count">{countOutlineItems(outlines)}</span>
-        {/if}
-      </button>
+        </button>
+      </div>
 
       {#if outlinesExpanded}
         <div class="section-content">
@@ -411,18 +415,24 @@
   .section-header {
     display: flex;
     align-items: center;
-    width: 100%;
+    gap: 0.25rem;
+    padding-right: 0.5rem;
+  }
+
+  .section-header:hover {
+    background-color: var(--nord2);
+  }
+
+  .section-toggle-btn {
+    display: flex;
+    align-items: center;
+    flex: 1;
     padding: 0.625rem 0.75rem;
     background: transparent;
     border: none;
     color: var(--nord4);
     cursor: pointer;
     gap: 0.375rem;
-    transition: background-color 0.1s;
-  }
-
-  .section-header:hover {
-    background-color: var(--nord2);
   }
 
   .section-toggle {
@@ -431,7 +441,7 @@
     opacity: 0.5;
   }
 
-  .section-header :global(.section-icon) {
+  .section-toggle-btn :global(.section-icon) {
     opacity: 0.6;
   }
 
@@ -464,6 +474,7 @@
     cursor: pointer;
     opacity: 0.6;
     transition: all 0.1s;
+    flex-shrink: 0;
   }
 
   .add-btn:hover {
