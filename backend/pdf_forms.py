@@ -8,16 +8,16 @@ import sys
 import json
 import fitz  # PyMuPDF
 
-# Field type constants from PyMuPDF
+# Field type constants from PyMuPDF (verified with fitz.PDF_WIDGET_TYPE_*)
 FIELD_TYPES = {
-    0: "unknown",
-    1: "button",      # Includes checkboxes and radio buttons
-    2: "checkbox",
-    3: "radiobutton",
-    4: "text",
-    5: "listbox",
-    6: "combobox",
-    7: "signature",
+    0: "unknown",       # PDF_WIDGET_TYPE_UNKNOWN
+    1: "button",        # PDF_WIDGET_TYPE_BUTTON
+    2: "checkbox",      # PDF_WIDGET_TYPE_CHECKBOX
+    3: "combobox",      # PDF_WIDGET_TYPE_COMBOBOX
+    4: "listbox",       # PDF_WIDGET_TYPE_LISTBOX
+    5: "radiobutton",   # PDF_WIDGET_TYPE_RADIOBUTTON
+    6: "signature",     # PDF_WIDGET_TYPE_SIGNATURE
+    7: "text",          # PDF_WIDGET_TYPE_TEXT
 }
 
 
@@ -56,20 +56,20 @@ def list_form_fields(pdf_path: str) -> dict:
             }
 
             # Add choices for dropdown/listbox
-            if widget.field_type in (5, 6):  # listbox or combobox
+            if widget.field_type in (fitz.PDF_WIDGET_TYPE_LISTBOX, fitz.PDF_WIDGET_TYPE_COMBOBOX):  # 4, 3
                 field_info["choices"] = widget.choice_values or []
 
             # Add button states for checkboxes/radio buttons
-            if widget.field_type in (1, 2, 3):  # button types
+            if widget.field_type in (fitz.PDF_WIDGET_TYPE_BUTTON, fitz.PDF_WIDGET_TYPE_CHECKBOX, fitz.PDF_WIDGET_TYPE_RADIOBUTTON):  # 1, 2, 5
                 states = widget.button_states()
                 field_info["on_state"] = widget.on_state()
                 field_info["button_states"] = states
                 # For checkboxes, value is True/False
-                if widget.field_type == 2:
+                if widget.field_type == fitz.PDF_WIDGET_TYPE_CHECKBOX:  # 2
                     field_info["checked"] = widget.field_value == widget.on_state()
 
             # Add text field properties
-            if widget.field_type == 4:  # text
+            if widget.field_type == fitz.PDF_WIDGET_TYPE_TEXT:  # 7
                 field_info["max_length"] = widget.text_maxlen
                 field_info["multiline"] = bool(widget.field_flags & (1 << 12))
 
@@ -116,18 +116,18 @@ def fill_form_fields(pdf_path: str, output_path: str, field_values: dict) -> dic
                 try:
                     value = field_values[field_name]
 
-                    # Handle different field types
-                    if widget.field_type == 2:  # checkbox
+                    # Handle different field types (using fitz constants)
+                    if widget.field_type == fitz.PDF_WIDGET_TYPE_CHECKBOX:  # 2
                         if value is True or value == widget.on_state():
                             widget.field_value = widget.on_state()
                         else:
                             widget.field_value = False
 
-                    elif widget.field_type == 3:  # radio button
+                    elif widget.field_type == fitz.PDF_WIDGET_TYPE_RADIOBUTTON:  # 5
                         if value == widget.on_state():
                             widget.field_value = widget.on_state()
 
-                    elif widget.field_type in (5, 6):  # listbox/combobox
+                    elif widget.field_type in (fitz.PDF_WIDGET_TYPE_LISTBOX, fitz.PDF_WIDGET_TYPE_COMBOBOX):  # 4, 3
                         if value in (widget.choice_values or []):
                             widget.field_value = value
                         else:
