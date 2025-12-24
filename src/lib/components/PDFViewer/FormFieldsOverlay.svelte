@@ -280,6 +280,7 @@
   .form-field-select {
     appearance: none;
     -webkit-appearance: none;
+    color-scheme: light; /* Force light mode for dropdown */
     background-color: #fafafa;
     color: #2e3440;
     border: 1px solid #b0b0b0;
