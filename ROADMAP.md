@@ -1,183 +1,183 @@
 # Tlacuilo - Roadmap
 
-**Ultima actualizacion:** 2024-12-24
+**Last updated:** 2024-12-24
 
 ---
 
-## Estado Actual: PDF Viewer/Annotator Funcional
+## Current State: Functional PDF Viewer/Annotator
 
-El viewer es usable para trabajo diario. Las herramientas de manipulacion (merge, split, rotate, compress, convert) estan funcionales.
+The viewer is usable for daily work. Manipulation tools (merge, split, rotate, compress, convert) are functional.
 
 ---
 
-## Completado
+## Completed
 
 ### Core Viewer
-- [x] Renderizado PDF de alta calidad con MuPDF (Rust bindings)
-- [x] Visor multi-tab
-- [x] Controles de zoom (fit-width, fit-page, custom)
-- [x] Rotacion de vista
-- [x] Navegacion de paginas
-- [x] Seleccion de texto con menu contextual
-- [x] Copiar texto seleccionado
-- [x] Busqueda con highlight y navegacion
+- [x] High-quality PDF rendering with MuPDF (Rust bindings)
+- [x] Multi-tab viewer
+- [x] Zoom controls (fit-width, fit-page, custom)
+- [x] View rotation
+- [x] Page navigation
+- [x] Text selection with context menu
+- [x] Copy selected text
+- [x] Search with highlight and navigation
 
 ### Annotations
-- [x] Highlight (resaltado)
-- [x] Underline (subrayado)
-- [x] Strikethrough (tachado)
-- [x] Comments (notas adhesivas)
-- [x] Freetext (texto libre/typewriter)
-- [x] Ink (dibujo libre)
+- [x] Highlight
+- [x] Underline
+- [x] Strikethrough
+- [x] Comments (sticky notes)
+- [x] Freetext (typewriter)
+- [x] Ink (freehand drawing)
 - [x] Rectangle
 - [x] Ellipse
 - [x] Line
-- [x] Arrow (con puntas configurables)
-- [x] Sequence Numbers (numeracion)
-- [x] Colores y opacidad configurables
-- [x] Estilos de linea (solid, dashed, dotted)
-- [x] Fill para shapes
-- [x] Guardar anotaciones en PDF
-- [x] Exportar como XFDF
-- [x] Imprimir con opciones de anotaciones
-- [x] Panel de anotaciones con busqueda
-- [x] Cambiar color de anotacion existente
-- [x] Stamps (predefinidos, texto personalizado, imagen, con rotacion)
+- [x] Arrow (configurable endpoints)
+- [x] Sequence Numbers
+- [x] Configurable colors and opacity
+- [x] Line styles (solid, dashed, dotted)
+- [x] Fill for shapes
+- [x] Save annotations to PDF
+- [x] Export as XFDF
+- [x] Print with annotation options
+- [x] Annotations panel with search
+- [x] Change existing annotation color
+- [x] Stamps (predefined, custom text, image, with rotation)
 
 ### Bookmarks
-- [x] Lector de PDF Outlines (Table of Contents)
-- [x] Navegacion a seccion con scroll preciso
-- [x] Outlines jerarquicos expandibles
-- [x] User bookmarks (marcadores de usuario)
-- [x] Persistencia de bookmarks por archivo
-- [x] Agregar/editar/eliminar bookmarks
-- [x] Busqueda en bookmarks y outlines
+- [x] PDF Outlines (Table of Contents) reader
+- [x] Navigation to section with precise scroll
+- [x] Hierarchical expandable outlines
+- [x] User bookmarks
+- [x] Bookmark persistence per file
+- [x] Add/edit/delete bookmarks
+- [x] Search in bookmarks and outlines
 
 ### OCR
-- [x] Deteccion automatica de documentos escaneados
-- [x] OCR con Tesseract via ocrmypdf
-- [x] Soporte multi-idioma
-- [x] Indicador de progreso
-- [x] Manejo de archivos temporales OCR
-- [x] Flujo: archivo original -> OCR -> temp -> Save As
+- [x] Automatic scanned document detection
+- [x] OCR with Tesseract via ocrmypdf
+- [x] Multi-language support
+- [x] Progress indicator
+- [x] OCR temporary file handling
+- [x] Flow: original file -> OCR -> temp -> Save As
 
 ### PDF Operations
-- [x] Merge PDFs (unir)
-- [x] Split PDFs (dividir)
-- [x] Rotate pages (rotar)
-- [x] Compress PDFs (comprimir con Ghostscript)
+- [x] Merge PDFs
+- [x] Split PDFs
+- [x] Rotate pages
+- [x] Compress PDFs (Ghostscript)
 
 ### Conversion
 - [x] Images to PDF (JPG, PNG, WEBP, TIFF, BMP)
 - [x] PDF to Images (PNG, JPG, WEBP, TIFF)
-- [x] Configuracion de DPI
+- [x] DPI configuration
 - [x] Per-image transforms
 
 ### UI/UX
-- [x] Tema Nord
-- [x] Sidebar con favoritos personalizables
-- [x] Archivos recientes
-- [x] Configuracion persistente (tauri-plugin-store)
-- [x] Atajos de teclado
-- [x] Sistema de tabs
-- [x] Menu de aplicacion (File, Edit, View, Help)
-- [x] Dialogo de confirmacion para cambios no guardados
+- [x] Nord theme
+- [x] Sidebar with customizable favorites
+- [x] Recent files
+- [x] Persistent configuration (tauri-plugin-store)
+- [x] Keyboard shortcuts
+- [x] Tab system
+- [x] Application menu (File, Edit, View, Help)
+- [x] Confirmation dialog for unsaved changes
 
 ---
 
-## En Progreso
+## In Progress
 
 ### Signatures Module
 - [x] Placeholder UI
-- [ ] Firma grafica (dibujar/cargar imagen)
-- [ ] Posicionar firma en documento
-- [ ] Biblioteca de firmas guardadas
+- [ ] Graphic signature (draw/load image)
+- [ ] Position signature in document
+- [ ] Saved signatures library
 
 ### Metadata Viewer
-- [x] Mostrar info del documento (titulo, autor, fechas)
-- [x] Propiedades del PDF (version, encriptacion)
-- [x] Estadisticas (paginas, tamano)
-- [x] Copiar campos al portapapeles
+- [x] Show document info (title, author, dates)
+- [x] PDF properties (version, encryption)
+- [x] Statistics (pages, size)
+- [x] Copy fields to clipboard
 
 ### Attachments Viewer
-- [x] Listar archivos embebidos con metadata
-- [x] Extraer attachment individual (Save As dialog)
-- [x] Extraer todos los attachments
-- [ ] Preview de attachments (imagenes, texto)
+- [x] List embedded files with metadata
+- [x] Extract individual attachment (Save As dialog)
+- [x] Extract all attachments
+- [ ] Attachment preview (images, text)
 
 ---
 
-## Siguiente (Quick Wins)
+## Next (Quick Wins)
 
 ### Stamps
-- [x] Stamps predefinidos (Approved, Draft, Confidential, etc.)
-- [x] Stamps de texto personalizado
-- [x] Stamps de imagen (PNG/JPG)
-- [x] Rotacion configurable (-90°, -45°, 0°, 45°, 90°)
-- [x] Posicionar como anotacion
+- [x] Predefined stamps (Approved, Draft, Confidential, etc.)
+- [x] Custom text stamps
+- [x] Image stamps (PNG/JPG)
+- [x] Configurable rotation (-90, -45, 0, 45, 90)
+- [x] Position as annotation
 
 ---
 
-## Medio Plazo
+## Mid-term
 
 ### AcroForms
-- [ ] Detectar campos de formulario
-- [ ] Llenar campos (text, checkbox, radio, dropdown)
-- [ ] Guardar formulario llenado
-- [ ] Validaciones basicas
+- [ ] Detect form fields
+- [ ] Fill fields (text, checkbox, radio, dropdown)
+- [ ] Save filled form
+- [ ] Basic validations
 
 ### Callouts
-- [ ] Freetext con linea conectora
-- [ ] Posicionamiento automatico
+- [ ] Freetext with connector line
+- [ ] Automatic positioning
 
 ### Layers
-- [ ] Detectar layers del PDF
-- [ ] Toggle visibilidad
+- [ ] Detect PDF layers
+- [ ] Toggle visibility
 
 ---
 
-## Largo Plazo
+## Long-term
 
 ### Redaction
-- [ ] Marcar areas para redactar
-- [ ] Eliminar contenido real (no solo cubrir)
-- [ ] Verificacion de redaccion
+- [ ] Mark areas for redaction
+- [ ] Remove actual content (not just visually cover)
+- [ ] Redaction verification
 
 ### Sanitization
-- [ ] Limpiar metadata
-- [ ] Eliminar scripts
-- [ ] Remover objetos ocultos
+- [ ] Clean metadata
+- [ ] Remove scripts
+- [ ] Remove hidden objects
 
 ### Digital Signatures
-- [ ] PKCS#7 con certificados
+- [ ] PKCS#7 with certificates
 - [ ] PAdES
 - [ ] Timestamp
-- [ ] Verificacion de firmas
+- [ ] Signature verification
 
 ### Office Conversion
-- [ ] DOCX a PDF (LibreOffice)
-- [ ] XLSX a PDF
-- [ ] PPTX a PDF
+- [ ] DOCX to PDF (LibreOffice)
+- [ ] XLSX to PDF
+- [ ] PPTX to PDF
 
 ---
 
 ## Nice to Have (Needs Research)
 
 - [ ] Cloud Storage Integration (OneDrive, Google Drive, Dropbox, iCloud)
-- [ ] Escanear a PDF (SANE)
-- [ ] Comparar PDFs
-- [ ] Reparar PDFs danados
+- [ ] Scan to PDF (SANE)
+- [ ] Compare PDFs
+- [ ] Repair damaged PDFs
 - [ ] PKCS#11 (hardware tokens)
 
 ---
 
-## Arquitectura Actual
+## Current Architecture
 
 ```
 ihpdf/
 ├── src-tauri/           # Rust (Tauri + MuPDF bindings)
 │   ├── src/
-│   │   ├── lib.rs       # Commands y menu
+│   │   ├── lib.rs       # Commands and menu
 │   │   ├── pdf_viewer.rs # MuPDF operations
 │   │   ├── pdf_ocr.rs   # OCR wrapper
 │   │   └── ...
