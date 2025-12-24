@@ -850,6 +850,121 @@ fn pdf_encrypt(
 }
 
 // ============================================================================
+// PDF Graphical Signatures Commands (PythonBridge)
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+struct GraphicalSignatureResult {
+    success: bool,
+    message: String,
+    signature_type: String,
+    warning: Option<String>,
+    placement: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SignatureCheckResult {
+    has_digital_signatures: bool,
+    signature_count: u32,
+    signature_fields: Vec<serde_json::Value>,
+    warning: Option<String>,
+    error: Option<String>,
+}
+
+/// Apply a graphical (visual) signature to a PDF
+#[tauri::command]
+fn apply_graphical_signature(
+    app: AppHandle,
+    input: String,
+    output: Option<String>,
+    image_b64: String,
+    page: i32,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: Option<f64>,
+    rotation: Option<f64>,
+    opacity: Option<f64>,
+    fit: Option<String>,
+) -> Result<GraphicalSignatureResult, String> {
+    let output_path = output.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+        cache_dir
+            .join("tlacuilo-signed.pdf")
+            .to_string_lossy()
+            .to_string()
+    });
+
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let mut args: Vec<String> = vec![
+        "apply".to_string(),
+        "--input".to_string(),
+        input,
+        "--output".to_string(),
+        output_path,
+        "--image-b64".to_string(),
+        image_b64,
+        "--page".to_string(),
+        page.to_string(),
+        "--x".to_string(),
+        x.to_string(),
+        "--y".to_string(),
+        y.to_string(),
+        "--width".to_string(),
+        width.to_string(),
+        "--json".to_string(),
+    ];
+
+    if let Some(h) = height {
+        args.push("--height".to_string());
+        args.push(h.to_string());
+    }
+
+    if let Some(r) = rotation {
+        args.push("--rotation".to_string());
+        args.push(r.to_string());
+    }
+
+    if let Some(o) = opacity {
+        args.push("--opacity".to_string());
+        args.push(o.to_string());
+    }
+
+    if let Some(f) = fit {
+        args.push("--fit".to_string());
+        args.push(f);
+    }
+
+    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+    let result = bridge
+        .run_script("pdf_signatures.py", &args_refs)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+/// Check if a PDF has existing digital signatures
+#[tauri::command]
+fn check_pdf_signatures(app: AppHandle, input: String) -> Result<SignatureCheckResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec!["check", "--input", &input, "--json"];
+
+    let result = bridge
+        .run_script("pdf_signatures.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+// ============================================================================
 // PDF Attachments Commands (PythonBridge)
 // ============================================================================
 
@@ -1311,7 +1426,10 @@ pub fn run() {
       // PDF Security
       pdf_check_security,
       pdf_unlock,
-      pdf_encrypt
+      pdf_encrypt,
+      // Graphical Signatures
+      apply_graphical_signature,
+      check_pdf_signatures
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
