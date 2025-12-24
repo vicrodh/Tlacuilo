@@ -735,6 +735,35 @@ pub fn run() {
             .accelerator("CmdOrCtrl+S")
             .build(app)?,
         )
+        .item(
+          &MenuItemBuilder::new("Save Annotations As...")
+            .id("save-as")
+            .accelerator("CmdOrCtrl+Shift+S")
+            .build(app)?,
+        )
+        .item(
+          &MenuItemBuilder::new("Reload from PDF")
+            .id("reload-annotations")
+            .build(app)?,
+        )
+        .separator()
+        .item(
+          &MenuItemBuilder::new("Export XFDF...")
+            .id("export-xfdf")
+            .build(app)?,
+        )
+        .item(
+          &MenuItemBuilder::new("Import XFDF...")
+            .id("import-xfdf")
+            .build(app)?,
+        )
+        .separator()
+        .item(
+          &MenuItemBuilder::new("Print...")
+            .id("print")
+            .accelerator("CmdOrCtrl+P")
+            .build(app)?,
+        )
         .separator()
         .item(
           &MenuItemBuilder::new("Quit")
@@ -772,6 +801,31 @@ pub fn run() {
           // Emit event to frontend to save annotations
           if let Some(window) = app.get_webview_window("main") {
             let _ = window.emit("menu-save", ());
+          }
+        }
+        "save-as" => {
+          if let Some(window) = app.get_webview_window("main") {
+            let _ = window.emit("menu-save-as", ());
+          }
+        }
+        "reload-annotations" => {
+          if let Some(window) = app.get_webview_window("main") {
+            let _ = window.emit("menu-reload-annotations", ());
+          }
+        }
+        "export-xfdf" => {
+          if let Some(window) = app.get_webview_window("main") {
+            let _ = window.emit("menu-export-xfdf", ());
+          }
+        }
+        "import-xfdf" => {
+          if let Some(window) = app.get_webview_window("main") {
+            let _ = window.emit("menu-import-xfdf", ());
+          }
+        }
+        "print" => {
+          if let Some(window) = app.get_webview_window("main") {
+            let _ = window.emit("menu-print", ());
           }
         }
         "quit" => app.exit(0),

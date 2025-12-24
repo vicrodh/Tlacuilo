@@ -1094,8 +1094,13 @@
   // Zoom presets
   const zoomPresets = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 
-  // Menu event listener
+  // Menu event listeners
   let unlistenSave: UnlistenFn | null = null;
+  let unlistenSaveAs: UnlistenFn | null = null;
+  let unlistenReload: UnlistenFn | null = null;
+  let unlistenExportXfdf: UnlistenFn | null = null;
+  let unlistenImportXfdf: UnlistenFn | null = null;
+  let unlistenPrint: UnlistenFn | null = null;
 
   // Track if we've already loaded to prevent double-loading
   let hasLoadedFile = '';
@@ -1105,11 +1110,31 @@
     window.addEventListener('keydown', handleKeydown);
     document.addEventListener('mouseup', handlePanEnd);
 
-    // Listen for menu save event (Ctrl+S)
+    // Listen for menu events
     unlistenSave = await listen('menu-save', () => {
       if (annotationsDirty) {
         saveAnnotationsToPdf();
       }
+    });
+
+    unlistenSaveAs = await listen('menu-save-as', () => {
+      saveAnnotationsToPdfAs();
+    });
+
+    unlistenReload = await listen('menu-reload-annotations', () => {
+      reloadAnnotationsFromPdf();
+    });
+
+    unlistenExportXfdf = await listen('menu-export-xfdf', () => {
+      exportToXfdf();
+    });
+
+    unlistenImportXfdf = await listen('menu-import-xfdf', () => {
+      importFromXfdf();
+    });
+
+    unlistenPrint = await listen('menu-print', () => {
+      showPrintDialog = true;
     });
 
     debugLog('MuPDFViewer', 'onMount() completed');
@@ -1120,6 +1145,11 @@
     window.removeEventListener('keydown', handleKeydown);
     document.removeEventListener('mouseup', handlePanEnd);
     unlistenSave?.();
+    unlistenSaveAs?.();
+    unlistenReload?.();
+    unlistenExportXfdf?.();
+    unlistenImportXfdf?.();
+    unlistenPrint?.();
   });
 
   // Load when file path changes (or on initial mount)
