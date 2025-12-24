@@ -64,12 +64,6 @@
     store.activeTool === 'arrow'
   );
 
-  // Get current shape icon
-  const currentShapeIcon = $derived(() => {
-    const shape = shapeTools.find(s => s.tool === store.activeTool);
-    return shape?.icon ?? Square;
-  });
-
   // Markup type options for selection modes
   const markupTypes: { type: MarkupType; icon: typeof Highlighter; label: string }[] = [
     { type: 'highlight', icon: Highlighter, label: 'Highlight' },
@@ -342,8 +336,15 @@
         style="color: {isShapeTool ? 'var(--nord0)' : 'var(--nord4)'};"
         title="Shapes"
       >
-        {@const CurrentIcon = currentShapeIcon()}
-        <CurrentIcon size={16} />
+        {#if store.activeTool === 'ellipse'}
+          <Circle size={16} />
+        {:else if store.activeTool === 'line'}
+          <Minus size={16} />
+        {:else if store.activeTool === 'arrow'}
+          <ArrowRight size={16} />
+        {:else}
+          <Square size={16} />
+        {/if}
         <ChevronRight size={12} class="rotate-90 opacity-60" />
       </button>
 

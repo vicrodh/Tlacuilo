@@ -21,7 +21,7 @@
     MoreVertical,
     Printer,
   } from 'lucide-svelte';
-  import { save, open } from '@tauri-apps/plugin-dialog';
+  import { save, open, ask, message } from '@tauri-apps/plugin-dialog';
   import { createAnnotationsStore } from '$lib/stores/annotations.svelte';
   import { debugLog } from '$lib/stores/debugLog.svelte';
   import AnnotationToolbar from './AnnotationToolbar.svelte';
@@ -112,6 +112,63 @@
 
   function handleSearchStateChange(query: string, currentPage: number, currentIndex: number) {
     searchHighlight = { query, currentPage, currentIndex };
+  }
+
+  // OCR detection state
+  interface OcrAnalysis {
+    success: boolean;
+    page_count?: number;
+    has_text?: boolean;
+    has_images?: boolean;
+    needs_ocr?: boolean;
+    recommendation?: string;
+    error?: string;
+    missing_languages?: string[];
+  }
+
+  let documentNeedsOcr = $state(false);
+  let ocrAnalyzed = $state(false);
+  let showOcrButton = $state(false);
+
+  // Analyze document for OCR need (called after PDF loads)
+  async function analyzeForOcr() {
+    try {
+      debugLog('MuPDFViewer', 'Analyzing document for OCR need...');
+      const result = await invoke<OcrAnalysis>('ocr_analyze_pdf', { input: filePath });
+      debugLog('MuPDFViewer', 'OCR analysis result:', result);
+
+      ocrAnalyzed = true;
+
+      if (result.success && result.needs_ocr) {
+        documentNeedsOcr = true;
+
+        // Check for missing language packages
+        if (result.missing_languages && result.missing_languages.length > 0) {
+          await message(
+            `This document appears to be scanned and needs OCR for full functionality.\n\nHowever, some language packages are missing:\n${result.missing_languages.join(', ')}\n\nPlease install the required Tesseract language packages.`,
+            { title: 'OCR Language Packages Missing', kind: 'warning' }
+          );
+          showOcrButton = true;
+        } else {
+          // Ask user if they want to apply OCR
+          const applyOcr = await ask(
+            'This document appears to be scanned and has no searchable text.\n\nSome features (search, text selection, annotations) may not work properly without OCR.\n\nWould you like to apply OCR now?',
+            { title: 'OCR Recommended', kind: 'info', okLabel: 'Apply OCR', cancelLabel: 'Skip' }
+          );
+
+          if (applyOcr) {
+            // TODO: Implement direct OCR application or redirect to OCR view
+            showOcrButton = true;
+            await message('OCR can be applied from the OCR tool in the sidebar or tools menu.', { title: 'Apply OCR' });
+          } else {
+            showOcrButton = true;
+          }
+        }
+      }
+    } catch (err) {
+      debugLog('MuPDFViewer', 'OCR analysis failed:', err, 'error');
+      // Don't show error to user, just log it
+    }
   }
 
   // Load annotations from PDF (industry standard - reads native PDF annotations)
@@ -507,6 +564,12 @@
       }
 
       debugLog('MuPDFViewer', 'loadPDF() completed successfully');
+
+      // Analyze for OCR need (async, don't block)
+      ocrAnalyzed = false;
+      documentNeedsOcr = false;
+      showOcrButton = false;
+      analyzeForOcr();
     } catch (err) {
       debugLog('MuPDFViewer', 'loadPDF() FAILED', err, 'error');
       error = String(err);
@@ -1380,6 +1443,15 @@
   >
     <div class="flex items-center gap-4">
       <span class="opacity-60 truncate max-w-[300px]" title={filePath}>{fileName}</span>
+      {#if showOcrButton && documentNeedsOcr}
+        <span
+          class="px-2 py-0.5 rounded text-[10px]"
+          style="background-color: var(--nord13); color: var(--nord0);"
+          title="This document may need OCR for full functionality"
+        >
+          OCR Recommended
+        </span>
+      {/if}
     </div>
     <div class="flex items-center gap-4">
       <span class="opacity-60">{Math.round(zoom * 100)}%</span>
