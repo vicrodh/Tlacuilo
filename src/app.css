@@ -26,24 +26,84 @@
   --nord15: #b48ead;
 }
 
-/* Dracula palette */
+/* Dracula palette - official spec from draculatheme.com */
 :root[data-palette="dracula"] {
   --nord0: #282A36; /* background */
-  --nord1: #44475A; /* current line / panels */
-  --nord2: #44475A; /* selection */
-  --nord3: #6272A4; /* comments / subtle borders */
-  --nord4: #6272A4; /* muted text */
-  --nord5: #F8F8F2; /* text */
+  --nord1: #343746; /* panels - slightly lighter than bg */
+  --nord2: #44475A; /* selection/current line */
+  --nord3: #6272A4; /* comments/borders */
+  --nord4: #9DA5C0; /* muted text - lighter for readability */
+  --nord5: #E4E8F2; /* text */
   --nord6: #F8F8F2; /* bright text */
   --nord7: #8BE9FD; /* cyan */
-  --nord8: #8BE9FD; /* primary accent */
-  --nord9: #BD93F9; /* purple */
-  --nord10: #FF79C6; /* pink */
+  --nord8: #BD93F9; /* primary accent - purple (iconic Dracula) */
+  --nord9: #FF79C6; /* pink */
+  --nord10: #8BE9FD; /* cyan secondary */
   --nord11: #FF5555; /* red */
   --nord12: #FFB86C; /* orange */
   --nord13: #F1FA8C; /* yellow */
   --nord14: #50FA7B; /* green */
-  --nord15: #BD93F9; /* violet/purple */
+  --nord15: #FF79C6; /* pink/magenta */
+}
+
+/* Alucard palette - Dracula light variant */
+:root[data-palette="alucard"] {
+  --nord0: #F8F8F2; /* background - inverted from Dracula fg */
+  --nord1: #EEF0F5; /* panels */
+  --nord2: #E2E5EB; /* selection */
+  --nord3: #C8CCD5; /* borders */
+  --nord4: #6272A4; /* muted text - Dracula comment color */
+  --nord5: #44475A; /* text - Dracula current line */
+  --nord6: #282A36; /* bright text - Dracula bg */
+  --nord7: #1FA8A0; /* cyan - darker for light bg */
+  --nord8: #8B5CF6; /* primary accent - purple adjusted */
+  --nord9: #DB2777; /* pink - darker */
+  --nord10: #0891B2; /* cyan secondary */
+  --nord11: #DC2626; /* red */
+  --nord12: #D97706; /* orange */
+  --nord13: #B58900; /* yellow - darkened */
+  --nord14: #16A34A; /* green */
+  --nord15: #C026D3; /* magenta */
+}
+
+/* Tokyo Night palette - github.com/tokyo-night */
+:root[data-palette="tokyo-night"] {
+  --nord0: #1A1B26; /* background */
+  --nord1: #1F2335; /* panels */
+  --nord2: #292E42; /* selection */
+  --nord3: #414868; /* borders */
+  --nord4: #565F89; /* muted text/comments */
+  --nord5: #A9B1D6; /* text */
+  --nord6: #C0CAF5; /* bright text */
+  --nord7: #7DCFFF; /* cyan */
+  --nord8: #7AA2F7; /* primary accent - blue */
+  --nord9: #BB9AF7; /* purple */
+  --nord10: #2AC3DE; /* teal */
+  --nord11: #F7768E; /* red */
+  --nord12: #FF9E64; /* orange */
+  --nord13: #E0AF68; /* yellow */
+  --nord14: #9ECE6A; /* green */
+  --nord15: #BB9AF7; /* purple */
+}
+
+/* Monokai palette - classic monokai.pro */
+:root[data-palette="monokai"] {
+  --nord0: #272822; /* background */
+  --nord1: #2D2E27; /* panels */
+  --nord2: #3E3D32; /* selection */
+  --nord3: #5A5A52; /* borders */
+  --nord4: #75715E; /* muted text/comments */
+  --nord5: #D6D6D6; /* text */
+  --nord6: #F8F8F2; /* bright text */
+  --nord7: #66D9EF; /* cyan */
+  --nord8: #F92672; /* primary accent - iconic pink */
+  --nord9: #AE81FF; /* purple */
+  --nord10: #66D9EF; /* cyan */
+  --nord11: #F92672; /* red/pink */
+  --nord12: #FD971F; /* orange */
+  --nord13: #E6DB74; /* yellow */
+  --nord14: #A6E22E; /* green */
+  --nord15: #AE81FF; /* purple */
 }
 
 /* Solarized Dark palette */

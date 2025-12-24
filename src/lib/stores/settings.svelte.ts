@@ -35,14 +35,62 @@ export const LANGUAGES: { id: Language; label: string; native: string }[] = [
 ];
 
 // Supported color palettes
-export type PaletteId = 'nord' | 'catppuccin-mocha' | 'dracula' | 'solarized-dark' | 'gruvbox-dark';
+export type PaletteId =
+  | 'nord'
+  | 'dracula'
+  | 'alucard'
+  | 'tokyo-night'
+  | 'monokai'
+  | 'catppuccin-mocha'
+  | 'solarized-dark'
+  | 'gruvbox-dark';
 
-export const PALETTES: { id: PaletteId; label: string }[] = [
-  { id: 'nord', label: 'Nord (default)' },
-  { id: 'catppuccin-mocha', label: 'Catppuccin Mocha' },
-  { id: 'dracula', label: 'Dracula' },
-  { id: 'solarized-dark', label: 'Solarized Dark' },
-  { id: 'gruvbox-dark', label: 'Gruvbox Dark' },
+// Palette definitions with preview colors
+export const PALETTES: {
+  id: PaletteId;
+  label: string;
+  colors: { bg: string; panel: string; accent: string; text: string; red: string; green: string };
+}[] = [
+  {
+    id: 'nord',
+    label: 'Nord',
+    colors: { bg: '#2e3440', panel: '#3b4252', accent: '#88c0d0', text: '#eceff4', red: '#bf616a', green: '#a3be8c' },
+  },
+  {
+    id: 'dracula',
+    label: 'Dracula',
+    colors: { bg: '#282A36', panel: '#343746', accent: '#BD93F9', text: '#F8F8F2', red: '#FF5555', green: '#50FA7B' },
+  },
+  {
+    id: 'alucard',
+    label: 'Alucard (Light)',
+    colors: { bg: '#F8F8F2', panel: '#EEF0F5', accent: '#8B5CF6', text: '#282A36', red: '#DC2626', green: '#16A34A' },
+  },
+  {
+    id: 'tokyo-night',
+    label: 'Tokyo Night',
+    colors: { bg: '#1A1B26', panel: '#1F2335', accent: '#7AA2F7', text: '#C0CAF5', red: '#F7768E', green: '#9ECE6A' },
+  },
+  {
+    id: 'monokai',
+    label: 'Monokai',
+    colors: { bg: '#272822', panel: '#2D2E27', accent: '#F92672', text: '#F8F8F2', red: '#F92672', green: '#A6E22E' },
+  },
+  {
+    id: 'catppuccin-mocha',
+    label: 'Catppuccin Mocha',
+    colors: { bg: '#11111b', panel: '#181825', accent: '#89b4fa', text: '#cdd6f4', red: '#f38ba8', green: '#a6e3a1' },
+  },
+  {
+    id: 'solarized-dark',
+    label: 'Solarized Dark',
+    colors: { bg: '#002b36', panel: '#073642', accent: '#268bd2', text: '#eee8d5', red: '#dc322f', green: '#859900' },
+  },
+  {
+    id: 'gruvbox-dark',
+    label: 'Gruvbox Dark',
+    colors: { bg: '#282828', panel: '#3c3836', accent: '#83a598', text: '#fbf1c7', red: '#fb4934', green: '#b8bb26' },
+  },
 ];
 
 // Author settings for annotation attribution

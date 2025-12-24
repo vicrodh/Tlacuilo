@@ -258,6 +258,15 @@
                      border: 1px solid {settings.palette === palette.id ? 'var(--nord8)' : 'var(--nord3)'};"
             >
               <div class="flex items-center gap-3">
+                <!-- Color swatches preview -->
+                <div class="flex gap-0.5 rounded overflow-hidden" style="border: 1px solid {palette.colors.panel};">
+                  <div class="w-4 h-6" style="background-color: {palette.colors.bg};" title="Background"></div>
+                  <div class="w-4 h-6" style="background-color: {palette.colors.panel};" title="Panel"></div>
+                  <div class="w-4 h-6" style="background-color: {palette.colors.accent};" title="Accent"></div>
+                  <div class="w-4 h-6" style="background-color: {palette.colors.text};" title="Text"></div>
+                  <div class="w-4 h-6" style="background-color: {palette.colors.red};" title="Red"></div>
+                  <div class="w-4 h-6" style="background-color: {palette.colors.green};" title="Green"></div>
+                </div>
                 <div class="text-left">
                   <p class="text-sm font-medium">{palette.label}</p>
                 </div>
