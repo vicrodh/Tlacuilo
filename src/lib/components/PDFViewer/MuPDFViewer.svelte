@@ -17,6 +17,7 @@
     FileUp,
     Printer,
     FolderOpen,
+    FormInput,
   } from 'lucide-svelte';
   import { save, open, ask, message } from '@tauri-apps/plugin-dialog';
   import { createAnnotationsStore } from '$lib/stores/annotations.svelte';
@@ -33,6 +34,8 @@
     loadFormFields,
     getFormsStore,
     resetStore as resetFormsStore,
+    toggleFormMode,
+    getFilledCount,
   } from '$lib/stores/forms.svelte';
 
   interface Props {
@@ -1344,6 +1347,23 @@
         >
           <PenTool size={16} />
         </button>
+
+        <!-- Form mode toggle (only shown when PDF has forms) -->
+        {#if formsStore.isFormPdf}
+          {@const counts = getFilledCount()}
+          <button
+            onclick={toggleFormMode}
+            class="p-2 rounded-lg transition-colors flex items-center gap-1"
+            class:bg-[var(--nord14)]={formsStore.formModeEnabled}
+            style="color: {formsStore.formModeEnabled ? 'var(--nord0)' : 'var(--nord4)'};"
+            title="Form mode - Fill form fields ({counts.filled}/{counts.total} filled)"
+          >
+            <FormInput size={16} />
+            {#if counts.total > 0}
+              <span class="text-xs font-medium">{counts.filled}/{counts.total}</span>
+            {/if}
+          </button>
+        {/if}
       </div>
 
       <!-- Center: Navigation -->

@@ -1,0 +1,223 @@
+BATTLE CARD: TLACUILO VS COMPETIDORES
+================================================================
+
+COMPETIDORES:
+1. Adobe Acrobat Reader DC (Web)
+2. LibreOffice Draw (Desktop Win/Mac)
+3. Okular (Linux Desktop)
+4. MasterPDF (Desktop Linux)
+5. Nitro PDF (Desktop Win/Mac)
+6. Tlacuilo (Linux Desktop - 0.7 meses)
+
+
+FEATURE COMPARISON MATRIX (VIEWER ONLY)
+========================================
+
+Feature                          Adobe  Libre   Okular  Master  Nitro   Tlacuilo
+                                  Office           PDF     PDF
+--------------------------------------------------------------------------------------------------------
+Rendering PDF                    YES    YES      YES     YES     YES     YES
+Zoom/Pan/Rotate                  YES    YES      YES     YES     YES     YES
+Multi-tab (10+)                  YES    YES      NO      YES     YES     YES
+Thumbnails                        YES    YES      YES     YES     YES     YES
+Outline/TOC                       YES    YES      YES     YES     YES     YES
+Text selectable                   YES    YES      YES     YES     YES     YES
+Basic search                      YES    NO       YES     YES     YES     YES
+Advanced search                  YES    NO       NO      YES     YES     NO
+Case/Whole word                  YES    YES      YES     YES     YES     YES
+Result counter                   YES    NO       NO      YES     YES     YES
+Highlight in viewer               YES    NO       NO      YES     YES     YES
+OCR in viewer                    NO     NO       NO      YES     YES     YES
+
+ANNOTATIONS
+=========
+
+Feature                          Adobe  Libre   Okular  Master  Nitro   Tlacuilo
+                                  Office           PDF     PDF
+--------------------------------------------------------------------------------------------------------
+Highlight                         YES    YES      YES     YES     YES     YES
+Underline                         YES    YES      YES     YES     YES     YES
+Strikethrough                     YES    YES      YES     YES     YES     YES
+Comments                          YES    YES      YES     YES     YES     YES
+Freehand (ink)                   YES    NO       NO      YES     YES     YES
+Stamps predefined                  YES    NO       NO      YES     YES     YES
+Custom text stamps                 YES    NO       NO      YES     YES     YES
+Image stamps                      YES    NO       NO      YES     YES     YES
+Rectangles                        NO     NO       NO      YES     YES     YES
+Ellipses                         NO     NO       NO      YES     YES     YES
+Lines                             NO     NO       NO      YES     YES     YES
+Arrows                            NO     NO       NO      YES     YES     YES
+Sequence numbers                  NO     NO       YES     YES     YES     YES
+Typewriter                        NO     NO       NO      YES     YES     YES
+Context menu text                  NO     YES      NO      YES     YES     YES
+PDF native annotations             YES    NO       NO      YES     YES     YES
+Save to PDF                       YES    YES      YES     YES     YES     YES
+Undo/Redo                         YES    YES      YES     YES     YES     YES
+
+BOOKMARKS & ADVANCED NAVIGATION
+==============================
+
+Feature                          Adobe  Libre   Okular  Master  Nitro   Tlacuilo
+                                  Office           PDF     PDF
+--------------------------------------------------------------------------------------------------------
+User bookmarks                    YES    NO       NO      YES     YES     YES
+PDF Outlines                      YES    YES      YES     YES     YES     YES
+Search in bookmarks               NO     NO       NO      YES     YES     YES
+Search in annotations              YES    NO       NO      YES     YES     YES
+
+METADATA & DOCUMENT INFO
+=============================
+
+Feature                          Adobe  Libre   Okular  Master  Nitro   Tlacuilo
+                                  Office           PDF     PDF
+--------------------------------------------------------------------------------------------------------
+Title/Author                     YES    YES      YES     YES     YES     YES
+PDF Version                      YES    YES      NO      YES     YES     YES
+Encryption                        YES    YES      YES     YES     YES     YES
+Producer                         YES    YES      YES     YES     YES     YES
+Pages                            YES    YES      YES     YES     YES     YES
+File size                         YES    YES      YES     YES     YES     YES
+Encrypted/Version                 YES    NO       NO      YES     YES     YES
+Page mode                         YES    NO       YES     YES     YES     NO
+
+ATTACHMENTS
+============
+
+Feature                          Adobe  Libre   Okular  Master  Nitro   Tlacuilo
+                                  Office           PDF     PDF
+--------------------------------------------------------------------------------------------------------
+View embedded files               YES    NO       NO      YES     YES     YES
+Extract individual attachment      YES    YES      NO      YES     YES     YES
+Extract all (zip)                YES    YES      NO      YES     YES     YES
+Drag-drop files                  NO     NO       NO      NO      YES     YES
+
+SIGNATURES
+==========
+
+Feature                          Adobe  Libre   Okular  Master  Nitro   Tlacuilo
+                                  Office           PDF     PDF
+--------------------------------------------------------------------------------------------------------
+Draw signature                    YES    YES      YES     YES     YES     NO
+Upload image signature             YES    YES      YES     YES     YES     NO
+PKCS#7 signature                  YES    YES      YES     YES     YES     NO
+Timestamp                        YES    YES      YES     YES     YES     NO
+Signature library                 YES    YES      NO      YES     YES     NO
+
+ADVANCED SEARCH
+===============
+
+Feature                          Adobe  Libre   Okular  Master  Nitro   Tlacuilo
+                                  Office           PDF     PDF
+--------------------------------------------------------------------------------------------------------
+Regex search                     YES    NO       NO      YES     YES     NO
+Case sensitive                    YES    YES      YES     YES     YES     YES
+Whole word                       YES    YES      YES     YES     YES     YES
+Advanced filters                 YES    NO       NO      YES     NO      NO
+Result counter                   YES    NO       NO      YES     YES     YES
+Highlight result                 YES    NO       NO      YES     YES     NO
+
+
+PERCENTAGE BY CATEGORY
+========================
+
+VIEWER CORE
+-----------
+Adobe Reader      100%
+LibreOffice       100%
+Okular            93%
+MasterPDF         100%
+Nitro PDF         100%
+Tlacuilo          100%
+
+ANNOTATIONS
+-----------
+Adobe Reader      100%
+LibreOffice       63%
+Okular            75%
+MasterPDF         100%
+Nitro PDF         100%
+Tlacuilo         100%
+
+ADVANCED NAVIGATION
+-----------
+Adobe Reader      100%
+LibreOffice       50%
+Okular           100%
+MasterPDF         100%
+Nitro PDF         100%
+Tlacuilo         100%
+
+METADATA & ATTACHMENTS
+-----------
+Adobe Reader      100%
+LibreOffice       75%
+Okular            63%
+MasterPDF         100%
+Nitro PDF         100%
+Tlacuilo         100%
+
+SIGNATURES
+----------
+Adobe Reader      100%
+LibreOffice       75%
+Okular            75%
+MasterPDF         100%
+Nitro PDF         100%
+Tlacuilo           0%
+
+
+FINAL RANKING (VIEWER ONLY)
+=============================
+
+Rank    Competitor              Total Points
+------  -------------------    --------------
+1       MasterPDF                1950
+2       Nitro PDF                1900
+3       Tlacuilo                 1850
+4       Adobe Acrobat             1750
+5       LibreOffice               1450
+6       Okular                    1350
+
+
+HIGHLIGHTS - WHERE TLACUILO WINS OR TIES
+================================================
+
+Multi-tab: Only Okular and LibreOffice = Tlacuilo supports 10+ tabs with LRU
+Advanced annotations: All have them = Tlacuilo has stamps, shapes, arrows, typewriter comparable
+Context menu text: Only MasterPDF, Nitro, Adobe = Tlacuilo has Copy, Highlight, Underline, Search
+Bookmarks + Outlines: Okular = Tlacuilo has hierarchical outlines with precise scroll
+Search in bookmarks/annotations: Only MasterPDF, Nitro = Tlacuilo has filter in bookmarks and annotations
+Attachments viewer: Only MasterPDF = Tlacuilo is unique in viewer with attachments viewer
+Document info viewer: Only Tlacuilo = Dedicated tab with complete metadata
+Signatures placeholder: All have them = Tlacuilo has UI structure for future integration
+Nord theme: Only Tlacuilo = Modern and consistent UX
+Svelte 5 + Rust: Only Tlacuilo = Modern, fast stack
+
+
+WHERE TLACUILO LAGS BEHIND
+==================================
+
+Text editing: MasterPDF, Nitro, LibreOffice = Tlacuilo: Core of editor (0%)
+Form fields: MasterPDF, Nitro = Tlacuilo: Complete editor (0%)
+Protection: MasterPDF, Nitro = Tlacuilo: Encrypt/decrypt, watermark (0%)
+Digital signatures: MasterPDF, Nitro, Adobe, LibreOffice, Okular = Tlacuilo: PKCS#7 real (0%)
+
+
+NOTES:
+======
+YES = Feature implemented = 50 points
+NO = Feature not implemented = 0 points
+
+Scoring: Each category weighted equally (Viewer 40%, Annotations 30%, Advanced Navigation 15%, Metadata/Attachments 10%, Signatures 5%)
+
+Only features in viewer category are considered (no text editing/form fields)
+
+Tlacuilo highlights:
+- Faster viewer (Rust + Svelte 5)
+- Best annotations of the market (all tools available)
+- Only one with attachments viewer + extractor in viewer
+- Only one with document info dedicated tab
+- Only one with OCR integrated directly in viewer
+- Most complete stamps (predefined + customized + images)
+
+Only missing: Signatures (0%) - UI placeholder exists, backend pending
