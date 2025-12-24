@@ -161,7 +161,7 @@
               checked={isChecked(field)}
               onchange={(e) => handleCheckboxChange(field, e)}
               disabled={!formModeEnabled}
-              style="width: 100%; height: 100%; cursor: {formModeEnabled ? 'pointer' : 'default'}; accent-color: var(--nord8);"
+              style="width: 100%; height: 100%;"
             />
           </div>
         {:else if field.field_type === 'radiobutton'}
@@ -179,7 +179,7 @@
               checked={isChecked(field)}
               onchange={(e) => handleCheckboxChange(field, e)}
               disabled={!formModeEnabled}
-              style="width: 100%; height: 100%; cursor: {formModeEnabled ? 'pointer' : 'default'}; accent-color: var(--nord8);"
+              style="width: 100%; height: 100%;"
             />
           </div>
         {:else if field.field_type === 'combobox' || field.field_type === 'listbox'}
@@ -195,10 +195,6 @@
                 width: {pos.width};
                 height: {pos.height};
                 font-family: {getWebFont((field as any).text_font)};
-                border: none;
-                outline: none;
-                background-color: transparent;
-                cursor: pointer;
               "
               value={getDisplayValue(field)}
               onchange={(e) => handleSelectChange(field, e)}
@@ -280,7 +276,110 @@
     white-space: nowrap;
   }
 
+  /* Custom styled select */
+  .form-field-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: var(--nord1);
+    color: var(--nord4);
+    border: 1px solid var(--nord3);
+    border-radius: 4px;
+    padding: 2px 24px 2px 8px;
+    font-size: inherit;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2381A1C1' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .form-field-select:hover {
+    border-color: var(--nord8);
+  }
+
   .form-field-select:focus {
-    box-shadow: 0 0 0 2px var(--nord8);
+    outline: none;
+    border-color: var(--nord8);
+    box-shadow: 0 0 0 2px rgba(136, 192, 208, 0.3);
+  }
+
+  .form-field-select option {
+    background-color: var(--nord1);
+    color: var(--nord4);
+    padding: 8px;
+  }
+
+  /* Custom styled checkbox */
+  .form-field-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: var(--nord1);
+    border: 2px solid var(--nord3);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    position: relative;
+  }
+
+  .form-field-checkbox:hover:not(:disabled) {
+    border-color: var(--nord8);
+  }
+
+  .form-field-checkbox:checked {
+    background-color: var(--nord8);
+    border-color: var(--nord8);
+  }
+
+  .form-field-checkbox:checked::after {
+    content: '';
+    position: absolute;
+    top: 45%;
+    left: 50%;
+    width: 35%;
+    height: 60%;
+    border: solid var(--nord0);
+    border-width: 0 2px 2px 0;
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+
+  .form-field-checkbox:disabled {
+    opacity: 0.7;
+    cursor: default;
+  }
+
+  /* Custom styled radio */
+  .form-field-radio {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: var(--nord1);
+    border: 2px solid var(--nord3);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    position: relative;
+  }
+
+  .form-field-radio:hover:not(:disabled) {
+    border-color: var(--nord8);
+  }
+
+  .form-field-radio:checked {
+    border-color: var(--nord8);
+  }
+
+  .form-field-radio:checked::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 50%;
+    height: 50%;
+    background-color: var(--nord8);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .form-field-radio:disabled {
+    opacity: 0.7;
+    cursor: default;
   }
 </style>
