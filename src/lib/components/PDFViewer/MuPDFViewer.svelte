@@ -18,6 +18,7 @@
     Printer,
     FolderOpen,
     FormInput,
+    SaveAll,
   } from 'lucide-svelte';
   import { save, open, ask, message } from '@tauri-apps/plugin-dialog';
   import { createAnnotationsStore } from '$lib/stores/annotations.svelte';
@@ -36,6 +37,8 @@
     resetStore as resetFormsStore,
     toggleFormMode,
     getFilledCount,
+    saveFilledForm,
+    hasModifications as checkFormModifications,
   } from '$lib/stores/forms.svelte';
 
   interface Props {
@@ -486,6 +489,44 @@
       await message(`Failed to save: ${err}`, { title: 'Error', kind: 'error' });
     } finally {
       isExporting = false;
+    }
+  }
+
+  // Save filled form to new file
+  let isSavingForm = $state(false);
+
+  async function saveFilledFormAs() {
+    if (!checkFormModifications()) {
+      await message('No form fields have been modified.', { title: 'Save Form', kind: 'info' });
+      return;
+    }
+
+    const defaultPath = filePath.replace('.pdf', '-filled.pdf');
+    const outputPath = await save({
+      title: 'Save Filled Form',
+      defaultPath,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+
+    if (!outputPath) return;
+
+    isSavingForm = true;
+    try {
+      const result = await saveFilledForm(outputPath);
+
+      if (result.success) {
+        await message(
+          `Form saved successfully!\n${result.filled_count} field(s) filled.`,
+          { title: 'Save Form', kind: 'info' }
+        );
+      } else {
+        throw new Error(result.errors?.join(', ') || 'Unknown error');
+      }
+    } catch (err) {
+      console.error('[MuPDFViewer] Failed to save form:', err);
+      await message(`Failed to save form: ${err}`, { title: 'Error', kind: 'error' });
+    } finally {
+      isSavingForm = false;
     }
   }
 
@@ -1363,6 +1404,21 @@
               <span class="text-xs font-medium">{counts.filled}/{counts.total}</span>
             {/if}
           </button>
+
+          <!-- Save form button (only shown when there are modifications) -->
+          {#if formsStore.hasModifications}
+            <button
+              onclick={saveFilledFormAs}
+              disabled={isSavingForm}
+              class="p-2 rounded-lg transition-colors flex items-center gap-1 bg-[var(--nord13)]"
+              class:animate-pulse={isSavingForm}
+              style="color: var(--nord0);"
+              title="Save filled form"
+            >
+              <SaveAll size={16} />
+              <span class="text-xs font-medium">Save Form</span>
+            </button>
+          {/if}
         {/if}
       </div>
 
