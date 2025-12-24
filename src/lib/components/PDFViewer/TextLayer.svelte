@@ -228,11 +228,8 @@
     return merged;
   }
 
-  // Check if text-select mode is active (for annotation creation)
+  // Check if text-select mode is active (for annotation creation via mouseup)
   const isTextSelectMode = $derived(store.activeTool === 'text-select');
-
-  // Check if annotation tools are visible (any tool active means toolbar is open)
-  const annotationToolsVisible = $derived(store.activeTool !== null);
 
   // Context menu handlers
   function handleContextMenu(e: MouseEvent) {
@@ -258,13 +255,25 @@
     closeContextMenu();
   }
 
+  // Default colors for context menu annotations
+  const CONTEXT_MENU_COLORS = {
+    highlight: '#FFEB3B',   // Yellow
+    underline: '#2196F3',   // Blue
+    strikethrough: '#F44336', // Red
+  };
+
   function handleHighlight() {
-    createMarkupFromSelection('highlight');
+    createMarkupFromSelection('highlight', CONTEXT_MENU_COLORS.highlight);
     closeContextMenu();
   }
 
   function handleUnderline() {
-    createMarkupFromSelection('underline');
+    createMarkupFromSelection('underline', CONTEXT_MENU_COLORS.underline);
+    closeContextMenu();
+  }
+
+  function handleStrikethrough() {
+    createMarkupFromSelection('strikethrough', CONTEXT_MENU_COLORS.strikethrough);
     closeContextMenu();
   }
 
@@ -275,7 +284,7 @@
     onSearchText?.(text);
   }
 
-  function createMarkupFromSelection(type: MarkupType) {
+  function createMarkupFromSelection(type: MarkupType, color?: string) {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) return;
 
@@ -283,13 +292,14 @@
     if (rects.length === 0) return;
 
     const author = getAuthorString() || undefined;
+    const annotationColor = color || store.activeColor;
 
     for (const rect of rects) {
       store.addAnnotation({
         type,
         page,
         rect,
-        color: store.activeColor,
+        color: annotationColor,
         opacity: type === 'highlight' ? 0.3 : 0.8,
         author,
       });
@@ -358,10 +368,10 @@
   x={contextMenu.x}
   y={contextMenu.y}
   selectedText={contextMenu.text}
-  showAnnotationActions={showAnnotationTools}
   onCopy={handleCopy}
   onHighlight={handleHighlight}
   onUnderline={handleUnderline}
+  onStrikethrough={handleStrikethrough}
   onSearch={handleSearchFromMenu}
   onClose={closeContextMenu}
 />

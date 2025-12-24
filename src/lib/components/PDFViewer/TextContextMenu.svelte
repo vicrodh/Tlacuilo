@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { Copy, Highlighter, Underline, Search } from 'lucide-svelte';
+  import { Copy, Highlighter, Underline, Strikethrough, Search } from 'lucide-svelte';
 
   interface Props {
     visible: boolean;
     x: number;
     y: number;
     selectedText: string;
-    showAnnotationActions: boolean;
     onCopy: () => void;
     onHighlight: () => void;
     onUnderline: () => void;
+    onStrikethrough: () => void;
     onSearch: () => void;
     onClose: () => void;
   }
@@ -19,10 +19,10 @@
     x,
     y,
     selectedText,
-    showAnnotationActions,
     onCopy,
     onHighlight,
     onUnderline,
+    onStrikethrough,
     onSearch,
     onClose,
   }: Props = $props();
@@ -45,17 +45,23 @@
       <span>Copy</span>
     </button>
 
-    {#if showAnnotationActions}
-      <div class="separator"></div>
-      <button class="menu-item" onclick={onHighlight}>
-        <Highlighter size={14} />
-        <span>Highlight</span>
-      </button>
-      <button class="menu-item" onclick={onUnderline}>
-        <Underline size={14} />
-        <span>Underline</span>
-      </button>
-    {/if}
+    <div class="separator"></div>
+
+    <button class="menu-item" onclick={onHighlight}>
+      <span class="color-indicator" style="background-color: #FFEB3B;"></span>
+      <Highlighter size={14} />
+      <span>Highlight</span>
+    </button>
+    <button class="menu-item" onclick={onUnderline}>
+      <span class="color-indicator" style="background-color: #2196F3;"></span>
+      <Underline size={14} />
+      <span>Underline</span>
+    </button>
+    <button class="menu-item" onclick={onStrikethrough}>
+      <span class="color-indicator" style="background-color: #F44336;"></span>
+      <Strikethrough size={14} />
+      <span>Strikethrough</span>
+    </button>
 
     <div class="separator"></div>
     <button class="menu-item" onclick={onSearch}>
@@ -101,5 +107,12 @@
     height: 1px;
     margin: 0.25rem 0;
     background-color: var(--nord3);
+  }
+
+  .color-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
   }
 </style>
