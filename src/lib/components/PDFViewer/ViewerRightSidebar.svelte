@@ -25,6 +25,8 @@
     onLoadThumbnail: (page: number) => void;
     onThumbnailScroll: () => void;
     onFileReload?: () => void;
+    onRunOcr?: () => void; // Callback to trigger OCR with splash notification
+    fileReloadVersion?: number; // Incremented when file is reloaded (e.g., after OCR)
     searchTrigger?: { text: string; timestamp: number } | null;
     onSearchStateChange?: (query: string, currentPage: number, currentIndex: number) => void;
   }
@@ -41,6 +43,8 @@
     onLoadThumbnail,
     onThumbnailScroll,
     onFileReload,
+    onRunOcr,
+    fileReloadVersion = 0,
     searchTrigger = null,
     onSearchStateChange,
   }: Props = $props();
@@ -94,6 +98,7 @@
           {totalPages}
           {loadedThumbnails}
           {loadingThumbnails}
+          {fileReloadVersion}
           {onNavigateToPage}
           {onLoadThumbnail}
           {onThumbnailScroll}
@@ -108,9 +113,11 @@
       {:else if activeTab === 'search'}
         <SearchTab
           {filePath}
+          {fileReloadVersion}
           {onNavigateToPage}
           {onFocusOnResult}
           {onFileReload}
+          {onRunOcr}
           {externalSearchQuery}
           {onSearchStateChange}
         />

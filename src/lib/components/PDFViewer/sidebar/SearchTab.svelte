@@ -7,14 +7,16 @@
 
   interface Props {
     filePath: string;
+    fileReloadVersion?: number; // Incremented when file is reloaded (e.g., after OCR)
     onNavigateToPage: (page: number) => void;
     onFocusOnResult?: (page: number, normalizedY: number) => void;
     onFileReload?: () => void;
+    onRunOcr?: () => void; // Callback to trigger OCR from parent (shows splash)
     externalSearchQuery?: string;
     onSearchStateChange?: (query: string, currentPage: number, currentIndex: number) => void;
   }
 
-  let { filePath, onNavigateToPage, onFocusOnResult, onFileReload, externalSearchQuery = '', onSearchStateChange }: Props = $props();
+  let { filePath, fileReloadVersion = 0, onNavigateToPage, onFocusOnResult, onFileReload, onRunOcr, externalSearchQuery = '', onSearchStateChange }: Props = $props();
 
   // OCR Analysis result type
   interface OcrAnalysis {
@@ -80,6 +82,24 @@
       showOcrNotification = true;
       showSuccessNotification = false;
       showErrorNotification = true;
+      searchQuery = '';
+      searchResults = [];
+      currentResultIndex = -1;
+      analyzeDocument();
+    }
+  });
+
+  // Re-analyze when file is reloaded (e.g., after OCR)
+  let lastReloadVersion = 0;
+  $effect(() => {
+    if (fileReloadVersion > 0 && fileReloadVersion !== lastReloadVersion) {
+      debugLog('SearchTab', '$effect: fileReloadVersion changed', { from: lastReloadVersion, to: fileReloadVersion });
+      lastReloadVersion = fileReloadVersion;
+      // Clear cache for this file and re-analyze
+      analysisCache.delete(filePath);
+      lastAnalyzedPath = ''; // Force re-analysis
+      searchState = 'idle';
+      showSuccessNotification = false;
       searchQuery = '';
       searchResults = [];
       currentResultIndex = -1;
@@ -160,6 +180,14 @@
   }
 
   async function runOcr() {
+    // If parent provides OCR callback, use it (shows splash notification)
+    if (onRunOcr) {
+      showOcrNotification = false;
+      onRunOcr();
+      return;
+    }
+
+    // Fallback: run OCR directly (no splash)
     searchState = 'processing-ocr';
     ocrProgress = 'Starting OCR...';
     showOcrNotification = false;
@@ -421,19 +449,23 @@
       {/if}
 
       <div class="search-container">
-        <div class="search-input-wrapper">
-          <Search size={16} class="search-icon" />
+        <div class="search-input-box">
+          <div class="search-icon-container">
+            <Search size={14} />
+          </div>
           <input
             type="text"
             placeholder="Search in document..."
             bind:value={searchQuery}
             onkeydown={handleKeyDown}
-            class="search-input"
+            class="search-input-field"
           />
           {#if isSearching}
-            <Loader2 size={16} class="loading-icon animate-spin" />
+            <div class="search-action-icon">
+              <Loader2 size={14} class="animate-spin" />
+            </div>
           {:else if searchQuery.length > 0}
-            <button class="clear-btn" onclick={clearSearch} title="Clear search (Esc)">
+            <button class="search-clear-btn" onclick={clearSearch} title="Clear search (Esc)">
               <X size={14} />
             </button>
           {/if}
@@ -601,35 +633,54 @@
     padding: 0 0.25rem;
   }
 
-  .search-input-wrapper {
-    position: relative;
+  .search-input-box {
     display: flex;
     align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--nord3);
+    background-color: var(--nord0);
+    transition: border-color 0.15s;
   }
 
-  .search-icon {
-    position: absolute;
-    left: 0.75rem;
-    top: 50%;
-    transform: translateY(-50%);
+  .search-input-box:focus-within {
+    border-color: var(--nord8);
+  }
+
+  .search-icon-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: var(--nord4);
     opacity: 0.5;
-    pointer-events: none;
-    z-index: 1;
+    flex-shrink: 0;
   }
 
-  .loading-icon {
-    position: absolute;
-    right: 0.75rem;
-    top: 50%;
-    transform: translateY(-50%);
+  .search-input-field {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--nord6);
+    font-size: 0.875rem;
+    outline: none;
+    min-width: 0;
+  }
+
+  .search-input-field::placeholder {
+    color: var(--nord4);
+    opacity: 0.6;
+  }
+
+  .search-action-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: var(--nord8);
-    pointer-events: none;
+    flex-shrink: 0;
   }
 
-  .clear-btn {
-    position: absolute;
-    right: 0.5rem;
+  .search-clear-btn {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -641,9 +692,10 @@
     cursor: pointer;
     border-radius: 0.25rem;
     transition: opacity 0.15s, background-color 0.15s;
+    flex-shrink: 0;
   }
 
-  .clear-btn:hover {
+  .search-clear-btn:hover {
     opacity: 1;
     background-color: var(--nord2);
   }
@@ -687,26 +739,6 @@
   .nav-btn:disabled {
     opacity: 0.3;
     cursor: not-allowed;
-  }
-
-  .search-input {
-    width: 100%;
-    padding: 0.625rem 2.25rem;
-    border-radius: 0.375rem;
-    border: 1px solid var(--nord3);
-    background-color: var(--nord0);
-    color: var(--nord6);
-    font-size: 0.875rem;
-  }
-
-  .search-input:focus {
-    outline: none;
-    border-color: var(--nord8);
-  }
-
-  .search-input::placeholder {
-    color: var(--nord4);
-    opacity: 0.6;
   }
 
   .search-btn {

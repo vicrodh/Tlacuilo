@@ -14,6 +14,7 @@
     totalPages: number;
     loadedThumbnails: Map<number, RenderedPage>;
     loadingThumbnails: Set<number>;
+    fileReloadVersion?: number; // Incremented when file is reloaded (e.g., after OCR)
     onNavigateToPage: (page: number) => void;
     onLoadThumbnail: (page: number) => void;
     onThumbnailScroll: () => void;
@@ -24,6 +25,7 @@
     totalPages,
     loadedThumbnails,
     loadingThumbnails,
+    fileReloadVersion = 0,
     onNavigateToPage,
     onLoadThumbnail,
     onThumbnailScroll,
@@ -81,6 +83,17 @@
       debugLog('PagesTab', '$effect: totalPages changed', { from: lastLoadedTotalPages, to: totalPages });
       lastLoadedTotalPages = totalPages;
       // Delay to allow DOM to settle
+      setTimeout(() => loadVisibleThumbnails(), 100);
+    }
+  });
+
+  // Reload thumbnails when file is reloaded (e.g., after OCR)
+  let lastReloadVersion = 0;
+  $effect(() => {
+    if (fileReloadVersion > 0 && fileReloadVersion !== lastReloadVersion) {
+      debugLog('PagesTab', '$effect: fileReloadVersion changed', { from: lastReloadVersion, to: fileReloadVersion });
+      lastReloadVersion = fileReloadVersion;
+      // Delay to allow thumbnails map to clear, then reload
       setTimeout(() => loadVisibleThumbnails(), 100);
     }
   });

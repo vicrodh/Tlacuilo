@@ -129,9 +129,20 @@
   let showOcrButton = $state(false);
   let isRunningOcr = $state(false);
   let ocrMessage = $state('Processing OCR...');
+  // Track if OCR was completed for this session (persists across reloads)
+  let ocrCompletedForSession = $state(false);
 
   // Analyze document for OCR need (called after PDF loads)
   async function analyzeForOcr() {
+    // Skip analysis if OCR was already completed this session
+    if (ocrCompletedForSession) {
+      debugLog('MuPDFViewer', 'Skipping OCR analysis - already completed this session');
+      documentNeedsOcr = false;
+      showOcrButton = false;
+      ocrAnalyzed = true;
+      return;
+    }
+
     try {
       debugLog('MuPDFViewer', 'Analyzing document for OCR need...');
       const result = await invoke<OcrAnalysis>('ocr_analyze_pdf', { input: filePath });
@@ -179,8 +190,12 @@
 
   // Run OCR on the current document (in-place, then reload)
   async function runOcrOnDocument() {
+    // Set state first
     isRunningOcr = true;
     ocrMessage = 'Processing OCR...';
+
+    // Force UI update before starting heavy work
+    await tick();
 
     try {
       debugLog('MuPDFViewer', 'Running OCR on document...', { filePath });
@@ -205,9 +220,13 @@
         debugLog('MuPDFViewer', 'OCR completed successfully');
         ocrMessage = 'OCR complete! Reloading document...';
 
-        // Clear OCR state before reload to prevent re-prompting
+        // Mark OCR as completed for this session - prevents re-prompting
+        ocrCompletedForSession = true;
         documentNeedsOcr = false;
         showOcrButton = false;
+
+        // Force UI update
+        await tick();
 
         // Small delay to show success message
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -555,6 +574,8 @@
 
   // Sidebar state
   let sidebarCollapsed = $state(false);
+  // Version counter to signal file reloads to sidebar components
+  let fileReloadVersion = $state(0);
 
   // Virtual thumbnails: only load visible ones
   let loadedThumbnails = $state<Map<number, RenderedPage>>(new Map());
@@ -607,6 +628,9 @@
       debugLog('MuPDFViewer', 'Clearing thumbnails...');
       loadedThumbnails = new Map();
       loadingThumbnails = new Set();
+
+      // Increment reload version to signal sidebar components to refresh
+      fileReloadVersion++;
 
       // Wait for DOM to render, then load visible content
       debugLog('MuPDFViewer', 'Awaiting tick()...');
@@ -1491,11 +1515,13 @@
         annotationsStore={annotationsStore}
         {loadedThumbnails}
         {loadingThumbnails}
+        {fileReloadVersion}
         onNavigateToPage={goToPage}
         onFocusOnResult={focusOnSearchResult}
         onLoadThumbnail={loadThumbnail}
         onThumbnailScroll={handleThumbnailScroll}
         onFileReload={loadPDF}
+        onRunOcr={runOcrOnDocument}
         {searchTrigger}
         onSearchStateChange={handleSearchStateChange}
       />
