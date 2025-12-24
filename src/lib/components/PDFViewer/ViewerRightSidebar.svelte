@@ -21,6 +21,7 @@
     loadedThumbnails: Map<number, RenderedPage>;
     loadingThumbnails: Set<number>;
     onNavigateToPage: (page: number) => void;
+    onFocusOnResult?: (page: number, normalizedY: number) => void;
     onLoadThumbnail: (page: number) => void;
     onThumbnailScroll: () => void;
     onFileReload?: () => void;
@@ -35,6 +36,7 @@
     loadedThumbnails,
     loadingThumbnails,
     onNavigateToPage,
+    onFocusOnResult,
     onLoadThumbnail,
     onThumbnailScroll,
     onFileReload,
@@ -105,6 +107,7 @@
         <SearchTab
           {filePath}
           {onNavigateToPage}
+          {onFocusOnResult}
           {onFileReload}
           {externalSearchQuery}
         />

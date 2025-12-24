@@ -652,6 +652,42 @@
     }
   }
 
+  // Focus on a search result at specific Y position
+  function focusOnSearchResult(page: number, normalizedY: number) {
+    if (page < 1 || page > totalPages) return;
+
+    currentPage = page;
+    pageInputValue = String(page);
+
+    const element = pageElements.get(page);
+    if (element && canvasContainer) {
+      isScrollingToPage = true;
+
+      // Get page dimensions
+      const dims = getPageDimensions(page - 1);
+      const pageHeight = dims.height;
+
+      // Calculate the Y offset within the page
+      const yOffset = normalizedY * pageHeight;
+
+      // Get the page's position relative to the container
+      const pageRect = element.getBoundingClientRect();
+      const containerRect = canvasContainer.getBoundingClientRect();
+      const pageTopInContainer = pageRect.top - containerRect.top + canvasContainer.scrollTop;
+
+      // Scroll to position the match roughly in the upper third of viewport
+      const targetScroll = pageTopInContainer + yOffset - (containerRect.height / 3);
+      canvasContainer.scrollTo({
+        top: Math.max(0, targetScroll),
+        behavior: 'smooth',
+      });
+
+      setTimeout(() => {
+        isScrollingToPage = false;
+      }, 500);
+    }
+  }
+
   function prevPage() {
     goToPage(currentPage - 1);
   }
@@ -1302,6 +1338,7 @@
         {loadedThumbnails}
         {loadingThumbnails}
         onNavigateToPage={goToPage}
+        onFocusOnResult={focusOnSearchResult}
         onLoadThumbnail={loadThumbnail}
         onThumbnailScroll={handleThumbnailScroll}
         onFileReload={loadPDF}

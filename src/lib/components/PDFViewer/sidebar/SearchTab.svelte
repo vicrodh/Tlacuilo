@@ -8,11 +8,12 @@
   interface Props {
     filePath: string;
     onNavigateToPage: (page: number) => void;
+    onFocusOnResult?: (page: number, normalizedY: number) => void;
     onFileReload?: () => void;
     externalSearchQuery?: string;
   }
 
-  let { filePath, onNavigateToPage, onFileReload, externalSearchQuery = '' }: Props = $props();
+  let { filePath, onNavigateToPage, onFocusOnResult, onFileReload, externalSearchQuery = '' }: Props = $props();
 
   // OCR Analysis result type
   interface OcrAnalysis {
@@ -30,6 +31,7 @@
     page: number;
     text: string;
     context: string;
+    normalizedY: number; // Y position on page (0-1)
   }
 
   // State machine
@@ -197,6 +199,11 @@
     }
   }
 
+  interface TextBlockInfo {
+    rect: { x: number; y: number; width: number; height: number };
+    lines: { text: string; rect: { x: number; y: number; width: number; height: number } }[];
+  }
+
   async function handleSearch() {
     if (!searchQuery.trim()) {
       searchResults = [];
@@ -213,32 +220,32 @@
       // Search through each page
       for (let page = 1; page <= totalPages; page++) {
         try {
-          const textContent = await invoke<{ page: number; blocks: { lines: { text: string }[] }[] }>(
+          const textContent = await invoke<{ page: number; blocks: TextBlockInfo[] }>(
             'pdf_get_text_blocks',
             { path: filePath, page }
           );
 
-          // Extract all text from blocks
-          const pageText = textContent.blocks
-            .flatMap(block => block.lines.map(line => line.text))
-            .join(' ');
+          // Search through blocks and lines to find matches with position
+          for (const block of textContent.blocks) {
+            for (const line of block.lines) {
+              const lineText = line.text.toLowerCase();
+              if (lineText.includes(query)) {
+                // Find context around match
+                const matchIndex = lineText.indexOf(query);
+                const start = Math.max(0, matchIndex - 30);
+                const end = Math.min(line.text.length, matchIndex + query.length + 30);
+                const context = (start > 0 ? '...' : '') +
+                  line.text.slice(start, end).trim() +
+                  (end < line.text.length ? '...' : '');
 
-          // Check if query matches
-          const lowerText = pageText.toLowerCase();
-          if (lowerText.includes(query)) {
-            // Find context around match
-            const matchIndex = lowerText.indexOf(query);
-            const start = Math.max(0, matchIndex - 30);
-            const end = Math.min(pageText.length, matchIndex + query.length + 30);
-            const context = (start > 0 ? '...' : '') +
-              pageText.slice(start, end).trim() +
-              (end < pageText.length ? '...' : '');
-
-            results.push({
-              page,
-              text: searchQuery,
-              context,
-            });
+                results.push({
+                  page,
+                  text: searchQuery,
+                  context,
+                  normalizedY: line.rect.y, // Normalized Y position (0-1)
+                });
+              }
+            }
           }
         } catch {
           // Skip pages that fail to extract
@@ -246,6 +253,10 @@
       }
 
       searchResults = results;
+      // Auto-select first result
+      if (results.length > 0) {
+        currentResultIndex = 0;
+      }
     } catch (err) {
       console.error('Search failed:', err);
     } finally {
@@ -253,15 +264,23 @@
     }
   }
 
+  function focusOnResult(result: SearchResult) {
+    if (onFocusOnResult) {
+      onFocusOnResult(result.page, result.normalizedY);
+    } else {
+      onNavigateToPage(result.page);
+    }
+  }
+
   function handleResultClick(result: SearchResult, index: number) {
     currentResultIndex = index;
-    onNavigateToPage(result.page);
+    focusOnResult(result);
   }
 
   function nextResult() {
     if (searchResults.length === 0) return;
     currentResultIndex = (currentResultIndex + 1) % searchResults.length;
-    onNavigateToPage(searchResults[currentResultIndex].page);
+    focusOnResult(searchResults[currentResultIndex]);
   }
 
   function prevResult() {
@@ -269,7 +288,7 @@
     currentResultIndex = currentResultIndex <= 0
       ? searchResults.length - 1
       : currentResultIndex - 1;
-    onNavigateToPage(searchResults[currentResultIndex].page);
+    focusOnResult(searchResults[currentResultIndex]);
   }
 
   function clearSearch() {
