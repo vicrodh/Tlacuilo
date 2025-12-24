@@ -23,11 +23,17 @@
   import { debugLog } from '$lib/stores/debugLog.svelte';
   import AnnotationToolbar from './AnnotationToolbar.svelte';
   import AnnotationOverlay from './AnnotationOverlay.svelte';
+  import FormFieldsOverlay from './FormFieldsOverlay.svelte';
   import ViewerRightSidebar from './ViewerRightSidebar.svelte';
   import TextLayer from './TextLayer.svelte';
   import SearchHighlightLayer from './SearchHighlightLayer.svelte';
   import PrintDialog from './PrintDialog.svelte';
   import OcrProgressSplash from '../OcrProgressSplash.svelte';
+  import {
+    loadFormFields,
+    getFormsStore,
+    resetStore as resetFormsStore,
+  } from '$lib/stores/forms.svelte';
 
   interface Props {
     filePath: string;
@@ -89,6 +95,9 @@
   let isSavingAnnotations = $state(false);
   let annotationsInitialized = $state(false);
   let lastAnnotationCount = $state(0);
+
+  // Form Fields
+  const formsStore = getFormsStore();
 
   // Print
   let showPrintDialog = $state(false);
@@ -722,6 +731,11 @@
       debugLog('MuPDFViewer', 'Loading annotations...');
       await loadAnnotations();
       debugLog('MuPDFViewer', 'Annotations loaded');
+
+      // Load form fields
+      debugLog('MuPDFViewer', 'Loading form fields...');
+      await loadFormFields(filePath);
+      debugLog('MuPDFViewer', 'Form fields loaded', { isForm: formsStore.isFormPdf, count: formsStore.fields.length });
 
       if (initialPage > 1) {
         debugLog('MuPDFViewer', 'Scrolling to initial page', { initialPage });
@@ -1558,6 +1572,14 @@
                       interactive={showAnnotationTools && annotationsStore.activeTool !== 'text-select'}
                     />
                   {/if}
+
+                  <!-- Form fields overlay -->
+                  <FormFieldsOverlay
+                    page={pageNum}
+                    pageWidth={loadedPage.width}
+                    pageHeight={loadedPage.height}
+                    formModeEnabled={formsStore.formModeEnabled}
+                  />
                 {:else}
                   <!-- Placeholder -->
                   <div
