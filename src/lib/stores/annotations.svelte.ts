@@ -177,6 +177,13 @@ export function createAnnotationsStore() {
   // Internal: add annotation with specific ID (for redo)
   function addAnnotationWithId(annotation: Annotation, skipHistory = false): void {
     const pageAnnotations = state.annotations.get(annotation.page) || [];
+
+    // Check for duplicate ID to prevent each_key_duplicate errors
+    if (pageAnnotations.some(a => a.id === annotation.id)) {
+      console.warn(`[Annotations] Skipping duplicate annotation: ${annotation.id}`);
+      return;
+    }
+
     state.annotations.set(annotation.page, [...pageAnnotations, annotation]);
     state.annotations = new Map(state.annotations);
 

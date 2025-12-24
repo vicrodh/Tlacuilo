@@ -133,6 +133,14 @@
     sidebarExpanded = !sidebarExpanded;
   }
 
+  // Helper to open a file in the viewer from any module
+  function openFileInViewer(path: string) {
+    setPendingOpenFile(path);
+    navigate('viewer');
+    // Dispatch event for TabViewerContainer to handle the pending file
+    window.dispatchEvent(new CustomEvent('pending-file-ready'));
+  }
+
   async function handleMenuOpen() {
     try {
       const selected = await open({
@@ -140,10 +148,7 @@
         filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
       });
       if (selected && typeof selected === 'string') {
-        setPendingOpenFile(selected);
-        navigate('viewer');
-        // Dispatch event for TabViewerContainer to handle the pending file
-        window.dispatchEvent(new CustomEvent('pending-file-ready'));
+        openFileInViewer(selected);
       }
     } catch (err) {
       console.error('[App] File dialog error:', err);
@@ -198,17 +203,17 @@
       {#if currentPage === 'home'}
         <Dashboard onNavigate={navigate} />
       {:else if currentPage === 'merge'}
-        <MergePDF onOpenInViewer={(path) => { setPendingOpenFile(path); navigate('viewer'); }} />
+        <MergePDF onOpenInViewer={openFileInViewer} />
       {:else if currentPage === 'split'}
         <SplitPDF />
       {:else if currentPage === 'rotate'}
-        <RotatePDF onOpenInViewer={(path) => { setPendingOpenFile(path); navigate('viewer'); }} />
+        <RotatePDF onOpenInViewer={openFileInViewer} />
       {:else if currentPage === 'compress'}
         <CompressPDF />
       {:else if currentPage === 'ocr'}
-        <OCRPDF onOpenInViewer={(path) => { setPendingOpenFile(path); navigate('viewer'); }} />
+        <OCRPDF onOpenInViewer={openFileInViewer} />
       {:else if currentPage === 'convert'}
-        <ConvertToPDF onOpenInViewer={(path) => { setPendingOpenFile(path); navigate('viewer'); }} />
+        <ConvertToPDF onOpenInViewer={openFileInViewer} />
       {:else if currentPage === 'export'}
         <ConvertFromPDF />
       {:else if currentPage === 'settings'}
