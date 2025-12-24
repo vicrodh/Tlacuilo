@@ -5,7 +5,6 @@
   import {
     ChevronLeft,
     ChevronRight,
-    RotateCw,
     X,
     Minus,
     Plus,
@@ -14,12 +13,10 @@
     Maximize,
     PenTool,
     Save,
-    Download,
-    Upload,
     FileDown,
     FileUp,
-    MoreVertical,
     Printer,
+    FolderOpen,
   } from 'lucide-svelte';
   import { save, open, ask, message } from '@tauri-apps/plugin-dialog';
   import { createAnnotationsStore } from '$lib/stores/annotations.svelte';
@@ -287,21 +284,23 @@
     }
   }
 
-  // Annotation menu state
-  let showAnnotationMenu = $state(false);
+  // Exporting state (used by save functions)
   let isExporting = $state(false);
-  let menuButtonRef: HTMLButtonElement;
-  let menuPosition = $state({ top: 0, left: 0 });
 
-  function toggleAnnotationMenu() {
-    if (!showAnnotationMenu && menuButtonRef) {
-      const rect = menuButtonRef.getBoundingClientRect();
-      menuPosition = {
-        top: rect.bottom + 4,
-        left: rect.right - 180, // menu width is 180px
-      };
+  // Open document handler - dispatches event for parent to handle
+  async function handleOpenDocument() {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
+      });
+      if (selected && typeof selected === 'string') {
+        // Dispatch event to open in new tab
+        window.dispatchEvent(new CustomEvent('open-pdf-file', { detail: { path: selected } }));
+      }
+    } catch (err) {
+      console.error('[MuPDFViewer] File dialog error:', err);
     }
-    showAnnotationMenu = !showAnnotationMenu;
   }
 
   // Convert Date objects to ISO strings for JSON serialization
@@ -327,7 +326,6 @@
     }
 
     isExporting = true;
-    showAnnotationMenu = false;
     try {
       const json = serializeAnnotations();
       // PyMuPDF reads the file into memory, so we can write directly to the same path
@@ -364,7 +362,6 @@
     if (!outputPath) return;
 
     isExporting = true;
-    showAnnotationMenu = false;
     try {
       const json = serializeAnnotations();
       const result = await invoke<{ output_path: string; total: number; errors: string[] }>(
@@ -414,8 +411,6 @@
 
   // Reload annotations from PDF (discard local changes)
   async function reloadAnnotationsFromPdf() {
-    showAnnotationMenu = false;
-
     if (annotationsDirty) {
       if (!confirm('Discard unsaved changes and reload annotations from PDF?')) {
         return;
@@ -456,7 +451,6 @@
     if (!outputPath) return;
 
     isExporting = true;
-    showAnnotationMenu = false;
     try {
       // Create temp PDF with annotations
       const tempPath = filePath.replace('.pdf', '-temp-annot.pdf');
@@ -489,7 +483,6 @@
     });
     if (!xfdfPath || Array.isArray(xfdfPath)) return;
 
-    showAnnotationMenu = false;
     try {
       // Import XFDF to temp PDF
       const tempPath = filePath.replace('.pdf', '-temp-xfdf.pdf');
@@ -1104,19 +1097,6 @@
   // Menu event listener
   let unlistenSave: UnlistenFn | null = null;
 
-  // Close annotation menu when clicking outside
-  function handleClickOutside(e: MouseEvent) {
-    if (showAnnotationMenu) {
-      const target = e.target as HTMLElement;
-      // Check if click is inside the menu button or the fixed menu
-      const isMenuButton = menuButtonRef?.contains(target);
-      const isInsideMenu = target.closest('[style*="z-index: 99999"]');
-      if (!isMenuButton && !isInsideMenu) {
-        showAnnotationMenu = false;
-      }
-    }
-  }
-
   // Track if we've already loaded to prevent double-loading
   let hasLoadedFile = '';
 
@@ -1124,7 +1104,6 @@
     debugLog('MuPDFViewer', 'onMount() called', { filePath, tabId });
     window.addEventListener('keydown', handleKeydown);
     document.addEventListener('mouseup', handlePanEnd);
-    document.addEventListener('click', handleClickOutside);
 
     // Listen for menu save event (Ctrl+S)
     unlistenSave = await listen('menu-save', () => {
@@ -1140,7 +1119,6 @@
     debugLog('MuPDFViewer', 'onDestroy() called', { filePath, tabId });
     window.removeEventListener('keydown', handleKeydown);
     document.removeEventListener('mouseup', handlePanEnd);
-    document.removeEventListener('click', handleClickOutside);
     unlistenSave?.();
   });
 
@@ -1164,28 +1142,18 @@
       class="flex items-center justify-between px-3 py-2 border-b"
       style="background-color: var(--nord1); border-color: var(--nord3);"
     >
-      <!-- Left: Rotate & Annotate -->
+      <!-- Left: Open, Save, Print, Annotate -->
       <div class="flex items-center gap-1">
+        <!-- Open Document -->
         <button
-          onclick={rotate}
+          onclick={handleOpenDocument}
           class="p-2 rounded-lg transition-colors hover:bg-[var(--nord2)]"
-          title="Rotate 90deg"
+          title="Open document (Ctrl+O)"
         >
-          <RotateCw size={16} />
+          <FolderOpen size={16} />
         </button>
 
-        <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
-
-        <button
-          onclick={() => showAnnotationTools = !showAnnotationTools}
-          class="p-2 rounded-lg transition-colors"
-          class:bg-[var(--nord8)]={showAnnotationTools}
-          style="color: {showAnnotationTools ? 'var(--nord0)' : 'var(--nord4)'};"
-          title="Annotation tools"
-        >
-          <PenTool size={16} />
-        </button>
-
+        <!-- Save annotations -->
         <button
           onclick={saveAnnotationsToPdf}
           disabled={isExporting || !annotationsDirty}
@@ -1194,7 +1162,7 @@
           class:opacity-40={!annotationsDirty}
           class:cursor-not-allowed={!annotationsDirty}
           class:animate-pulse={isExporting}
-          title={annotationsDirty ? "Save annotations to PDF" : "No changes to save"}
+          title={annotationsDirty ? "Save annotations to PDF (Ctrl+S)" : "No changes to save"}
         >
           <Save size={16} />
           {#if annotationsDirty}
@@ -1211,25 +1179,22 @@
           disabled={isPrinting}
           class="p-2 rounded-lg transition-colors hover:bg-[var(--nord2)]"
           class:animate-pulse={isPrinting}
-          title="Print document"
+          title="Print document (Ctrl+P)"
         >
           <Printer size={16} />
         </button>
 
-        <!-- Annotation export/import menu -->
+        <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
+
+        <!-- Annotation tools toggle -->
         <button
-          bind:this={menuButtonRef}
-          onclick={toggleAnnotationMenu}
-          class="p-2 rounded-lg transition-colors hover:bg-[var(--nord2)]"
-          class:bg-[var(--nord2)]={showAnnotationMenu}
-          title="Annotation options"
-          disabled={isExporting}
+          onclick={() => showAnnotationTools = !showAnnotationTools}
+          class="p-2 rounded-lg transition-colors"
+          class:bg-[var(--nord8)]={showAnnotationTools}
+          style="color: {showAnnotationTools ? 'var(--nord0)' : 'var(--nord4)'};"
+          title="Annotation tools"
         >
-          {#if isExporting}
-            <div class="w-4 h-4 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
-          {:else}
-            <MoreVertical size={16} />
-          {/if}
+          <PenTool size={16} />
         </button>
       </div>
 
@@ -1531,68 +1496,6 @@
     </div>
   </div>
 </div>
-
-<!-- Fixed position annotation menu (portal) -->
-{#if showAnnotationMenu}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="fixed py-1 rounded-lg shadow-lg min-w-[180px]"
-    style="
-      top: {menuPosition.top}px;
-      left: {menuPosition.left}px;
-      background-color: var(--nord1);
-      border: 1px solid var(--nord3);
-      z-index: 99999;
-    "
-    onclick={(e) => e.stopPropagation()}
-  >
-    <button
-      onclick={saveAnnotationsToPdf}
-      class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
-    >
-      <Save size={14} />
-      Save to PDF
-    </button>
-    <button
-      onclick={saveAnnotationsToPdfAs}
-      class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
-    >
-      <Download size={14} />
-      Save to PDF as...
-    </button>
-    <button
-      onclick={reloadAnnotationsFromPdf}
-      class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
-    >
-      <Upload size={14} />
-      Reload from PDF
-    </button>
-    <div class="my-1 border-t" style="border-color: var(--nord3);"></div>
-    <button
-      onclick={() => { showPrintDialog = true; showAnnotationMenu = false; }}
-      class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
-      disabled={isPrinting}
-    >
-      <Printer size={14} />
-      Print...
-    </button>
-    <div class="my-1 border-t" style="border-color: var(--nord3);"></div>
-    <button
-      onclick={exportToXfdf}
-      class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
-    >
-      <FileDown size={14} />
-      Export XFDF
-    </button>
-    <button
-      onclick={importFromXfdf}
-      class="w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-[var(--nord2)] transition-colors"
-    >
-      <FileUp size={14} />
-      Import XFDF
-    </button>
-  </div>
-{/if}
 
 <!-- Print Dialog -->
 <PrintDialog

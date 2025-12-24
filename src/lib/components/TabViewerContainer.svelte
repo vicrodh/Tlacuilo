@@ -43,6 +43,13 @@
     }
   }
 
+  // Handle open-pdf-file event from MuPDFViewer toolbar
+  function handleOpenPdfFile(e: CustomEvent<{ path: string }>) {
+    if (e.detail.path) {
+      openFileInNewTab(e.detail.path);
+    }
+  }
+
   // Check for pending file on mount
   onMount(() => {
     const pending = consumePendingOpenFile();
@@ -57,11 +64,14 @@
     window.addEventListener('close-active-tab', handleCloseActiveTabEvent);
     // Listen for pending file from app menu
     window.addEventListener('pending-file-ready', handlePendingFileReady);
+    // Listen for open-pdf-file event from MuPDFViewer toolbar
+    window.addEventListener('open-pdf-file', handleOpenPdfFile as EventListener);
   });
 
   onDestroy(() => {
     window.removeEventListener('close-active-tab', handleCloseActiveTabEvent);
     window.removeEventListener('pending-file-ready', handlePendingFileReady);
+    window.removeEventListener('open-pdf-file', handleOpenPdfFile as EventListener);
   });
 
   function openFileInNewTab(filePath: string) {
