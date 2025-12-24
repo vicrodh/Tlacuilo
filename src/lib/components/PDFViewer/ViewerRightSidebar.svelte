@@ -111,6 +111,8 @@
       {:else if activeTab === 'bookmarks'}
         <BookmarksTab
           {filePath}
+          {currentPage}
+          {totalPages}
           {fileReloadVersion}
           {onNavigateToPage}
           {onFocusOnResult}

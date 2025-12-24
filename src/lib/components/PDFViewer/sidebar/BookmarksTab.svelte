@@ -1,7 +1,27 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { Bookmark, ChevronRight, ChevronDown, FileText, BookMarked, Loader2 } from 'lucide-svelte';
+  import {
+    Bookmark,
+    ChevronRight,
+    ChevronDown,
+    FileText,
+    BookMarked,
+    Loader2,
+    Plus,
+    Trash2,
+    Pencil,
+    Check,
+    X
+  } from 'lucide-svelte';
+  import {
+    getBookmarksForFile,
+    addBookmark,
+    updateBookmark,
+    deleteBookmark,
+    ensureLoaded,
+    type UserBookmark
+  } from '$lib/stores/bookmarks.svelte';
 
   interface OutlineEntry {
     title: string;
@@ -12,73 +32,168 @@
 
   interface Props {
     filePath: string;
+    currentPage: number;
+    totalPages: number;
     onNavigateToPage: (page: number) => void;
     onFocusOnResult?: (page: number, normalizedY: number) => void;
     fileReloadVersion?: number;
   }
 
-  let { filePath, onNavigateToPage, onFocusOnResult, fileReloadVersion = 0 }: Props = $props();
+  let {
+    filePath,
+    currentPage,
+    totalPages,
+    onNavigateToPage,
+    onFocusOnResult,
+    fileReloadVersion = 0
+  }: Props = $props();
 
+  // PDF Outlines state
   let outlines = $state<OutlineEntry[]>([]);
-  let isLoading = $state(true);
-  let error = $state<string | null>(null);
+  let isLoadingOutlines = $state(true);
+  let outlineError = $state<string | null>(null);
   let expandedItems = $state<Set<string>>(new Set());
 
-  // Load outlines when file changes
+  // User bookmarks state
+  let userBookmarks = $state<UserBookmark[]>([]);
+  let isLoadingBookmarks = $state(true);
+  let editingBookmarkId = $state<string | null>(null);
+  let editingTitle = $state('');
+
+  // Section visibility
+  let outlinesExpanded = $state(true);
+  let bookmarksExpanded = $state(true);
+
+  // Load both outlines and bookmarks when file changes
   $effect(() => {
     if (filePath) {
-      // Also depend on fileReloadVersion to reload after OCR
       const _ = fileReloadVersion;
       loadOutlines();
+      loadUserBookmarks();
     }
   });
 
   async function loadOutlines() {
     if (!filePath) return;
 
-    isLoading = true;
-    error = null;
+    isLoadingOutlines = true;
+    outlineError = null;
 
     try {
       const result = await invoke<OutlineEntry[]>('pdf_get_outlines', { path: filePath });
       outlines = result;
       // Auto-expand first level
+      expandedItems = new Set();
       outlines.forEach((_, index) => {
         expandedItems.add(`0-${index}`);
       });
     } catch (e) {
       console.error('[BookmarksTab] Failed to load outlines:', e);
-      error = e instanceof Error ? e.message : String(e);
+      outlineError = e instanceof Error ? e.message : String(e);
       outlines = [];
     } finally {
-      isLoading = false;
+      isLoadingOutlines = false;
     }
   }
 
-  function toggleExpand(path: string) {
+  async function loadUserBookmarks() {
+    if (!filePath) return;
+
+    isLoadingBookmarks = true;
+    try {
+      await ensureLoaded();
+      userBookmarks = getBookmarksForFile(filePath);
+    } catch (e) {
+      console.error('[BookmarksTab] Failed to load user bookmarks:', e);
+      userBookmarks = [];
+    } finally {
+      isLoadingBookmarks = false;
+    }
+  }
+
+  function toggleOutlineExpand(path: string) {
     if (expandedItems.has(path)) {
       expandedItems.delete(path);
     } else {
       expandedItems.add(path);
     }
-    expandedItems = new Set(expandedItems); // Trigger reactivity
+    expandedItems = new Set(expandedItems);
   }
 
-  function handleItemClick(entry: OutlineEntry) {
+  function handleOutlineClick(entry: OutlineEntry) {
     if (entry.page !== null) {
       if (entry.y !== null && onFocusOnResult) {
-        // Use focus on result for precise Y positioning
         onFocusOnResult(entry.page, entry.y);
       } else {
-        // Fall back to simple page navigation
         onNavigateToPage(entry.page);
       }
     }
   }
 
-  function countTotalItems(entries: OutlineEntry[]): number {
+  function handleBookmarkClick(bookmark: UserBookmark) {
+    if (bookmark.y !== undefined && onFocusOnResult) {
+      onFocusOnResult(bookmark.page, bookmark.y);
+    } else {
+      onNavigateToPage(bookmark.page);
+    }
+  }
+
+  async function handleAddBookmark() {
+    try {
+      const newBookmark = await addBookmark(filePath, currentPage);
+      userBookmarks = getBookmarksForFile(filePath);
+      // Start editing the new bookmark
+      editingBookmarkId = newBookmark.id;
+      editingTitle = newBookmark.title;
+    } catch (e) {
+      console.error('[BookmarksTab] Failed to add bookmark:', e);
+    }
+  }
+
+  function startEditing(bookmark: UserBookmark) {
+    editingBookmarkId = bookmark.id;
+    editingTitle = bookmark.title;
+  }
+
+  async function saveEditing() {
+    if (!editingBookmarkId || !editingTitle.trim()) return;
+
+    try {
+      await updateBookmark(filePath, editingBookmarkId, { title: editingTitle.trim() });
+      userBookmarks = getBookmarksForFile(filePath);
+    } catch (e) {
+      console.error('[BookmarksTab] Failed to update bookmark:', e);
+    } finally {
+      editingBookmarkId = null;
+      editingTitle = '';
+    }
+  }
+
+  function cancelEditing() {
+    editingBookmarkId = null;
+    editingTitle = '';
+  }
+
+  async function handleDeleteBookmark(bookmarkId: string) {
+    try {
+      await deleteBookmark(filePath, bookmarkId);
+      userBookmarks = getBookmarksForFile(filePath);
+    } catch (e) {
+      console.error('[BookmarksTab] Failed to delete bookmark:', e);
+    }
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      saveEditing();
+    } else if (e.key === 'Escape') {
+      cancelEditing();
+    }
+  }
+
+  function countOutlineItems(entries: OutlineEntry[]): number {
     return entries.reduce((count, entry) => {
-      return count + 1 + countTotalItems(entry.children);
+      return count + 1 + countOutlineItems(entry.children);
     }, 0);
   }
 </script>
@@ -94,7 +209,7 @@
         {#if hasChildren}
           <button
             class="expand-btn"
-            onclick={() => toggleExpand(path)}
+            onclick={() => toggleOutlineExpand(path)}
             title={isExpanded ? 'Collapse' : 'Expand'}
           >
             {#if isExpanded}
@@ -110,7 +225,7 @@
         <button
           class="outline-button"
           class:has-page={entry.page !== null}
-          onclick={() => handleItemClick(entry)}
+          onclick={() => handleOutlineClick(entry)}
           title={entry.page !== null ? `Go to page ${entry.page}` : entry.title}
         >
           <span class="outline-title">{entry.title}</span>
@@ -129,38 +244,148 @@
 {/snippet}
 
 <div class="bookmarks-tab">
-  <div class="header">
-    <span class="title">Table of Contents</span>
-    {#if outlines.length > 0}
-      <span class="count">{countTotalItems(outlines)}</span>
-    {/if}
-  </div>
-
   <div class="content">
-    {#if isLoading}
-      <div class="loading-state">
-        <Loader2 size={24} class="spinner" />
-        <p>Loading outline...</p>
-      </div>
-    {:else if error}
-      <div class="error-state">
-        <FileText size={32} />
-        <p class="message">Failed to load outline</p>
-        <p class="hint">{error}</p>
-      </div>
-    {:else if outlines.length === 0}
-      <div class="empty-state">
-        <div class="icon-container">
-          <BookMarked size={32} />
+    <!-- User Bookmarks Section -->
+    <div class="section">
+      <button
+        class="section-header"
+        onclick={() => bookmarksExpanded = !bookmarksExpanded}
+      >
+        <span class="section-toggle">
+          {#if bookmarksExpanded}
+            <ChevronDown size={14} />
+          {:else}
+            <ChevronRight size={14} />
+          {/if}
+        </span>
+        <Bookmark size={14} class="section-icon" />
+        <span class="section-title">Bookmarks</span>
+        {#if userBookmarks.length > 0}
+          <span class="count">{userBookmarks.length}</span>
+        {/if}
+        <button
+          class="add-btn"
+          onclick={(e) => { e.stopPropagation(); handleAddBookmark(); }}
+          title="Add bookmark for current page"
+        >
+          <Plus size={14} />
+        </button>
+      </button>
+
+      {#if bookmarksExpanded}
+        <div class="section-content">
+          {#if isLoadingBookmarks}
+            <div class="loading-inline">
+              <Loader2 size={16} class="spinner" />
+              <span>Loading...</span>
+            </div>
+          {:else if userBookmarks.length === 0}
+            <div class="empty-section">
+              <p>No bookmarks yet</p>
+              <button class="add-bookmark-btn" onclick={handleAddBookmark}>
+                <Plus size={14} />
+                <span>Add bookmark</span>
+              </button>
+            </div>
+          {:else}
+            <div class="bookmark-list">
+              {#each userBookmarks as bookmark (bookmark.id)}
+                <div class="bookmark-item" class:active={bookmark.page === currentPage}>
+                  {#if editingBookmarkId === bookmark.id}
+                    <div class="bookmark-edit">
+                      <input
+                        type="text"
+                        bind:value={editingTitle}
+                        onkeydown={handleKeydown}
+                        class="edit-input"
+                        autofocus
+                      />
+                      <button class="edit-action save" onclick={saveEditing} title="Save">
+                        <Check size={14} />
+                      </button>
+                      <button class="edit-action cancel" onclick={cancelEditing} title="Cancel">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  {:else}
+                    <button
+                      class="bookmark-button"
+                      onclick={() => handleBookmarkClick(bookmark)}
+                      title={`Go to page ${bookmark.page}`}
+                    >
+                      <Bookmark size={14} class="bookmark-icon" />
+                      <span class="bookmark-title">{bookmark.title}</span>
+                      <span class="page-number">{bookmark.page}</span>
+                    </button>
+                    <div class="bookmark-actions">
+                      <button
+                        class="action-btn"
+                        onclick={(e) => { e.stopPropagation(); startEditing(bookmark); }}
+                        title="Edit"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      <button
+                        class="action-btn delete"
+                        onclick={(e) => { e.stopPropagation(); handleDeleteBookmark(bookmark.id); }}
+                        title="Delete"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
-        <p class="message">No Table of Contents</p>
-        <p class="hint">This PDF doesn't have a document outline</p>
-      </div>
-    {:else}
-      <div class="outline-list">
-        {@render outlineTree(outlines, 0, '0')}
-      </div>
-    {/if}
+      {/if}
+    </div>
+
+    <!-- PDF Outlines Section -->
+    <div class="section">
+      <button
+        class="section-header"
+        onclick={() => outlinesExpanded = !outlinesExpanded}
+      >
+        <span class="section-toggle">
+          {#if outlinesExpanded}
+            <ChevronDown size={14} />
+          {:else}
+            <ChevronRight size={14} />
+          {/if}
+        </span>
+        <BookMarked size={14} class="section-icon" />
+        <span class="section-title">Table of Contents</span>
+        {#if outlines.length > 0}
+          <span class="count">{countOutlineItems(outlines)}</span>
+        {/if}
+      </button>
+
+      {#if outlinesExpanded}
+        <div class="section-content">
+          {#if isLoadingOutlines}
+            <div class="loading-inline">
+              <Loader2 size={16} class="spinner" />
+              <span>Loading...</span>
+            </div>
+          {:else if outlineError}
+            <div class="error-inline">
+              <FileText size={16} />
+              <span>Failed to load</span>
+            </div>
+          {:else if outlines.length === 0}
+            <div class="empty-section">
+              <p>No table of contents</p>
+            </div>
+          {:else}
+            <div class="outline-list">
+              {@render outlineTree(outlines, 0, '0')}
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
   </div>
 </div>
 
@@ -172,45 +397,105 @@
     overflow: hidden;
   }
 
-  .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid var(--nord3);
-  }
-
-  .title {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    opacity: 0.6;
-  }
-
-  .count {
-    font-size: 0.7rem;
-    padding: 0.125rem 0.375rem;
-    background-color: var(--nord3);
-    border-radius: 0.25rem;
-    color: var(--nord5);
-  }
-
   .content {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
   }
 
-  .loading-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    gap: 0.75rem;
-    color: var(--nord4);
+  /* Section styles */
+  .section {
+    border-bottom: 1px solid var(--nord2);
   }
 
-  .loading-state :global(.spinner) {
+  .section-header {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    background: transparent;
+    border: none;
+    color: var(--nord4);
+    cursor: pointer;
+    gap: 0.375rem;
+    transition: background-color 0.1s;
+  }
+
+  .section-header:hover {
+    background-color: var(--nord2);
+  }
+
+  .section-toggle {
+    display: flex;
+    align-items: center;
+    opacity: 0.5;
+  }
+
+  .section-header :global(.section-icon) {
+    opacity: 0.6;
+  }
+
+  .section-title {
+    flex: 1;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    text-align: left;
+    opacity: 0.8;
+  }
+
+  .count {
+    font-size: 0.65rem;
+    padding: 0.125rem 0.375rem;
+    background-color: var(--nord3);
+    border-radius: 0.25rem;
+    color: var(--nord5);
+  }
+
+  .add-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--nord4);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: all 0.1s;
+  }
+
+  .add-btn:hover {
+    opacity: 1;
+    background-color: var(--nord8);
+    color: var(--nord0);
+  }
+
+  .section-content {
+    padding: 0.25rem 0;
+  }
+
+  /* Loading and empty states */
+  .loading-inline,
+  .error-inline,
+  .empty-section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    color: var(--nord4);
+    opacity: 0.5;
+    font-size: 0.75rem;
+  }
+
+  .empty-section {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .loading-inline :global(.spinner) {
     animation: spin 1s linear infinite;
   }
 
@@ -219,55 +504,172 @@
     to { transform: rotate(360deg); }
   }
 
-  .error-state,
-  .empty-state {
-    flex: 1;
+  .add-bookmark-btn {
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    background-color: var(--nord3);
+    border: none;
+    border-radius: 4px;
+    color: var(--nord5);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+
+  .add-bookmark-btn:hover {
+    background-color: var(--nord8);
+    color: var(--nord0);
+  }
+
+  /* Bookmark list */
+  .bookmark-list {
+    padding: 0 0.25rem;
+  }
+
+  .bookmark-item {
+    display: flex;
+    align-items: center;
+    margin: 0.125rem 0;
+    border-radius: 4px;
+  }
+
+  .bookmark-item:hover,
+  .bookmark-item.active {
+    background-color: var(--nord2);
+  }
+
+  .bookmark-item:hover .bookmark-actions {
+    opacity: 1;
+  }
+
+  .bookmark-button {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    padding: 0.375rem 0.5rem;
+    background: transparent;
+    border: none;
+    color: var(--nord4);
+    font-size: 0.8125rem;
+    text-align: left;
+    cursor: pointer;
+    gap: 0.375rem;
+    transition: color 0.1s;
+  }
+
+  .bookmark-button:hover {
+    color: var(--nord8);
+  }
+
+  .bookmark-button :global(.bookmark-icon) {
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+
+  .bookmark-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .bookmark-actions {
+    display: flex;
+    gap: 0.125rem;
+    padding-right: 0.375rem;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  .action-btn {
+    display: flex;
     align-items: center;
     justify-content: center;
-    padding: 2rem;
-    text-align: center;
-  }
-
-  .icon-container {
+    width: 22px;
+    height: 22px;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
     color: var(--nord4);
-    opacity: 0.3;
-    margin-bottom: 0.75rem;
+    cursor: pointer;
+    transition: all 0.1s;
   }
 
-  .error-state {
-    color: var(--nord11);
+  .action-btn:hover {
+    background-color: var(--nord3);
+    color: var(--nord6);
   }
 
-  .message {
-    font-size: 0.875rem;
+  .action-btn.delete:hover {
+    background-color: var(--nord11);
+    color: var(--nord6);
+  }
+
+  /* Bookmark editing */
+  .bookmark-edit {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    padding: 0.25rem 0.375rem;
+    gap: 0.25rem;
+  }
+
+  .edit-input {
+    flex: 1;
+    padding: 0.25rem 0.375rem;
+    background-color: var(--nord0);
+    border: 1px solid var(--nord3);
+    border-radius: 4px;
+    color: var(--nord6);
+    font-size: 0.8125rem;
+    outline: none;
+  }
+
+  .edit-input:focus {
+    border-color: var(--nord8);
+  }
+
+  .edit-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
     color: var(--nord4);
-    opacity: 0.6;
-    margin: 0;
+    cursor: pointer;
+    transition: all 0.1s;
   }
 
-  .hint {
-    font-size: 0.75rem;
-    color: var(--nord4);
-    opacity: 0.4;
-    margin: 0.25rem 0 0 0;
-    max-width: 200px;
-    word-break: break-word;
+  .edit-action.save:hover {
+    background-color: var(--nord14);
+    color: var(--nord0);
   }
 
+  .edit-action.cancel:hover {
+    background-color: var(--nord11);
+    color: var(--nord6);
+  }
+
+  /* Outline list styles */
   .outline-list {
-    padding: 0.5rem 0;
+    padding: 0 0.25rem;
   }
 
   .outline-item {
-    padding-left: calc(var(--depth) * 1rem);
+    padding-left: calc(var(--depth) * 0.75rem);
   }
 
   .outline-row {
     display: flex;
     align-items: center;
     gap: 0.125rem;
+    border-radius: 4px;
   }
 
   .outline-row:hover {
@@ -343,7 +745,8 @@
     flex-shrink: 0;
   }
 
-  .outline-button:hover .page-number {
+  .outline-button:hover .page-number,
+  .bookmark-button:hover .page-number {
     opacity: 1;
     background-color: var(--nord3);
   }
