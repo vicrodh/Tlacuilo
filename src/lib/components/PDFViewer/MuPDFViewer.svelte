@@ -113,6 +113,7 @@
 
   // Edit mode (mutually exclusive with annotation mode per EDITOR_MODE_PLAN)
   let showEditTools = $state(false);
+  let textBlocksRefreshKey = $state(0);  // Increment to force text blocks refresh
 
   // Live preview for edit mode
   let previewImages = $state<Map<number, string>>(new Map()); // page -> base64 image
@@ -858,6 +859,92 @@
     } catch (err) {
       console.error('[MuPDFViewer] Failed to apply edits:', err);
       await message(`Failed to apply edits: ${err}`, { title: 'Error', kind: 'error' });
+    } finally {
+      editsStore.setApplying(false);
+    }
+  }
+
+  // Apply edits in-place (overwrite original file)
+  async function applyEditsInPlace() {
+    if (!pdfInfo || editsStore.opCount === 0) return;
+
+    // Warn about overwriting
+    const confirmed = await ask(
+      `Save ${editsStore.opCount} edit(s) to the current file?\n\nThis will overwrite the original file.`,
+      { title: 'Save Edits', kind: 'warning', okLabel: 'Save', cancelLabel: 'Cancel' }
+    );
+
+    if (!confirmed) return;
+
+    editsStore.setApplying(true);
+
+    try {
+      // Build page dimensions map for coordinate conversion
+      const pageWidths: Record<string, number> = {};
+      const pageHeights: Record<string, number> = {};
+
+      if (pdfInfo?.page_sizes) {
+        pdfInfo.page_sizes.forEach((size, index) => {
+          pageWidths[String(index)] = size.width;
+          pageHeights[String(index)] = size.height;
+        });
+      }
+
+      // Convert EditorOps to the format expected by the backend
+      const ops = editsStore.ops.map(op => {
+        const backendPage = op.page - 1;
+        const baseOp = {
+          type: op.type,
+          page: backendPage,
+          rect: op.rect,
+        };
+
+        if (op.type === 'insert_text' || op.type === 'replace_text') {
+          return { ...baseOp, text: op.text, style: op.style };
+        } else if (op.type === 'draw_shape') {
+          return {
+            ...baseOp,
+            shape: op.shape,
+            strokeColor: op.strokeColor,
+            strokeWidth: op.strokeWidth,
+            fillColor: op.fillColor,
+          };
+        }
+        return baseOp;
+      });
+
+      const editsJson = JSON.stringify({ ops, pageWidths, pageHeights });
+
+      // Save to a temp file first, then replace original
+      const tempOutput = filePath + '.tmp';
+      const result = await invoke<{ success: boolean; message: string; applied: number }>(
+        'pdf_apply_edits',
+        { input: filePath, output: tempOutput, editsJson }
+      );
+
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+
+      // Replace original with temp file
+      await invoke('replace_file', { from: tempOutput, to: filePath });
+
+      // Clear edits
+      editsStore.clearOps();
+
+      // Reload the current file (force refresh)
+      loadedPages.clear();
+      previewImages.clear();
+      await loadPDF();
+
+      // Force text blocks refresh by incrementing key
+      textBlocksRefreshKey++;
+
+      console.log(`[MuPDFViewer] In-place save complete: ${result.applied} edits applied`);
+
+    } catch (err) {
+      console.error('[MuPDFViewer] Failed to save edits in-place:', err);
+      await message(`Failed to save: ${err}`, { title: 'Error', kind: 'error' });
     } finally {
       editsStore.setApplying(false);
     }
@@ -1971,6 +2058,7 @@
         <EditToolbar
           store={editsStore}
           onApply={applyEdits}
+          onApplyInPlace={applyEditsInPlace}
           onDiscard={() => { editsStore.clearOps(); showEditTools = false; }}
         />
       </div>
@@ -2107,6 +2195,7 @@
                       scale={1}
                       interactive={true}
                       hasPreview={previewImages.has(pageNum)}
+                      refreshKey={textBlocksRefreshKey}
                     />
                   {/if}
 

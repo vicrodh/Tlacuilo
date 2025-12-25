@@ -1975,6 +1975,35 @@ fn form_fields_fill(
     })
 }
 
+// ============================================================================
+// File Utilities
+// ============================================================================
+
+/// Replace a file with another file (atomic rename for in-place save)
+#[tauri::command]
+fn replace_file(from: String, to: String) -> Result<(), String> {
+    use std::fs;
+    use std::path::Path;
+
+    let from_path = Path::new(&from);
+    let to_path = Path::new(&to);
+
+    // Ensure source file exists
+    if !from_path.exists() {
+        return Err(format!("Source file does not exist: {}", from));
+    }
+
+    // Remove destination if it exists
+    if to_path.exists() {
+        fs::remove_file(to_path).map_err(|e| format!("Failed to remove original file: {}", e))?;
+    }
+
+    // Rename temp file to destination
+    fs::rename(from_path, to_path).map_err(|e| format!("Failed to rename file: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   // On Linux/Wayland (especially KDE), prefer XDG Desktop Portal file dialogs.
@@ -2201,7 +2230,9 @@ pub fn run() {
       pdf_replace_text,
       pdf_apply_edits,
       pdf_render_preview,
-      pdf_get_text_blocks_with_fonts
+      pdf_get_text_blocks_with_fonts,
+      // File utilities
+      replace_file
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

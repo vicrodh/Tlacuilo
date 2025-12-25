@@ -18,6 +18,7 @@
     AlignLeft,
     AlignCenter,
     AlignRight,
+    Save,
   } from 'lucide-svelte';
   import { ask } from '@tauri-apps/plugin-dialog';
   import type { EditsStore, EditTool, TextStyle } from '$lib/stores/edits.svelte';
@@ -25,22 +26,23 @@
   interface Props {
     store: EditsStore;
     onApply?: () => void;
+    onApplyInPlace?: () => void;  // Save to same file (overwrite)
     onDiscard?: () => void;
   }
 
-  let { store, onApply, onDiscard }: Props = $props();
+  let { store, onApply, onApplyInPlace, onDiscard }: Props = $props();
 
   let showShapesMenu = $state(false);
   let showTextOptions = $state(false);
   let showColorPicker = $state(false);
 
-  // Font options
+  // Font options - Include serif and sans-serif
   const fontFamilies = [
-    'Helvetica',
-    'Times-Roman',
-    'Courier',
-    'Arial',
-    'Verdana',
+    { value: '"Times New Roman", Times, Georgia, serif', label: 'Times (Serif)' },
+    { value: 'Arial, Helvetica, sans-serif', label: 'Arial (Sans)' },
+    { value: '"Courier New", Courier, monospace', label: 'Courier (Mono)' },
+    { value: 'Georgia, serif', label: 'Georgia' },
+    { value: 'Verdana, sans-serif', label: 'Verdana' },
   ];
 
   const fontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72];
@@ -134,126 +136,16 @@
   <!-- Separator -->
   <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
 
-  <!-- Text tool with options -->
-  <div class="relative">
-    <button
-      onclick={() => selectTool('text')}
-      class="p-2 rounded transition-colors flex items-center gap-0.5"
-      class:bg-[var(--nord8)]={store.activeTool === 'text'}
-      style="color: {store.activeTool === 'text' ? 'var(--nord0)' : 'var(--nord4)'};"
-      title="Text"
-    >
-      <Type size={16} />
-      <ChevronRight size={12} class="rotate-90 opacity-60" />
-    </button>
-
-    {#if store.activeTool === 'text' && showTextOptions}
-      <div
-        class="absolute top-full left-0 mt-1 rounded-lg shadow-lg p-2 z-50"
-        style="background-color: var(--nord1); border: 1px solid var(--nord3); min-width: 200px;"
-      >
-        <!-- Font Family -->
-        <div class="mb-2">
-          <div class="text-[10px] uppercase opacity-40 mb-1">Font</div>
-          <select
-            value={store.activeTextStyle.fontFamily}
-            onchange={(e) => setTextStyle({ fontFamily: (e.target as HTMLSelectElement).value })}
-            class="w-full px-2 py-1 text-xs rounded"
-            style="background-color: var(--nord2); border: 1px solid var(--nord3);"
-          >
-            {#each fontFamilies as font}
-              <option value={font}>{font}</option>
-            {/each}
-          </select>
-        </div>
-
-        <!-- Font Size -->
-        <div class="mb-2">
-          <div class="text-[10px] uppercase opacity-40 mb-1">Size</div>
-          <select
-            value={store.activeTextStyle.fontSize}
-            onchange={(e) => setTextStyle({ fontSize: parseInt((e.target as HTMLSelectElement).value) })}
-            class="w-full px-2 py-1 text-xs rounded"
-            style="background-color: var(--nord2); border: 1px solid var(--nord3);"
-          >
-            {#each fontSizes as size}
-              <option value={size}>{size}pt</option>
-            {/each}
-          </select>
-        </div>
-
-        <!-- Text Color -->
-        <div class="mb-2">
-          <div class="text-[10px] uppercase opacity-40 mb-1">Color</div>
-          <div class="grid grid-cols-5 gap-1">
-            {#each colors as color}
-              <button
-                onclick={() => setTextStyle({ color })}
-                class="w-6 h-6 rounded border-2 transition-transform hover:scale-110"
-                style="
-                  background-color: {color};
-                  border-color: {store.activeTextStyle.color === color ? 'var(--nord6)' : 'transparent'};
-                "
-              ></button>
-            {/each}
-          </div>
-        </div>
-
-        <!-- Bold / Italic -->
-        <div class="flex gap-1 mb-2 pt-2" style="border-top: 1px solid var(--nord3);">
-          <button
-            onclick={() => setTextStyle({ bold: !store.activeTextStyle.bold })}
-            class="flex-1 p-1.5 rounded transition-colors"
-            class:bg-[var(--nord8)]={store.activeTextStyle.bold}
-            style="color: {store.activeTextStyle.bold ? 'var(--nord0)' : 'var(--nord4)'};"
-            title="Bold"
-          >
-            <Bold size={14} />
-          </button>
-          <button
-            onclick={() => setTextStyle({ italic: !store.activeTextStyle.italic })}
-            class="flex-1 p-1.5 rounded transition-colors"
-            class:bg-[var(--nord8)]={store.activeTextStyle.italic}
-            style="color: {store.activeTextStyle.italic ? 'var(--nord0)' : 'var(--nord4)'};"
-            title="Italic"
-          >
-            <Italic size={14} />
-          </button>
-        </div>
-
-        <!-- Alignment -->
-        <div class="flex gap-1">
-          <button
-            onclick={() => setTextStyle({ align: 'left' })}
-            class="flex-1 p-1.5 rounded transition-colors"
-            class:bg-[var(--nord8)]={store.activeTextStyle.align === 'left'}
-            style="color: {store.activeTextStyle.align === 'left' ? 'var(--nord0)' : 'var(--nord4)'};"
-            title="Align Left"
-          >
-            <AlignLeft size={14} />
-          </button>
-          <button
-            onclick={() => setTextStyle({ align: 'center' })}
-            class="flex-1 p-1.5 rounded transition-colors"
-            class:bg-[var(--nord8)]={store.activeTextStyle.align === 'center'}
-            style="color: {store.activeTextStyle.align === 'center' ? 'var(--nord0)' : 'var(--nord4)'};"
-            title="Align Center"
-          >
-            <AlignCenter size={14} />
-          </button>
-          <button
-            onclick={() => setTextStyle({ align: 'right' })}
-            class="flex-1 p-1.5 rounded transition-colors"
-            class:bg-[var(--nord8)]={store.activeTextStyle.align === 'right'}
-            style="color: {store.activeTextStyle.align === 'right' ? 'var(--nord0)' : 'var(--nord4)'};"
-            title="Align Right"
-          >
-            <AlignRight size={14} />
-          </button>
-        </div>
-      </div>
-    {/if}
-  </div>
+  <!-- Text tool (simple button, no dropdown) -->
+  <button
+    onclick={() => selectTool('text')}
+    class="p-2 rounded transition-colors"
+    class:bg-[var(--nord8)]={store.activeTool === 'text'}
+    style="color: {store.activeTool === 'text' ? 'var(--nord0)' : 'var(--nord4)'};"
+    title="Text"
+  >
+    <Type size={16} />
+  </button>
 
   <!-- Image tool -->
   <button
@@ -351,6 +243,92 @@
   <!-- Separator -->
   <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
 
+  <!-- TEXT FORMATTING CONTROLS (visible, not in dropdown) -->
+  <!-- Font Family -->
+  <select
+    value={store.activeTextStyle.fontFamily}
+    onchange={(e) => setTextStyle({ fontFamily: (e.target as HTMLSelectElement).value })}
+    class="px-2 py-1.5 text-xs rounded"
+    style="background-color: var(--nord3); border: none; max-width: 110px;"
+    title="Font Family"
+  >
+    {#each fontFamilies as font}
+      <option value={font.value}>{font.label}</option>
+    {/each}
+  </select>
+
+  <!-- Font Size -->
+  <select
+    value={store.activeTextStyle.fontSize}
+    onchange={(e) => setTextStyle({ fontSize: parseInt((e.target as HTMLSelectElement).value) })}
+    class="px-2 py-1.5 text-xs rounded"
+    style="background-color: var(--nord3); border: none; width: 55px;"
+    title="Font Size"
+  >
+    {#each fontSizes as size}
+      <option value={size}>{size}pt</option>
+    {/each}
+  </select>
+
+  <!-- Bold -->
+  <button
+    onclick={() => setTextStyle({ bold: !store.activeTextStyle.bold })}
+    class="p-2 rounded transition-colors"
+    class:bg-[var(--nord8)]={store.activeTextStyle.bold}
+    style="color: {store.activeTextStyle.bold ? 'var(--nord0)' : 'var(--nord4)'};"
+    title="Bold"
+  >
+    <Bold size={16} />
+  </button>
+
+  <!-- Italic -->
+  <button
+    onclick={() => setTextStyle({ italic: !store.activeTextStyle.italic })}
+    class="p-2 rounded transition-colors"
+    class:bg-[var(--nord8)]={store.activeTextStyle.italic}
+    style="color: {store.activeTextStyle.italic ? 'var(--nord0)' : 'var(--nord4)'};"
+    title="Italic"
+  >
+    <Italic size={16} />
+  </button>
+
+  <!-- Text Color Picker -->
+  <div class="relative">
+    <button
+      onclick={toggleColorPicker}
+      class="p-2 rounded transition-colors flex items-center"
+      class:bg-[var(--nord3)]={showColorPicker}
+      title="Text Color"
+    >
+      <div
+        class="w-4 h-4 rounded border"
+        style="background-color: {store.activeTextStyle.color}; border-color: var(--nord4);"
+      ></div>
+    </button>
+    {#if showColorPicker}
+      <div
+        class="absolute top-full left-0 mt-1 rounded-lg shadow-lg p-2 z-50"
+        style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+      >
+        <div class="grid grid-cols-5 gap-1">
+          {#each colors as color}
+            <button
+              onclick={() => { setTextStyle({ color }); showColorPicker = false; }}
+              class="w-6 h-6 rounded border-2 transition-transform hover:scale-110"
+              style="
+                background-color: {color};
+                border-color: {store.activeTextStyle.color === color ? 'var(--nord6)' : 'transparent'};
+              "
+            ></button>
+          {/each}
+        </div>
+      </div>
+    {/if}
+  </div>
+
+  <!-- Separator -->
+  <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
+
   <!-- Delete selected -->
   <button
     onclick={deleteSelected}
@@ -364,9 +342,6 @@
   >
     <Trash2 size={16} />
   </button>
-
-  <!-- Separator -->
-  <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
 
   <!-- Undo/Redo -->
   <button
@@ -414,6 +389,21 @@
       <X size={16} />
     </button>
 
+    <!-- Save in-place (overwrite original) -->
+    {#if onApplyInPlace}
+      <button
+        onclick={onApplyInPlace}
+        disabled={store.opCount === 0}
+        class="px-3 py-1.5 rounded transition-colors flex items-center gap-1 text-sm font-medium"
+        class:opacity-40={store.opCount === 0}
+        class:cursor-not-allowed={store.opCount === 0}
+        style="background-color: {store.opCount > 0 ? 'var(--nord10)' : 'var(--nord3)'}; color: {store.opCount > 0 ? 'var(--nord6)' : 'var(--nord4)'};"
+        title="Save changes to current file"
+      >
+        <Save size={16} />
+      </button>
+    {/if}
+
     <button
       onclick={handleApply}
       disabled={store.opCount === 0}
@@ -421,7 +411,7 @@
       class:opacity-40={store.opCount === 0}
       class:cursor-not-allowed={store.opCount === 0}
       style="background-color: {store.opCount > 0 ? 'var(--nord14)' : 'var(--nord3)'}; color: {store.opCount > 0 ? 'var(--nord0)' : 'var(--nord4)'};"
-      title="Apply edits"
+      title="Save As... (new file)"
     >
       <Check size={16} />
       <span>Apply</span>

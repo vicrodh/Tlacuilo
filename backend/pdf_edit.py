@@ -513,9 +513,12 @@ def parse_css_font_family(css_font: str) -> str:
 
     CSS font families look like: '"Times New Roman", Times, Georgia, serif'
     We extract the first font name and map it to PyMuPDF's built-in fonts.
+
+    PRIORITY: Font name detection > serif category > monospace category
+    (Reduces false monospace detection from OCR documents)
     """
     if not css_font:
-        return "helv"
+        return "tiro"  # Default to serif for documents
 
     # Split by comma and get individual font names
     fonts = [f.strip().strip('"').strip("'") for f in css_font.split(",")]
@@ -551,7 +554,7 @@ def parse_css_font_family(css_font: str) -> str:
         "noto sans": "helv",
         "freesans": "helv",
 
-        # Monospace fonts
+        # Monospace fonts (only match if explicitly named)
         "courier": "cour",
         "courier new": "cour",
         "consolas": "cour",
@@ -568,13 +571,16 @@ def parse_css_font_family(css_font: str) -> str:
         if font_lower in font_map:
             return font_map[font_lower]
 
-    # Fall back to category
+    # Fall back to category - prioritize serif over monospace
     if category == "serif":
         return "tiro"  # Times Roman
+    elif category == "sans-serif":
+        return "helv"  # Helvetica
     elif category == "monospace":
         return "cour"  # Courier
     else:
-        return "helv"  # Helvetica (default sans-serif)
+        # Default to serif for documents (most common in formal documents)
+        return "tiro"
 
 
 def int_color_to_hex(color_int: int) -> str:

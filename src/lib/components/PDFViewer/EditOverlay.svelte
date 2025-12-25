@@ -75,9 +75,10 @@
     scale?: number;
     interactive?: boolean;
     hasPreview?: boolean; // When true, hide operation visuals (preview image shows them)
+    refreshKey?: number;  // Increment to force re-fetch text blocks
   }
 
-  let { store, page, pageWidth, pageHeight, pdfPageWidth, pdfPageHeight, pdfPath, scale = 1, interactive = true, hasPreview = false }: Props = $props();
+  let { store, page, pageWidth, pageHeight, pdfPageWidth, pdfPageHeight, pdfPath, scale = 1, interactive = true, hasPreview = false, refreshKey = 0 }: Props = $props();
 
   // Calculate the scale factor from PDF points to rendered pixels
   // PDF uses points (1/72 inch), rendered at specific DPI
@@ -174,37 +175,82 @@
   }
 
   // Map PDF font names to CSS-friendly font families
-  // Uses PyMuPDF font flags (isSerif, isMono) when available, falls back to name matching
+  // PRIORITY: Font name detection > isSerif flag > isMono flag
+  // (PyMuPDF mono flag is unreliable for OCR documents)
   function mapFontFamily(pdfFont: string | null, isSerif?: boolean, isMono?: boolean): string {
     // Clean font name (remove subset prefix like "ABCDEF+")
     const cleanFont = pdfFont ? pdfFont.replace(/^[A-Z]{6}\+/, '') : null;
     const fontLower = pdfFont?.toLowerCase() ?? '';
 
-    // If we have PyMuPDF font flags, use them directly (most reliable)
-    if (isMono === true) {
-      if (cleanFont) {
-        return `"${cleanFont}", "Courier New", Courier, monospace`;
-      }
-      return '"Courier New", Courier, monospace';
+    // STEP 1: Check font name first (most reliable, even for OCR)
+    // Known monospace fonts - only trust mono if font name confirms it
+    const isMonoByName = fontLower.includes('courier') ||
+                         fontLower.includes('consol') ||
+                         fontLower.includes('mono') ||
+                         fontLower.includes('fixed');
+
+    if (isMonoByName) {
+      return cleanFont
+        ? `"${cleanFont}", "Courier New", Courier, monospace`
+        : '"Courier New", Courier, monospace';
     }
 
+    // Known serif fonts by name
+    const isSerifByName = fontLower.includes('times') ||
+                          fontLower.includes('tiro') ||
+                          fontLower.includes('georgia') ||
+                          fontLower.includes('palatino') ||
+                          fontLower.includes('garamond') ||
+                          fontLower.includes('cambria') ||
+                          fontLower.includes('roman') ||
+                          (fontLower.includes('serif') && !fontLower.includes('sans'));
+
+    if (isSerifByName) {
+      return cleanFont
+        ? `"${cleanFont}", "Times New Roman", Times, Georgia, serif`
+        : '"Times New Roman", Times, Georgia, serif';
+    }
+
+    // Known sans-serif fonts by name
+    const isSansByName = fontLower.includes('arial') ||
+                         fontLower.includes('helv') ||
+                         fontLower.includes('helvetica') ||
+                         fontLower.includes('verdana') ||
+                         fontLower.includes('calibri') ||
+                         fontLower.includes('sans') ||
+                         fontLower.includes('gothic');
+
+    if (isSansByName) {
+      return cleanFont
+        ? `"${cleanFont}", Arial, Helvetica, sans-serif`
+        : 'Arial, Helvetica, sans-serif';
+    }
+
+    // STEP 2: Fall back to PyMuPDF flags (but prioritize serif over mono)
+    // For OCR documents, serif flag is more reliable than mono flag
     if (isSerif === true) {
-      if (cleanFont) {
-        return `"${cleanFont}", "Times New Roman", Times, Georgia, serif`;
-      }
-      return '"Times New Roman", Times, Georgia, serif';
+      return cleanFont
+        ? `"${cleanFont}", "Times New Roman", Times, Georgia, serif`
+        : '"Times New Roman", Times, Georgia, serif';
     }
 
-    // isSerif === false means explicitly sans-serif from PyMuPDF flags
-    if (isSerif === false && isMono === false) {
-      if (cleanFont) {
-        return `"${cleanFont}", Arial, Helvetica, sans-serif`;
-      }
-      return 'Arial, Helvetica, sans-serif';
+    // Only use mono flag if serif is explicitly false AND mono is true
+    // (reduces false positives from OCR)
+    if (isMono === true && isSerif === false) {
+      return cleanFont
+        ? `"${cleanFont}", "Courier New", Courier, monospace`
+        : '"Courier New", Courier, monospace';
     }
 
-    // No font flags available - fall back to name-based detection
-    if (!pdfFont) return 'Arial, Helvetica, sans-serif';
+    // isSerif === false and isMono === false -> sans-serif
+    if (isSerif === false) {
+      return cleanFont
+        ? `"${cleanFont}", Arial, Helvetica, sans-serif`
+        : 'Arial, Helvetica, sans-serif';
+    }
+
+    // STEP 3: No reliable info - use font name or default
+    if (!pdfFont) return '"Times New Roman", Times, Georgia, serif'; // Default to serif for documents
 
     // OCRmyPDF invisible text layer font - use system sans-serif
     if (fontLower.includes('glyphless') || fontLower === 'none' || fontLower === '[none]') {
@@ -417,8 +463,10 @@
     store.selectOp(op.id);
   }
 
-  // Fetch blocks when page or path changes
+  // Fetch blocks when page, path, or refreshKey changes
   $effect(() => {
+    // Dependencies: pdfPath, page, refreshKey
+    const _ = refreshKey; // Explicit dependency
     if (pdfPath && page) {
       fetchTextBlocks();
     }
