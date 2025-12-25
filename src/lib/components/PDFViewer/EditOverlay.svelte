@@ -442,6 +442,7 @@
     >
       {#if op.type === 'insert_text' || op.type === 'replace_text'}
         {@const textOp = op as InsertTextOp}
+        {@const isReplaceOp = op.type === 'replace_text'}
         <!-- Text box -->
         {#if editingTextId === op.id}
           <textarea
@@ -453,7 +454,7 @@
               font-weight: {textOp.style.bold ? 'bold' : 'normal'};
               font-style: {textOp.style.italic ? 'italic' : 'normal'};
               text-align: {textOp.style.align || 'left'};
-              background-color: rgba(255, 255, 255, 0.9);
+              background-color: rgba(255, 255, 255, 0.95);
               border: 1px solid var(--nord10);
             "
             bind:value={editingTextContent}
@@ -470,7 +471,7 @@
               font-weight: {textOp.style.bold ? 'bold' : 'normal'};
               font-style: {textOp.style.italic ? 'italic' : 'normal'};
               text-align: {textOp.style.align || 'left'};
-              background-color: {textOp.text ? 'transparent' : 'rgba(136, 192, 208, 0.1)'};
+              background-color: {isReplaceOp ? 'white' : (textOp.text ? 'transparent' : 'rgba(136, 192, 208, 0.1)')};
               border: 1px dashed {textOp.text ? 'transparent' : 'var(--nord8)'};
             "
             ondblclick={() => startEditingText(op)}
