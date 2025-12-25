@@ -158,9 +158,9 @@ The viewer is usable for daily work. Manipulation tools (merge, split, rotate, c
 - [x] Redaction verification
 
 ### Sanitization
-- [ ] Clean metadata
-- [ ] Remove scripts
-- [ ] Remove hidden objects
+- [x] Clean metadata
+- [x] Remove scripts
+- [x] Remove hidden objects
 
 ## Long-term
 

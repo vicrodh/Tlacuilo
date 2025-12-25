@@ -171,6 +171,7 @@ export const TOOL_CATALOG: Tool[] = [
   { id: 'protect-encrypt', label: 'Encrypt PDF', icon: 'Lock', page: 'encrypt', group: 'protect', description: 'Password protect a PDF' },
   { id: 'protect-decrypt', label: 'Decrypt PDF', icon: 'Unlock', page: 'decrypt', group: 'protect', description: 'Remove password from PDF' },
   { id: 'protect-redact', label: 'Redact', icon: 'EyeOff', page: 'redact', group: 'protect', description: 'Permanently remove sensitive content' },
+  { id: 'protect-sanitize', label: 'Sanitize', icon: 'Shield', page: 'sanitize', group: 'protect', description: 'Remove metadata, scripts, hidden objects' },
 
   // Annotate group (future)
   { id: 'annotate-watermark', label: 'Watermark', icon: 'Droplet', page: 'watermark', group: 'annotate', description: 'Add text or image watermark' },

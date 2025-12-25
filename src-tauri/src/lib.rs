@@ -1235,6 +1235,101 @@ fn pdf_verify_redaction(
 }
 
 // ============================================================================
+// PDF Sanitization Commands (PythonBridge)
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SanitizationInfo {
+    has_metadata: bool,
+    metadata_fields: Vec<String>,
+    has_javascript: bool,
+    javascript_count: i32,
+    has_embedded_files: bool,
+    embedded_files_count: i32,
+    has_links: bool,
+    links_count: i32,
+    error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SanitizationRemoved {
+    metadata: bool,
+    javascript: i32,
+    embedded_files: i32,
+    links: i32,
+    annotations: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SanitizationResult {
+    success: bool,
+    message: String,
+    removed: SanitizationRemoved,
+}
+
+/// Get info about sanitizable content in a PDF
+#[tauri::command]
+fn pdf_sanitization_info(app: AppHandle, input: String) -> Result<SanitizationInfo, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec!["info", "--input", &input, "--json"];
+
+    let result = bridge
+        .run_script("pdf_sanitize.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+/// Sanitize a PDF by removing metadata, scripts, etc.
+#[tauri::command]
+fn pdf_sanitize(
+    app: AppHandle,
+    input: String,
+    output: String,
+    remove_metadata: bool,
+    remove_javascript: bool,
+    remove_embedded_files: bool,
+    remove_links: bool,
+    remove_annotations: bool,
+) -> Result<SanitizationResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let mut args: Vec<&str> = vec![
+        "clean",
+        "--input",
+        &input,
+        "--output",
+        &output,
+        "--json",
+    ];
+
+    if !remove_metadata {
+        args.push("--keep-metadata");
+    }
+    if !remove_javascript {
+        args.push("--keep-javascript");
+    }
+    if !remove_embedded_files {
+        args.push("--keep-embedded");
+    }
+    if remove_links {
+        args.push("--remove-links");
+    }
+    if remove_annotations {
+        args.push("--remove-annotations");
+    }
+
+    let result = bridge
+        .run_script("pdf_sanitize.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+// ============================================================================
 // PDF Attachments Commands (PythonBridge)
 // ============================================================================
 
@@ -1707,7 +1802,10 @@ pub fn run() {
       pdf_add_redaction,
       pdf_apply_redactions,
       pdf_get_pending_redactions,
-      pdf_verify_redaction
+      pdf_verify_redaction,
+      // Sanitization
+      pdf_sanitization_info,
+      pdf_sanitize
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
