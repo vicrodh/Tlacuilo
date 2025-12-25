@@ -137,62 +137,126 @@
   }
 
   // Map PDF font names to CSS-friendly font families
+  // Strategy: Include original font name first (browser may have it), then fallbacks
   function mapFontFamily(pdfFont: string | null): string {
-    if (!pdfFont) return 'Helvetica, Arial, sans-serif';
+    if (!pdfFont) return 'Arial, Helvetica, sans-serif';
 
     const fontLower = pdfFont.toLowerCase();
+    // Clean font name (remove subset prefix like "ABCDEF+")
+    const cleanFont = pdfFont.replace(/^[A-Z]{6}\+/, '');
 
-    // Sans-serif fonts (most common in OCR and modern documents)
-    if (fontLower.includes('arial') || fontLower.includes('helv') || fontLower.includes('helvetica')) {
-      return 'Helvetica, Arial, sans-serif';
-    }
-    if (fontLower.includes('sans') || fontLower.includes('gothic') || fontLower.includes('calibri')) {
+    // OCRmyPDF invisible text layer font - use system sans-serif
+    if (fontLower.includes('glyphless') || fontLower === 'none' || fontLower === '[none]') {
       return 'Arial, Helvetica, sans-serif';
     }
-    if (fontLower.includes('verdana')) return 'Verdana, Geneva, sans-serif';
-    if (fontLower.includes('tahoma')) return 'Tahoma, Geneva, sans-serif';
-    if (fontLower.includes('trebuchet')) return 'Trebuchet MS, sans-serif';
+
+    // Exact "sans" font (common in OCR'd PDFs) - use sans-serif stack
+    if (fontLower === 'sans' || fontLower === 'sans-serif') {
+      return 'Arial, Helvetica, sans-serif';
+    }
+
+    // Sans-serif fonts
+    if (fontLower.includes('arial')) {
+      return `"${cleanFont}", Arial, Helvetica, sans-serif`;
+    }
+    if (fontLower.includes('helv') || fontLower.includes('helvetica')) {
+      return `"${cleanFont}", Helvetica, Arial, sans-serif`;
+    }
+    if (fontLower.includes('calibri')) {
+      return `"${cleanFont}", Calibri, Arial, sans-serif`;
+    }
+    if (fontLower.includes('verdana')) {
+      return `"${cleanFont}", Verdana, Geneva, sans-serif`;
+    }
+    if (fontLower.includes('tahoma')) {
+      return `"${cleanFont}", Tahoma, Geneva, sans-serif`;
+    }
+    if (fontLower.includes('trebuchet')) {
+      return `"${cleanFont}", "Trebuchet MS", sans-serif`;
+    }
 
     // Serif fonts
-    if (fontLower.includes('times') || fontLower.includes('tiro') || fontLower.includes('roman')) {
-      return 'Times New Roman, Times, serif';
+    if (fontLower.includes('times') || fontLower.includes('tiro')) {
+      return `"${cleanFont}", "Times New Roman", Times, serif`;
     }
-    if (fontLower.includes('georgia')) return 'Georgia, serif';
-    if (fontLower.includes('palatino')) return 'Palatino Linotype, Book Antiqua, serif';
-    if (fontLower.includes('garamond')) return 'Garamond, serif';
-    if (fontLower.includes('cambria')) return 'Cambria, Georgia, serif';
+    if (fontLower.includes('georgia')) {
+      return `"${cleanFont}", Georgia, serif`;
+    }
+    if (fontLower.includes('palatino')) {
+      return `"${cleanFont}", "Palatino Linotype", "Book Antiqua", serif`;
+    }
+    if (fontLower.includes('garamond')) {
+      return `"${cleanFont}", Garamond, serif`;
+    }
+    if (fontLower.includes('cambria')) {
+      return `"${cleanFont}", Cambria, Georgia, serif`;
+    }
 
     // Monospace fonts
-    if (fontLower.includes('courier') || fontLower.includes('mono') || fontLower.includes('consol')) {
-      return 'Courier New, Courier, monospace';
+    if (fontLower.includes('courier')) {
+      return `"${cleanFont}", "Courier New", Courier, monospace`;
+    }
+    if (fontLower.includes('consol')) {
+      return `"${cleanFont}", Consolas, "Courier New", monospace`;
     }
 
-    // OCR-specific fonts (Tesseract often uses these)
-    if (fontLower.includes('freeserif')) return 'Times New Roman, Times, serif';
-    if (fontLower.includes('freesans')) return 'Arial, Helvetica, sans-serif';
-    if (fontLower.includes('freemono')) return 'Courier New, Courier, monospace';
+    // OCR-specific fonts (Tesseract/OCRmyPDF)
+    if (fontLower.includes('freeserif')) {
+      return `"${cleanFont}", "Times New Roman", Times, serif`;
+    }
+    if (fontLower.includes('freesans')) {
+      return `"${cleanFont}", Arial, Helvetica, sans-serif`;
+    }
+    if (fontLower.includes('freemono')) {
+      return `"${cleanFont}", "Courier New", Courier, monospace`;
+    }
     if (fontLower.includes('dejavu')) {
-      if (fontLower.includes('serif')) return 'DejaVu Serif, Times New Roman, serif';
-      if (fontLower.includes('mono')) return 'DejaVu Sans Mono, Courier New, monospace';
-      return 'DejaVu Sans, Arial, sans-serif';
+      if (fontLower.includes('serif') && !fontLower.includes('sans')) {
+        return `"${cleanFont}", "DejaVu Serif", "Times New Roman", serif`;
+      }
+      if (fontLower.includes('mono')) {
+        return `"${cleanFont}", "DejaVu Sans Mono", "Courier New", monospace`;
+      }
+      return `"${cleanFont}", "DejaVu Sans", Arial, sans-serif`;
     }
     if (fontLower.includes('liberation')) {
-      if (fontLower.includes('serif')) return 'Liberation Serif, Times New Roman, serif';
-      if (fontLower.includes('mono')) return 'Liberation Mono, Courier New, monospace';
-      return 'Liberation Sans, Arial, sans-serif';
+      if (fontLower.includes('serif') && !fontLower.includes('sans')) {
+        return `"${cleanFont}", "Liberation Serif", "Times New Roman", serif`;
+      }
+      if (fontLower.includes('mono')) {
+        return `"${cleanFont}", "Liberation Mono", "Courier New", monospace`;
+      }
+      return `"${cleanFont}", "Liberation Sans", Arial, sans-serif`;
     }
     if (fontLower.includes('noto')) {
-      if (fontLower.includes('serif')) return 'Noto Serif, Times New Roman, serif';
-      if (fontLower.includes('mono')) return 'Noto Mono, Courier New, monospace';
-      return 'Noto Sans, Arial, sans-serif';
+      if (fontLower.includes('serif') && !fontLower.includes('sans')) {
+        return `"${cleanFont}", "Noto Serif", "Times New Roman", serif`;
+      }
+      if (fontLower.includes('mono')) {
+        return `"${cleanFont}", "Noto Mono", "Courier New", monospace`;
+      }
+      return `"${cleanFont}", "Noto Sans", Arial, sans-serif`;
     }
 
-    // Fallback: try to detect font category from name
-    if (fontLower.includes('serif')) return 'Times New Roman, Times, serif';
-    if (fontLower.includes('mono')) return 'Courier New, Courier, monospace';
+    // Detect font category from name
+    if (fontLower.includes('sans')) {
+      return `"${cleanFont}", Arial, Helvetica, sans-serif`;
+    }
+    if (fontLower.includes('serif')) {
+      return `"${cleanFont}", "Times New Roman", Times, serif`;
+    }
+    if (fontLower.includes('mono')) {
+      return `"${cleanFont}", "Courier New", Courier, monospace`;
+    }
+    if (fontLower.includes('gothic')) {
+      return `"${cleanFont}", Arial, sans-serif`;
+    }
+    if (fontLower.includes('roman')) {
+      return `"${cleanFont}", "Times New Roman", serif`;
+    }
 
-    // Default to sans-serif (most common for modern/OCR documents)
-    return 'Arial, Helvetica, sans-serif';
+    // Default: try the original font first, then fall back to sans-serif
+    return `"${cleanFont}", Arial, Helvetica, sans-serif`;
   }
 
   // Check if block has bold text
@@ -475,8 +539,13 @@
   }
 
   function handleTextBlur(op: EditorOp) {
+    // Only update if we're still editing this op (Escape handler might have cleared it)
     if ((op.type === 'insert_text' || op.type === 'replace_text') && editingTextId === op.id) {
-      store.updateOp(op.id, { text: editingTextContent });
+      // Check if op still exists (might have been removed by Escape)
+      const existingOp = store.getOpById(op.id);
+      if (existingOp) {
+        store.updateOp(op.id, { text: editingTextContent });
+      }
       editingTextId = null;
       editingTextContent = '';
     }
@@ -488,13 +557,27 @@
       e.preventDefault();
       e.stopPropagation();
 
-      // Restore original text if this is a replace operation
       const op = editingTextId ? store.getOpById(editingTextId) : null;
-      if (op && op.type === 'replace_text') {
-        const replaceOp = op as ReplaceTextOp;
-        // If text wasn't changed, remove the operation entirely
-        if (editingTextContent === replaceOp.originalText) {
-          store.removeOp(op.id);
+
+      if (op) {
+        if (op.type === 'replace_text') {
+          const replaceOp = op as ReplaceTextOp;
+          // Always remove if text wasn't changed from original
+          // (canceling the edit restores original state)
+          if (editingTextContent === replaceOp.originalText || editingTextContent === replaceOp.text) {
+            store.removeOp(op.id);
+          } else {
+            // Text was changed but user pressed Escape - restore original and remove
+            store.removeOp(op.id);
+          }
+        } else if (op.type === 'insert_text') {
+          // Remove empty insert_text operations
+          if (!editingTextContent.trim()) {
+            store.removeOp(op.id);
+          } else {
+            // Save the text before clearing
+            store.updateOp(op.id, { text: editingTextContent });
+          }
         }
       }
 

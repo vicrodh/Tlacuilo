@@ -1573,14 +1573,34 @@
       return;
     }
 
-    // Close: Escape
+    // Escape key handling - prioritized actions (never closes tab)
     if (e.key === 'Escape') {
-      // Deselect annotation first, or close viewer
+      // 1. Deselect annotation if selected
       if (annotationsStore.selectedId) {
         annotationsStore.selectAnnotation(null);
-      } else if (onClose) {
-        onClose();
+        return;
       }
+
+      // 2. Deselect edit operation if selected
+      if (editsStore.selectedId) {
+        editsStore.selectOp(null);
+        return;
+      }
+
+      // 3. Exit annotation tool if active
+      if (showAnnotationTools && annotationsStore.activeTool) {
+        annotationsStore.setActiveTool(null);
+        return;
+      }
+
+      // 4. Exit edit tool if active
+      if (showEditTools && editsStore.activeTool) {
+        editsStore.setActiveTool(null);
+        return;
+      }
+
+      // 5. Don't close document on Escape - user should use Ctrl+W
+      // This prevents accidental closure and matches browser behavior
       return;
     }
 
