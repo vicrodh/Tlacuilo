@@ -140,8 +140,8 @@ The viewer is usable for daily work. Manipulation tools (merge, split, rotate, c
 - [ ] Automatic positioning
 
 ### Layers
-- [ ] Detect PDF layers
-- [ ] Toggle visibility
+- [x] Detect PDF layers
+- [x] Toggle visibility
 
 ---
 

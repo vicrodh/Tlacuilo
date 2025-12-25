@@ -965,6 +965,92 @@ fn check_pdf_signatures(app: AppHandle, input: String) -> Result<SignatureCheckR
 }
 
 // ============================================================================
+// PDF Layers Commands (PythonBridge)
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+struct LayerInfo {
+    xref: i32,
+    name: String,
+    on: bool,
+    #[serde(default)]
+    intent: Vec<String>,
+    #[serde(default)]
+    usage: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct LayersResult {
+    has_layers: bool,
+    layers: Vec<LayerInfo>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct LayerToggleResult {
+    success: bool,
+    message: String,
+    #[serde(default)]
+    layer_name: String,
+}
+
+/// Get all layers from a PDF
+#[tauri::command]
+fn pdf_get_layers(app: AppHandle, input: String) -> Result<LayersResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec!["list", "--input", &input, "--json"];
+
+    let result = bridge
+        .run_script("pdf_layers.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+/// Toggle visibility of a layer
+#[tauri::command]
+fn pdf_set_layer(
+    app: AppHandle,
+    input: String,
+    output: String,
+    layer_name: Option<String>,
+    layer_xref: Option<i32>,
+    visible: bool,
+) -> Result<LayerToggleResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let mut args: Vec<String> = vec![
+        "toggle".to_string(),
+        "--input".to_string(),
+        input,
+        "--output".to_string(),
+        output,
+        "--visible".to_string(),
+        visible.to_string(),
+        "--json".to_string(),
+    ];
+
+    if let Some(name) = layer_name {
+        args.push("--layer".to_string());
+        args.push(name);
+    } else if let Some(xref) = layer_xref {
+        args.push("--xref".to_string());
+        args.push(xref.to_string());
+    }
+
+    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+    let result = bridge
+        .run_script("pdf_layers.py", &args_refs)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+// ============================================================================
 // PDF Attachments Commands (PythonBridge)
 // ============================================================================
 
@@ -1429,7 +1515,10 @@ pub fn run() {
       pdf_encrypt,
       // Graphical Signatures
       apply_graphical_signature,
-      check_pdf_signatures
+      check_pdf_signatures,
+      // Layers
+      pdf_get_layers,
+      pdf_set_layer
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
