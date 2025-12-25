@@ -132,19 +132,61 @@
 
   // Map PDF font names to CSS-friendly font families
   function mapFontFamily(pdfFont: string | null): string {
-    if (!pdfFont) return 'Helvetica';
+    if (!pdfFont) return 'Helvetica, Arial, sans-serif';
 
     const fontLower = pdfFont.toLowerCase();
 
-    // Common font mappings
-    if (fontLower.includes('arial') || fontLower.includes('helv')) return 'Helvetica';
-    if (fontLower.includes('times') || fontLower.includes('tiro')) return 'Times New Roman';
-    if (fontLower.includes('courier')) return 'Courier';
-    if (fontLower.includes('georgia')) return 'Georgia';
-    if (fontLower.includes('verdana')) return 'Verdana';
+    // Sans-serif fonts (most common in OCR and modern documents)
+    if (fontLower.includes('arial') || fontLower.includes('helv') || fontLower.includes('helvetica')) {
+      return 'Helvetica, Arial, sans-serif';
+    }
+    if (fontLower.includes('sans') || fontLower.includes('gothic') || fontLower.includes('calibri')) {
+      return 'Arial, Helvetica, sans-serif';
+    }
+    if (fontLower.includes('verdana')) return 'Verdana, Geneva, sans-serif';
+    if (fontLower.includes('tahoma')) return 'Tahoma, Geneva, sans-serif';
+    if (fontLower.includes('trebuchet')) return 'Trebuchet MS, sans-serif';
 
-    // Return the original if no mapping found - browsers may have it
-    return pdfFont;
+    // Serif fonts
+    if (fontLower.includes('times') || fontLower.includes('tiro') || fontLower.includes('roman')) {
+      return 'Times New Roman, Times, serif';
+    }
+    if (fontLower.includes('georgia')) return 'Georgia, serif';
+    if (fontLower.includes('palatino')) return 'Palatino Linotype, Book Antiqua, serif';
+    if (fontLower.includes('garamond')) return 'Garamond, serif';
+    if (fontLower.includes('cambria')) return 'Cambria, Georgia, serif';
+
+    // Monospace fonts
+    if (fontLower.includes('courier') || fontLower.includes('mono') || fontLower.includes('consol')) {
+      return 'Courier New, Courier, monospace';
+    }
+
+    // OCR-specific fonts (Tesseract often uses these)
+    if (fontLower.includes('freeserif')) return 'Times New Roman, Times, serif';
+    if (fontLower.includes('freesans')) return 'Arial, Helvetica, sans-serif';
+    if (fontLower.includes('freemono')) return 'Courier New, Courier, monospace';
+    if (fontLower.includes('dejavu')) {
+      if (fontLower.includes('serif')) return 'DejaVu Serif, Times New Roman, serif';
+      if (fontLower.includes('mono')) return 'DejaVu Sans Mono, Courier New, monospace';
+      return 'DejaVu Sans, Arial, sans-serif';
+    }
+    if (fontLower.includes('liberation')) {
+      if (fontLower.includes('serif')) return 'Liberation Serif, Times New Roman, serif';
+      if (fontLower.includes('mono')) return 'Liberation Mono, Courier New, monospace';
+      return 'Liberation Sans, Arial, sans-serif';
+    }
+    if (fontLower.includes('noto')) {
+      if (fontLower.includes('serif')) return 'Noto Serif, Times New Roman, serif';
+      if (fontLower.includes('mono')) return 'Noto Mono, Courier New, monospace';
+      return 'Noto Sans, Arial, sans-serif';
+    }
+
+    // Fallback: try to detect font category from name
+    if (fontLower.includes('serif')) return 'Times New Roman, Times, serif';
+    if (fontLower.includes('mono')) return 'Courier New, Courier, monospace';
+
+    // Default to sans-serif (most common for modern/OCR documents)
+    return 'Arial, Helvetica, sans-serif';
   }
 
   // Check if block has bold text
@@ -521,16 +563,20 @@
     {@const isSelected = store.selectedId === op.id}
     {@const isActivelyEditing = editingTextId === op.id}
     {@const showVisuals = !hasPreview || isActivelyEditing}
+    {@const minEditWidth = Math.max(px.width, 300)}
+    {@const minEditHeight = Math.max(px.height, 100)}
 
     <div
       class="absolute"
       class:ring-2={isSelected && showVisuals}
       class:ring-[var(--nord8)]={isSelected && showVisuals}
+      class:z-50={isActivelyEditing}
       style="
         left: {px.x}px;
         top: {px.y}px;
-        width: {px.width}px;
-        height: {px.height}px;
+        width: {isActivelyEditing ? minEditWidth : px.width}px;
+        min-height: {isActivelyEditing ? minEditHeight : px.height}px;
+        height: {isActivelyEditing ? 'auto' : px.height + 'px'};
       "
     >
       {#if op.type === 'insert_text' || op.type === 'replace_text'}
@@ -539,7 +585,7 @@
         <!-- Text box - always show textarea when actively editing -->
         {#if editingTextId === op.id}
           <textarea
-            class="w-full h-full p-1 resize-none outline-none"
+            class="w-full p-2 outline-none resize-y"
             style="
               font-family: {textOp.style.fontFamily};
               font-size: {textOp.style.fontSize * scale}px;
@@ -547,8 +593,12 @@
               font-weight: {textOp.style.bold ? 'bold' : 'normal'};
               font-style: {textOp.style.italic ? 'italic' : 'normal'};
               text-align: {textOp.style.align || 'left'};
-              background-color: rgba(255, 255, 255, 0.95);
-              border: 1px solid var(--nord10);
+              background-color: rgba(255, 255, 255, 0.98);
+              border: 2px solid var(--nord10);
+              border-radius: 4px;
+              min-height: {minEditHeight}px;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+              line-height: 1.4;
             "
             bind:value={editingTextContent}
             onblur={() => handleTextBlur(op)}
