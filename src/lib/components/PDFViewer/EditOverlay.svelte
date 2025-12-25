@@ -10,7 +10,7 @@
    * - Click existing PDF text blocks to edit them
    */
 
-  import { X, Move, Type } from 'lucide-svelte';
+  import { X, Move, Type, Check } from 'lucide-svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import type {
@@ -514,7 +514,24 @@
   function handleMouseDown(e: MouseEvent) {
     if (e.button !== 0 || !interactive) return;
 
+    // Stop propagation to prevent document panning
+    e.stopPropagation();
+
     const pos = getMousePos(e);
+
+    // If we're editing text and clicked outside the textarea, confirm the edit
+    if (editingTextId) {
+      const editingOp = store.getOpById(editingTextId);
+      if (editingOp) {
+        const px = toPixels(editingOp.rect);
+        const isOutsideEdit = pos.x < px.x || pos.x > px.x + Math.max(px.width, 300) ||
+                              pos.y < px.y || pos.y > px.y + Math.max(px.height, 100) + 40; // +40 for Done button
+        if (isOutsideEdit) {
+          confirmTextEdit(editingOp);
+          return;
+        }
+      }
+    }
 
     // Handle select tool - check if clicking on an operation
     if (store.activeTool === 'select' || !store.activeTool) {
@@ -657,16 +674,35 @@
   }
 
   function handleTextBlur(op: EditorOp) {
-    // Only update if we're still editing this op (Escape handler might have cleared it)
+    // Don't blur if clicking on the Done button (handled separately)
+    // The blur fires before click, so we use a small delay to check
+    setTimeout(() => {
+      if ((op.type === 'insert_text' || op.type === 'replace_text') && editingTextId === op.id) {
+        confirmTextEdit(op);
+      }
+    }, 100);
+  }
+
+  // Confirm and apply the text edit
+  function confirmTextEdit(op: EditorOp) {
     if ((op.type === 'insert_text' || op.type === 'replace_text') && editingTextId === op.id) {
-      // Check if op still exists (might have been removed by Escape)
       const existingOp = store.getOpById(op.id);
       if (existingOp) {
         store.updateOp(op.id, { text: editingTextContent });
       }
+      // Clear undo/redo history when confirming
+      textUndoHistory = [];
+      textRedoHistory = [];
       editingTextId = null;
       editingTextContent = '';
     }
+  }
+
+  // Handle clicking the Done button
+  function handleDoneClick(e: MouseEvent, op: EditorOp) {
+    e.preventDefault();
+    e.stopPropagation();
+    confirmTextEdit(op);
   }
 
   function handleTextKeydown(e: KeyboardEvent) {
@@ -846,27 +882,44 @@
         <!-- Text box - always show textarea when actively editing -->
         {#if editingTextId === op.id}
           {@const scaledFontSize = textOp.style.fontSize * pdfToPixelScale}
-          <textarea
-            class="w-full p-2 outline-none resize-y"
-            style="
-              font-family: {textOp.style.fontFamily};
-              font-size: {scaledFontSize}px;
-              color: {textOp.style.color};
-              font-weight: {textOp.style.bold ? 'bold' : 'normal'};
-              font-style: {textOp.style.italic ? 'italic' : 'normal'};
-              text-align: {textOp.style.align || 'left'};
-              background-color: rgba(255, 255, 255, 0.98);
-              border: 2px solid var(--nord10);
-              border-radius: 4px;
-              min-height: {minEditHeight}px;
-              box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-              line-height: 1.3;
-            "
-            bind:value={editingTextContent}
-            onblur={() => handleTextBlur(op)}
-            onkeydown={(e) => handleTextKeydown(e)}
-            oninput={(e) => handleTextInput(e)}
-          ></textarea>
+          <div class="flex flex-col">
+            <textarea
+              class="w-full p-2 outline-none resize-y"
+              style="
+                font-family: {textOp.style.fontFamily};
+                font-size: {scaledFontSize}px;
+                color: {textOp.style.color};
+                font-weight: {textOp.style.bold ? 'bold' : 'normal'};
+                font-style: {textOp.style.italic ? 'italic' : 'normal'};
+                text-align: {textOp.style.align || 'left'};
+                background-color: rgba(255, 255, 255, 0.98);
+                border: 2px solid var(--nord10);
+                border-radius: 4px 4px 0 0;
+                min-height: {minEditHeight}px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                line-height: 1.3;
+              "
+              bind:value={editingTextContent}
+              onkeydown={(e) => handleTextKeydown(e)}
+              oninput={(e) => handleTextInput(e)}
+              onmousedown={(e) => e.stopPropagation()}
+            ></textarea>
+            <!-- Done button -->
+            <button
+              type="button"
+              class="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
+              style="
+                background-color: var(--nord14);
+                color: var(--nord0);
+                border-radius: 0 0 4px 4px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+              "
+              onmousedown={(e) => handleDoneClick(e, op)}
+            >
+              <Check size={16} />
+              Done
+            </button>
+          </div>
         {:else if showVisuals}
           {@const scaledFontSize = textOp.style.fontSize * pdfToPixelScale}
           {@const rotationDeg = textOp.style.rotation || 0}

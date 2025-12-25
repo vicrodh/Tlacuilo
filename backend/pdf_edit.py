@@ -431,6 +431,8 @@ def apply_edits(
                 color_str = style.get("color", "#000000")
                 rotation = style.get("rotation", 0)  # Text rotation in degrees
                 color = parse_hex_color(color_str)
+                is_bold = style.get("bold", False)
+                is_italic = style.get("italic", False)
 
                 # Parse CSS font-family to PyMuPDF font name
                 font_name = parse_css_font_family(css_font)
@@ -442,15 +444,17 @@ def apply_edits(
                 page.add_redact_annot(redact_rect, fill=(1, 1, 1))  # White fill
                 page.apply_redactions()
 
-                # Insert new text with rotation if applicable
-                point = fitz.Point(x0, y0 + font_size)
-                page.insert_text(
-                    point,
+                # Use insert_textbox for multi-line text to properly fit within the area
+                # This handles line wrapping and vertical alignment
+                text_rect = fitz.Rect(x0, y0, x1, y1)
+                page.insert_textbox(
+                    text_rect,
                     text,
                     fontname=font_name,
                     fontsize=font_size,
                     color=color,
                     rotate=int(rotation) if rotation else 0,
+                    align=0,  # 0 = left, 1 = center, 2 = right
                 )
                 applied_count += 1
 
@@ -686,16 +690,17 @@ def render_page_preview(
                 page.add_redact_annot(redact_rect, fill=(1, 1, 1))
                 page.apply_redactions()
 
-                # Insert new text
+                # Use insert_textbox for multi-line text
                 if text:
-                    point = fitz.Point(x0, y0 + font_size)
-                    page.insert_text(
-                        point,
+                    text_rect = fitz.Rect(x0, y0, x1, y1)
+                    page.insert_textbox(
+                        text_rect,
                         text,
                         fontname=font_name,
                         fontsize=font_size,
                         color=color,
                         rotate=int(rotation) if rotation else 0,
+                        align=0,
                     )
 
             elif op_type == "draw_shape":

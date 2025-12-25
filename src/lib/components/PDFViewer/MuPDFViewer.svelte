@@ -1589,9 +1589,12 @@
   // Check if annotation mode is active (tool selected and toolbar visible)
   const isAnnotationMode = $derived(showAnnotationTools && annotationsStore.activeTool !== null);
 
+  // Check if edit mode is active
+  const isEditMode = $derived(showEditTools);
+
   function handlePanStart(e: MouseEvent) {
-    // Don't start panning if annotation tool is active
-    if (isAnnotationMode) return;
+    // Don't start panning if annotation tool or edit mode is active
+    if (isAnnotationMode || isEditMode) return;
 
     if (e.button === 1 || e.button === 0) {
       isPanning = true;
@@ -2093,7 +2096,7 @@
         <div
           bind:this={canvasContainer}
           class="flex-1 h-full overflow-y-auto overflow-x-hidden p-4"
-          style="background-color: var(--nord0); cursor: {isAnnotationMode ? 'default' : (isPanning ? 'grabbing' : 'grab')};"
+          style="background-color: var(--nord0); cursor: {isAnnotationMode || isEditMode ? 'default' : (isPanning ? 'grabbing' : 'grab')};"
           onmousedown={handlePanStart}
           onmousemove={handlePanMove}
           onscroll={handleScroll}
