@@ -101,8 +101,9 @@
     isLoadingBlocks = true;
     try {
       // Use font-aware command to get detailed font info
+      // Note: Tauri command uses "input" parameter, not "path"
       const result = await invoke<PageTextContent>('pdf_get_text_blocks_with_fonts', {
-        path: pdfPath,
+        input: pdfPath,
         page: page - 1, // 0-indexed for backend
       });
       if (result.success) {
