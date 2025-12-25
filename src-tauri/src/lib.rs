@@ -1051,6 +1051,190 @@ fn pdf_set_layer(
 }
 
 // ============================================================================
+// PDF Redaction Commands (PythonBridge)
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+struct RedactionMarkResult {
+    success: bool,
+    message: String,
+    page: i32,
+    rect: Vec<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct RedactionApplyResult {
+    success: bool,
+    message: String,
+    pages_affected: i32,
+    redactions_applied: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PendingRedaction {
+    page: i32,
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PendingRedactionsResult {
+    has_redactions: bool,
+    count: i32,
+    redactions: Vec<PendingRedaction>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct RedactionVerifyResult {
+    area_clear: bool,
+    text_found: String,
+    images_found: i32,
+    error: Option<String>,
+}
+
+/// Add a redaction mark to a PDF page
+#[tauri::command]
+fn pdf_add_redaction(
+    app: AppHandle,
+    input: String,
+    output: String,
+    page: i32,
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+    text: Option<String>,
+) -> Result<RedactionMarkResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let mut args: Vec<String> = vec![
+        "mark".to_string(),
+        "--input".to_string(),
+        input,
+        "--output".to_string(),
+        output,
+        "--page".to_string(),
+        page.to_string(),
+        "--x0".to_string(),
+        x0.to_string(),
+        "--y0".to_string(),
+        y0.to_string(),
+        "--x1".to_string(),
+        x1.to_string(),
+        "--y1".to_string(),
+        y1.to_string(),
+        "--json".to_string(),
+    ];
+
+    if let Some(t) = text {
+        args.push("--text".to_string());
+        args.push(t);
+    }
+
+    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+    let result = bridge
+        .run_script("pdf_redaction.py", &args_refs)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+/// Apply all pending redactions (permanently remove content)
+#[tauri::command]
+fn pdf_apply_redactions(
+    app: AppHandle,
+    input: String,
+    output: String,
+    redact_images: bool,
+    redact_graphics: bool,
+) -> Result<RedactionApplyResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let mut args: Vec<&str> = vec![
+        "apply",
+        "--input",
+        &input,
+        "--output",
+        &output,
+        "--json",
+    ];
+
+    if !redact_images {
+        args.push("--no-images");
+    }
+    if !redact_graphics {
+        args.push("--no-graphics");
+    }
+
+    let result = bridge
+        .run_script("pdf_redaction.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+/// Get pending redaction marks
+#[tauri::command]
+fn pdf_get_pending_redactions(app: AppHandle, input: String) -> Result<PendingRedactionsResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec!["pending", "--input", &input, "--json"];
+
+    let result = bridge
+        .run_script("pdf_redaction.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+/// Verify redaction was successful
+#[tauri::command]
+fn pdf_verify_redaction(
+    app: AppHandle,
+    input: String,
+    page: i32,
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+) -> Result<RedactionVerifyResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<String> = vec![
+        "verify".to_string(),
+        "--input".to_string(),
+        input,
+        "--page".to_string(),
+        page.to_string(),
+        "--x0".to_string(),
+        x0.to_string(),
+        "--y0".to_string(),
+        y0.to_string(),
+        "--x1".to_string(),
+        x1.to_string(),
+        "--y1".to_string(),
+        y1.to_string(),
+        "--json".to_string(),
+    ];
+
+    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+
+    let result = bridge
+        .run_script("pdf_redaction.py", &args_refs)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+// ============================================================================
 // PDF Attachments Commands (PythonBridge)
 // ============================================================================
 
@@ -1518,7 +1702,12 @@ pub fn run() {
       check_pdf_signatures,
       // Layers
       pdf_get_layers,
-      pdf_set_layer
+      pdf_set_layer,
+      // Redaction
+      pdf_add_redaction,
+      pdf_apply_redactions,
+      pdf_get_pending_redactions,
+      pdf_verify_redaction
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

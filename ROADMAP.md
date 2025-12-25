@@ -153,9 +153,9 @@ The viewer is usable for daily work. Manipulation tools (merge, split, rotate, c
 - [x] Remove password protection
 
 ### Redaction
-- [ ] Mark areas for redaction
-- [ ] Remove actual content (not just visually cover)
-- [ ] Redaction verification
+- [x] Mark areas for redaction
+- [x] Remove actual content (not just visually cover)
+- [x] Redaction verification
 
 ### Sanitization
 - [ ] Clean metadata
