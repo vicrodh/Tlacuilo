@@ -5,11 +5,13 @@ CLI usage (dev):
   python pdf_attachments.py list --input document.pdf
   python pdf_attachments.py extract --input document.pdf --name "file.txt" --output /tmp/file.txt
   python pdf_attachments.py extract-all --input document.pdf --output-dir /tmp/attachments
+  python pdf_attachments.py preview --input document.pdf --name "file.txt"
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import sys
 from pathlib import Path
@@ -41,6 +43,106 @@ def list_attachments(input_path: Path) -> list[dict[str, Any]]:
 
     doc.close()
     return attachments
+
+
+def get_attachment_preview(input_path: Path, name_or_index: str | int, max_text_size: int = 50000) -> dict[str, Any]:
+    """
+    Get attachment content for preview.
+
+    Returns:
+        - For images (jpg, png, gif, webp, svg, bmp): base64 encoded data
+        - For text files (txt, md, json, xml, csv, log, html, css, js): text content
+        - For other files: first 1KB as hex dump
+    """
+    doc = fitz.open(str(input_path))
+
+    try:
+        # Get content
+        if isinstance(name_or_index, int) or (isinstance(name_or_index, str) and name_or_index.isdigit()):
+            idx = int(name_or_index)
+            content = doc.embfile_get(idx)
+            info = doc.embfile_info(idx)
+        else:
+            content = doc.embfile_get(name_or_index)
+            names = doc.embfile_names()
+            idx = names.index(name_or_index) if name_or_index in names else 0
+            info = doc.embfile_info(idx)
+
+        name = info.get("name", "")
+        ext = name.split(".")[-1].lower() if "." in name else ""
+
+        # Image extensions
+        image_exts = {"jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "tiff", "ico"}
+
+        # Text extensions
+        text_exts = {"txt", "md", "json", "xml", "csv", "log", "html", "css", "js", "ts", "py", "rs", "go", "c", "cpp", "h", "hpp", "java", "kt", "swift", "rb", "php", "sh", "bash", "zsh", "yml", "yaml", "toml", "ini", "cfg", "conf"}
+
+        result = {
+            "name": name,
+            "size": len(content),
+            "type": "unknown",
+            "content": None,
+            "mime_type": None,
+        }
+
+        if ext in image_exts:
+            # Return as base64 for images
+            result["type"] = "image"
+            result["content"] = base64.b64encode(content).decode("ascii")
+            mime_map = {
+                "jpg": "image/jpeg",
+                "jpeg": "image/jpeg",
+                "png": "image/png",
+                "gif": "image/gif",
+                "webp": "image/webp",
+                "svg": "image/svg+xml",
+                "bmp": "image/bmp",
+                "tiff": "image/tiff",
+                "ico": "image/x-icon",
+            }
+            result["mime_type"] = mime_map.get(ext, "image/png")
+
+        elif ext in text_exts:
+            # Try to decode as text
+            try:
+                text = content.decode("utf-8")
+                if len(text) > max_text_size:
+                    text = text[:max_text_size] + "\n\n... (truncated)"
+                result["type"] = "text"
+                result["content"] = text
+                result["mime_type"] = "text/plain"
+            except UnicodeDecodeError:
+                # Fall back to hex dump
+                result["type"] = "binary"
+                result["content"] = content[:1024].hex()
+                result["mime_type"] = "application/octet-stream"
+
+        else:
+            # Unknown type - try text first, then hex
+            try:
+                text = content.decode("utf-8")
+                if len(text) > max_text_size:
+                    text = text[:max_text_size] + "\n\n... (truncated)"
+                result["type"] = "text"
+                result["content"] = text
+                result["mime_type"] = "text/plain"
+            except UnicodeDecodeError:
+                result["type"] = "binary"
+                result["content"] = content[:1024].hex()
+                result["mime_type"] = "application/octet-stream"
+
+        doc.close()
+        return result
+
+    except Exception as e:
+        doc.close()
+        return {
+            "name": str(name_or_index),
+            "size": 0,
+            "type": "error",
+            "content": str(e),
+            "mime_type": None,
+        }
 
 
 def extract_attachment(input_path: Path, name_or_index: str | int, output_path: Path) -> dict[str, Any]:
@@ -152,6 +254,11 @@ def main() -> int:
     extract_all_parser.add_argument("--input", required=True, help="Input PDF path")
     extract_all_parser.add_argument("--output-dir", required=True, help="Output directory")
 
+    # Preview command
+    preview_parser = subparsers.add_parser("preview", help="Get attachment content for preview")
+    preview_parser.add_argument("--input", required=True, help="Input PDF path")
+    preview_parser.add_argument("--name", required=True, help="File name or index")
+
     args = parser.parse_args()
 
     try:
@@ -171,6 +278,13 @@ def main() -> int:
             result = extract_all_attachments(
                 Path(args.input),
                 Path(args.output_dir)
+            )
+            print(json.dumps(result))
+
+        elif args.command == "preview":
+            result = get_attachment_preview(
+                Path(args.input),
+                args.name
             )
             print(json.dumps(result))
 

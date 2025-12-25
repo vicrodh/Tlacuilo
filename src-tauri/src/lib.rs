@@ -1461,6 +1461,31 @@ fn attachments_extract_all(
         .collect())
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct AttachmentPreview {
+    name: String,
+    size: u64,
+    #[serde(rename = "type")]
+    content_type: String,
+    content: Option<String>,
+    mime_type: Option<String>,
+}
+
+/// Get attachment content for preview (images as base64, text as string)
+#[tauri::command]
+fn attachments_preview(app: AppHandle, input: String, name: String) -> Result<AttachmentPreview, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec!["preview", "--input", &input, "--name", &name];
+
+    let result = bridge
+        .run_script("pdf_attachments.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
 // ============================================================================
 // Form Fields (AcroForms)
 // ============================================================================
@@ -1786,6 +1811,7 @@ pub fn run() {
       attachments_list,
       attachments_extract,
       attachments_extract_all,
+      attachments_preview,
       form_fields_list,
       form_fields_fill,
       // PDF Security

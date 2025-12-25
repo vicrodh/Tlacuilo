@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { save } from '@tauri-apps/plugin-dialog';
-  import { Paperclip, Download, FolderOpen, RefreshCw, FileText, Image, FileArchive, File, Check, AlertCircle } from 'lucide-svelte';
+  import { Paperclip, Download, FolderOpen, RefreshCw, FileText, Image, FileArchive, File, Check, AlertCircle, X, Eye } from 'lucide-svelte';
 
   interface AttachmentInfo {
     index: number;
@@ -12,6 +12,14 @@
     created: string;
     modified: string;
     description: string;
+  }
+
+  interface AttachmentPreview {
+    name: string;
+    size: number;
+    type: 'image' | 'text' | 'binary' | 'error';
+    content: string | null;
+    mime_type: string | null;
   }
 
   interface Props {
@@ -26,6 +34,11 @@
   let error = $state<string | null>(null);
   let extracting = $state<number | null>(null);
   let extractSuccess = $state<number | null>(null);
+
+  // Preview state
+  let selectedAttachment = $state<AttachmentInfo | null>(null);
+  let preview = $state<AttachmentPreview | null>(null);
+  let previewLoading = $state(false);
 
   async function loadAttachments() {
     if (!filePath) return;
@@ -146,6 +159,50 @@
       // Fallback: do nothing
     });
   }
+
+  async function loadPreview(attachment: AttachmentInfo) {
+    if (selectedAttachment?.index === attachment.index && preview) {
+      // Already loaded, toggle off
+      closePreview();
+      return;
+    }
+
+    selectedAttachment = attachment;
+    previewLoading = true;
+    preview = null;
+
+    try {
+      preview = await invoke<AttachmentPreview>('attachments_preview', {
+        input: filePath,
+        name: attachment.name,
+      });
+    } catch (e) {
+      preview = {
+        name: attachment.name,
+        size: attachment.size,
+        type: 'error',
+        content: e instanceof Error ? e.message : String(e),
+        mime_type: null,
+      };
+    } finally {
+      previewLoading = false;
+    }
+  }
+
+  function closePreview() {
+    selectedAttachment = null;
+    preview = null;
+    previewLoading = false;
+  }
+
+  function isPreviewable(name: string): boolean {
+    const ext = name.split('.').pop()?.toLowerCase() || '';
+    const previewableExts = [
+      'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp',
+      'txt', 'md', 'json', 'xml', 'csv', 'log', 'html', 'css', 'js', 'ts', 'py', 'rs'
+    ];
+    return previewableExts.includes(ext);
+  }
 </script>
 
 <div class="attachments-tab">
@@ -198,7 +255,7 @@
     <div class="attachments-list">
       {#each attachments as attachment (attachment.index)}
         {@const Icon = getFileIcon(attachment.name)}
-        <div class="attachment-item">
+        <div class="attachment-item" class:selected={selectedAttachment?.index === attachment.index}>
           <div class="attachment-icon">
             <Icon size={18} />
           </div>
@@ -216,6 +273,20 @@
               {/if}
             </span>
           </div>
+          {#if isPreviewable(attachment.name)}
+            <button
+              class="preview-btn"
+              onclick={() => loadPreview(attachment)}
+              disabled={previewLoading && selectedAttachment?.index === attachment.index}
+              title="Preview"
+            >
+              {#if previewLoading && selectedAttachment?.index === attachment.index}
+                <RefreshCw size={14} class="spinning" />
+              {:else}
+                <Eye size={14} />
+              {/if}
+            </button>
+          {/if}
           <button
             class="extract-btn"
             onclick={() => extractAttachment(attachment)}
@@ -238,6 +309,40 @@
       <div class="success-toast">
         <Check size={14} />
         <span>All attachments extracted</span>
+      </div>
+    {/if}
+
+    <!-- Preview Panel -->
+    {#if preview}
+      <div class="preview-panel">
+        <div class="preview-header">
+          <span class="preview-title" title={preview.name}>{preview.name}</span>
+          <button class="close-preview-btn" onclick={closePreview} title="Close preview">
+            <X size={14} />
+          </button>
+        </div>
+        <div class="preview-content">
+          {#if preview.type === 'image' && preview.content}
+            <img
+              src={`data:${preview.mime_type || 'image/png'};base64,${preview.content}`}
+              alt={preview.name}
+              class="preview-image"
+            />
+          {:else if preview.type === 'text' && preview.content}
+            <pre class="preview-text">{preview.content}</pre>
+          {:else if preview.type === 'binary'}
+            <div class="preview-binary">
+              <FileArchive size={24} class="opacity-40" />
+              <p>Binary file - cannot preview</p>
+              <span class="hint">Use extract to download</span>
+            </div>
+          {:else if preview.type === 'error'}
+            <div class="preview-error">
+              <AlertCircle size={20} />
+              <p>{preview.content}</p>
+            </div>
+          {/if}
+        </div>
       </div>
     {/if}
   {/if}
@@ -333,6 +438,12 @@
     background-color: var(--nord2);
   }
 
+  .attachment-item.selected {
+    background-color: var(--nord2);
+    border-left: 2px solid var(--nord8);
+    margin-left: -2px;
+  }
+
   .attachment-icon {
     display: flex;
     align-items: center;
@@ -403,6 +514,31 @@
   }
 
   .extract-btn:disabled {
+    cursor: not-allowed;
+  }
+
+  .preview-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--nord4);
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .preview-btn:hover:not(:disabled) {
+    background-color: var(--nord3);
+    color: var(--nord8);
+  }
+
+  .preview-btn:disabled {
     cursor: not-allowed;
   }
 
@@ -482,5 +618,109 @@
     to {
       transform: rotate(360deg);
     }
+  }
+
+  /* Preview Panel */
+  .preview-panel {
+    border-top: 1px solid var(--nord3);
+    background-color: var(--nord0);
+    max-height: 300px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    background-color: var(--nord1);
+    border-bottom: 1px solid var(--nord3);
+  }
+
+  .preview-title {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--nord6);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  .close-preview-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--nord4);
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .close-preview-btn:hover {
+    background-color: var(--nord2);
+    color: var(--nord11);
+  }
+
+  .preview-content {
+    flex: 1;
+    overflow: auto;
+    padding: 0.5rem;
+  }
+
+  .preview-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    display: block;
+    margin: 0 auto;
+  }
+
+  .preview-text {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.625rem;
+    line-height: 1.4;
+    margin: 0;
+    padding: 0.5rem;
+    background-color: var(--nord1);
+    border-radius: 4px;
+    color: var(--nord5);
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .preview-binary,
+  .preview-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--nord4);
+  }
+
+  .preview-binary p,
+  .preview-error p {
+    font-size: 0.75rem;
+    margin: 0;
+  }
+
+  .preview-binary .hint {
+    font-size: 0.625rem;
+    opacity: 0.6;
+  }
+
+  .preview-error {
+    color: var(--nord11);
   }
 </style>

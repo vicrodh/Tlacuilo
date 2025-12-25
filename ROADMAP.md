@@ -111,7 +111,7 @@ The viewer is usable for daily work. Manipulation tools (merge, split, rotate, c
 - [x] List embedded files with metadata
 - [x] Extract individual attachment (Save As dialog)
 - [x] Extract all attachments
-- [ ] Attachment preview (images, text)
+- [x] Attachment preview (images, text)
 
 ---
 
