@@ -85,6 +85,7 @@
         page: page, // 1-indexed
       });
       textBlocks = result.blocks;
+      console.log(`[EditOverlay] Loaded ${textBlocks.length} text blocks for page ${page}`);
     } catch (e) {
       console.error('[EditOverlay] Failed to fetch text blocks:', e);
       textBlocks = [];
@@ -191,9 +192,13 @@
   });
 
   function handleMouseDown(e: MouseEvent) {
-    if (e.button !== 0 || !interactive) return;
+    if (e.button !== 0 || !interactive) {
+      console.log('[EditOverlay] mousedown ignored - button:', e.button, 'interactive:', interactive);
+      return;
+    }
 
     const pos = getMousePos(e);
+    console.log('[EditOverlay] mousedown at', pos, 'activeTool:', store.activeTool);
 
     // Handle select tool - check if clicking on an operation
     if (store.activeTool === 'select' || !store.activeTool) {
@@ -214,6 +219,7 @@
     if (store.activeTool === 'text' || store.activeTool === 'image' ||
         store.activeTool === 'shape-rect' || store.activeTool === 'shape-ellipse' ||
         store.activeTool === 'line') {
+      console.log('[EditOverlay] Starting draw with tool:', store.activeTool);
       isDrawing = true;
       drawStart = pos;
       drawEnd = pos;
@@ -376,6 +382,7 @@
   style="
     width: {pageWidth * scale}px;
     height: {pageHeight * scale}px;
+    z-index: 30;
     cursor: {cursorStyle()};
   "
   onmousedown={handleMouseDown}

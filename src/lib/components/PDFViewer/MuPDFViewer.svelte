@@ -1929,7 +1929,7 @@
                     draggable="false"
                   />
 
-                  <!-- Text layer for text selection (always visible for copy support) -->
+                  <!-- Text layer for text selection (disabled when Edit Mode is active) -->
                   <TextLayer
                     pdfPath={filePath}
                     page={pageNum}
@@ -1939,6 +1939,7 @@
                     store={annotationsStore}
                     showAnnotationTools={showAnnotationTools}
                     onSearchText={handleSearchText}
+                    disabled={showEditTools}
                   />
 
                   <!-- Search highlight layer (shows matches when searching) -->

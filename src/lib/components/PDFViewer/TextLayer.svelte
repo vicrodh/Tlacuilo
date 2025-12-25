@@ -41,9 +41,10 @@
     store: AnnotationsStore;
     showAnnotationTools?: boolean;
     onSearchText?: (text: string) => void;
+    disabled?: boolean; // Disable text layer interaction (e.g., when Edit Mode is active)
   }
 
-  let { pdfPath, page, pageWidth, pageHeight, scale = 1, store, showAnnotationTools = false, onSearchText }: Props = $props();
+  let { pdfPath, page, pageWidth, pageHeight, scale = 1, store, showAnnotationTools = false, onSearchText, disabled = false }: Props = $props();
 
   // Context menu state
   let contextMenu = $state({ visible: false, x: 0, y: 0, text: '' });
@@ -375,7 +376,10 @@
   const isTextSelectMode = $derived(store.activeTool === 'text-select');
 
   // TextLayer should capture events only in text-select mode or when no tool is active (for copy)
-  const shouldCaptureEvents = $derived(store.activeTool === null || store.activeTool === 'text-select');
+  // Also respect the disabled prop (e.g., when Edit Mode is active)
+  const shouldCaptureEvents = $derived(
+    !disabled && (store.activeTool === null || store.activeTool === 'text-select')
+  );
 
   // Context menu handlers
   function handleContextMenu(e: MouseEvent) {
