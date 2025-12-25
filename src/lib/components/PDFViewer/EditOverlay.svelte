@@ -61,15 +61,21 @@
   interface Props {
     store: EditsStore;
     page: number;
-    pageWidth: number;
-    pageHeight: number;
+    pageWidth: number;      // Rendered page width in pixels
+    pageHeight: number;     // Rendered page height in pixels
+    pdfPageWidth?: number;  // Original PDF page width in points
+    pdfPageHeight?: number; // Original PDF page height in points
     pdfPath: string;
     scale?: number;
     interactive?: boolean;
     hasPreview?: boolean; // When true, hide operation visuals (preview image shows them)
   }
 
-  let { store, page, pageWidth, pageHeight, pdfPath, scale = 1, interactive = true, hasPreview = false }: Props = $props();
+  let { store, page, pageWidth, pageHeight, pdfPageWidth, pdfPageHeight, pdfPath, scale = 1, interactive = true, hasPreview = false }: Props = $props();
+
+  // Calculate the scale factor from PDF points to rendered pixels
+  // PDF uses points (1/72 inch), rendered at specific DPI
+  const pdfToPixelScale = $derived(pdfPageWidth ? pageWidth / pdfPageWidth : 150 / 72);
 
   let overlayElement: HTMLDivElement;
 
@@ -478,6 +484,20 @@
 
   function handleTextKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
+      // Stop propagation to prevent closing the tab
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Restore original text if this is a replace operation
+      const op = editingTextId ? store.getOpById(editingTextId) : null;
+      if (op && op.type === 'replace_text') {
+        const replaceOp = op as ReplaceTextOp;
+        // If text wasn't changed, remove the operation entirely
+        if (editingTextContent === replaceOp.originalText) {
+          store.removeOp(op.id);
+        }
+      }
+
       editingTextId = null;
       editingTextContent = '';
     }
@@ -584,11 +604,12 @@
         {@const isReplaceOp = op.type === 'replace_text'}
         <!-- Text box - always show textarea when actively editing -->
         {#if editingTextId === op.id}
+          {@const scaledFontSize = textOp.style.fontSize * pdfToPixelScale}
           <textarea
             class="w-full p-2 outline-none resize-y"
             style="
               font-family: {textOp.style.fontFamily};
-              font-size: {textOp.style.fontSize * scale}px;
+              font-size: {scaledFontSize}px;
               color: {textOp.style.color};
               font-weight: {textOp.style.bold ? 'bold' : 'normal'};
               font-style: {textOp.style.italic ? 'italic' : 'normal'};
@@ -598,24 +619,26 @@
               border-radius: 4px;
               min-height: {minEditHeight}px;
               box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-              line-height: 1.4;
+              line-height: 1.3;
             "
             bind:value={editingTextContent}
             onblur={() => handleTextBlur(op)}
             onkeydown={(e) => handleTextKeydown(e)}
           ></textarea>
         {:else if showVisuals}
+          {@const scaledFontSize = textOp.style.fontSize * pdfToPixelScale}
           <div
             class="w-full h-full p-1 overflow-hidden cursor-text"
             style="
               font-family: {textOp.style.fontFamily};
-              font-size: {textOp.style.fontSize * scale}px;
+              font-size: {scaledFontSize}px;
               color: {textOp.style.color};
               font-weight: {textOp.style.bold ? 'bold' : 'normal'};
               font-style: {textOp.style.italic ? 'italic' : 'normal'};
               text-align: {textOp.style.align || 'left'};
               background-color: {isReplaceOp ? 'white' : (textOp.text ? 'transparent' : 'rgba(136, 192, 208, 0.1)')};
               border: 1px dashed {textOp.text ? 'transparent' : 'var(--nord8)'};
+              line-height: 1.3;
             "
             ondblclick={() => startEditingText(op)}
           >

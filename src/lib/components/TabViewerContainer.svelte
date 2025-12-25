@@ -27,14 +27,6 @@
     }
   };
 
-  // Handle close-active-tab event from keyboard shortcuts
-  function handleCloseActiveTabEvent() {
-    const activeTab = tabsStore.activeTab;
-    if (activeTab) {
-      handleCloseTab(activeTab.id);
-    }
-  }
-
   // Handle pending file from app menu
   function handlePendingFileReady() {
     const pending = consumePendingOpenFile();
@@ -57,6 +49,65 @@
     }
   }
 
+  // Global keyboard shortcuts for tabs
+  function handleKeyDown(e: KeyboardEvent) {
+    // Only handle when visible
+    if (!visible) return;
+
+    // Ctrl+T: New tab
+    if (e.ctrlKey && !e.shiftKey && e.key === 't') {
+      e.preventDefault();
+      e.stopPropagation();
+      tabsStore.createTab();
+      return;
+    }
+
+    // Ctrl+W: Close current tab
+    if (e.ctrlKey && !e.shiftKey && e.key === 'w') {
+      e.preventDefault();
+      e.stopPropagation();
+      const activeTab = tabsStore.activeTab;
+      if (activeTab) {
+        handleCloseTab(activeTab.id);
+      }
+      return;
+    }
+
+    // Ctrl+Shift+T: Reopen last closed tab
+    if (e.ctrlKey && e.shiftKey && e.key === 'T') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (tabsStore.canReopenTab) {
+        tabsStore.reopenLastClosedTab();
+      }
+      return;
+    }
+
+    // Ctrl+Tab: Next tab
+    if (e.ctrlKey && !e.shiftKey && e.key === 'Tab') {
+      e.preventDefault();
+      e.stopPropagation();
+      tabsStore.nextTab();
+      return;
+    }
+
+    // Ctrl+Shift+Tab: Previous tab
+    if (e.ctrlKey && e.shiftKey && e.key === 'Tab') {
+      e.preventDefault();
+      e.stopPropagation();
+      tabsStore.prevTab();
+      return;
+    }
+
+    // Ctrl+1-9: Switch to tab by index
+    if (e.ctrlKey && !e.shiftKey && e.key >= '1' && e.key <= '9') {
+      e.preventDefault();
+      e.stopPropagation();
+      tabsStore.switchToTabIndex(parseInt(e.key));
+      return;
+    }
+  }
+
   // Check for pending file on mount
   onMount(() => {
     const pending = consumePendingOpenFile();
@@ -67,8 +118,8 @@
       tabsStore.createTab();
     }
 
-    // Listen for close-active-tab event from App.svelte keyboard shortcuts
-    window.addEventListener('close-active-tab', handleCloseActiveTabEvent);
+    // Global keyboard shortcuts
+    window.addEventListener('keydown', handleKeyDown, true);
     // Listen for pending file from app menu
     window.addEventListener('pending-file-ready', handlePendingFileReady);
     // Listen for open-pdf-file event from MuPDFViewer toolbar
@@ -76,7 +127,7 @@
   });
 
   onDestroy(() => {
-    window.removeEventListener('close-active-tab', handleCloseActiveTabEvent);
+    window.removeEventListener('keydown', handleKeyDown, true);
     window.removeEventListener('pending-file-ready', handlePendingFileReady);
     window.removeEventListener('open-pdf-file', handleOpenPdfFile as EventListener);
   });

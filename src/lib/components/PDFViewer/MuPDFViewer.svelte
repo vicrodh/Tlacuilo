@@ -2075,11 +2075,14 @@
 
                   <!-- Edit overlay (shows edit operations) -->
                   {#if showEditTools}
+                    {@const pdfPageSize = pdfInfo?.page_sizes[pageNum - 1]}
                     <EditOverlay
                       store={editsStore}
                       page={pageNum}
                       pageWidth={loadedPage.width}
                       pageHeight={loadedPage.height}
+                      pdfPageWidth={pdfPageSize?.width}
+                      pdfPageHeight={pdfPageSize?.height}
                       pdfPath={filePath}
                       scale={1}
                       interactive={true}

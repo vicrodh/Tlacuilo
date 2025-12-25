@@ -14,6 +14,16 @@ const MAX_TABS = 10;
 // Maximum number of tabs to keep "active" (with loaded pages in memory)
 const MAX_ACTIVE_TABS = 3;
 
+// Recently closed tabs cache (for Ctrl+Shift+T restore)
+const RECENTLY_CLOSED_MAX = 5;
+const RECENTLY_CLOSED_TTL = 2 * 60 * 1000; // 2 minutes
+
+interface RecentlyClosedTab {
+  filePath: string;
+  fileName: string;
+  closedAt: number;
+}
+
 export interface RenderedPage {
   pageNum: number;
   base64: string;
@@ -70,6 +80,29 @@ export function createTabsStore() {
 
   // LRU tracking for resource management
   let tabAccessOrder: string[] = [];
+
+  // Recently closed tabs (for restore functionality)
+  let recentlyClosed = $state<RecentlyClosedTab[]>([]);
+
+  // Clean up expired entries periodically
+  function cleanupRecentlyClosed() {
+    const now = Date.now();
+    recentlyClosed = recentlyClosed.filter(t => (now - t.closedAt) < RECENTLY_CLOSED_TTL);
+  }
+
+  // Add to recently closed
+  function addToRecentlyClosed(filePath: string, fileName: string) {
+    cleanupRecentlyClosed();
+
+    // Don't add duplicates
+    recentlyClosed = recentlyClosed.filter(t => t.filePath !== filePath);
+
+    // Add new entry
+    recentlyClosed = [
+      { filePath, fileName, closedAt: Date.now() },
+      ...recentlyClosed,
+    ].slice(0, RECENTLY_CLOSED_MAX);
+  }
 
   function updateLRU(tabId: string) {
     tabAccessOrder = tabAccessOrder.filter(id => id !== tabId);
@@ -157,6 +190,11 @@ export function createTabsStore() {
       return false;
     }
 
+    // Save to recently closed if it has a file
+    if (tab.filePath) {
+      addToRecentlyClosed(tab.filePath, tab.fileName);
+    }
+
     // Remove from LRU
     tabAccessOrder = tabAccessOrder.filter(id => id !== tabId);
 
@@ -175,6 +213,21 @@ export function createTabsStore() {
     }
 
     return true;
+  }
+
+  /**
+   * Reopen the most recently closed tab
+   */
+  function reopenLastClosedTab(): string | null {
+    cleanupRecentlyClosed();
+
+    if (recentlyClosed.length === 0) return null;
+
+    const [lastClosed, ...rest] = recentlyClosed;
+    recentlyClosed = rest;
+
+    // Open the tab
+    return createTab(lastClosed.filePath);
   }
 
   /**
@@ -392,6 +445,8 @@ export function createTabsStore() {
     get activeTab() { return getActiveTab(); },
     get tabCount() { return tabs.length; },
     get hasUnsavedChanges() { return hasUnsavedChanges(); },
+    get recentlyClosed() { return recentlyClosed; },
+    get canReopenTab() { cleanupRecentlyClosed(); return recentlyClosed.length > 0; },
 
     // Tab operations
     createTab,
@@ -405,6 +460,7 @@ export function createTabsStore() {
     getTab,
     getActiveTab,
     getUnsavedTabs,
+    reopenLastClosedTab,
 
     // Navigation
     nextTab,
