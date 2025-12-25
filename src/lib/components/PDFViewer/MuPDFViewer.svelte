@@ -26,8 +26,11 @@
   import AnnotationToolbar from './AnnotationToolbar.svelte';
   import AnnotationOverlay from './AnnotationOverlay.svelte';
   import RedactionOverlay from './RedactionOverlay.svelte';
+  import EditToolbar from './EditToolbar.svelte';
+  import EditOverlay from './EditOverlay.svelte';
   import FormFieldsOverlay from './FormFieldsOverlay.svelte';
   import { createRedactionsStore, setRedactionsStore } from '$lib/stores/redactions.svelte';
+  import { createEditsStore, setEditsStore } from '$lib/stores/edits.svelte';
   import ViewerRightSidebar from './ViewerRightSidebar.svelte';
   import TextLayer from './TextLayer.svelte';
   import SearchHighlightLayer from './SearchHighlightLayer.svelte';
@@ -100,9 +103,37 @@
   const redactionsStore = createRedactionsStore();
   setRedactionsStore(redactionsStore);
 
+  // Edit mode
+  const editsStore = createEditsStore();
+  setEditsStore(editsStore);
+
   let showAnnotationTools = $state(false);
   let showAnnotationOverlay = $state(true); // Toggle visibility of overlay
   let annotationsDirty = $state(false);
+
+  // Edit mode (mutually exclusive with annotation mode per EDITOR_MODE_PLAN)
+  let showEditTools = $state(false);
+
+  // Toggle annotation mode (disables edit mode)
+  function toggleAnnotationMode() {
+    if (showAnnotationTools) {
+      showAnnotationTools = false;
+    } else {
+      showAnnotationTools = true;
+      showEditTools = false; // Mutually exclusive
+    }
+  }
+
+  // Toggle edit mode (disables annotation mode)
+  function toggleEditMode() {
+    if (showEditTools) {
+      showEditTools = false;
+    } else {
+      showEditTools = true;
+      showAnnotationTools = false; // Mutually exclusive
+    }
+  }
+
   let isSavingAnnotations = $state(false);
   let annotationsInitialized = $state(false);
   let lastAnnotationCount = $state(0);
@@ -638,6 +669,58 @@
     } finally {
       isApplyingRedactions = false;
       redactionsStore.setApplying(false);
+    }
+  }
+
+  // Apply edit operations to PDF
+  // This implements the "redact original + insert new" pattern from EDITOR_MODE_PLAN
+  async function applyEdits() {
+    if (!pdfInfo || editsStore.opCount === 0) return;
+
+    // Confirm with user
+    const confirmed = await ask(
+      `Apply ${editsStore.opCount} edit operation(s)?\n\nThis will modify the PDF content. A new file will be created.`,
+      { title: 'Apply Edits', kind: 'info', okLabel: 'Apply', cancelLabel: 'Cancel' }
+    );
+
+    if (!confirmed) return;
+
+    // Ask where to save
+    const defaultPath = filePath.replace('.pdf', '-edited.pdf');
+    const outputPath = await save({
+      title: 'Save Edited PDF',
+      defaultPath,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+
+    if (!outputPath) return;
+
+    editsStore.setApplying(true);
+
+    try {
+      // For Phase 2, we'll implement the actual edit application
+      // For now, show a placeholder message
+      // TODO: Implement backend integration for text/image edits
+      await message(
+        'Edit mode is in development.\n\nThis will apply text insertions, image replacements, and shape additions to your PDF.',
+        { title: 'Coming Soon', kind: 'info' }
+      );
+
+      // When implemented, this will:
+      // 1. For each InsertTextOp: Insert text at position
+      // 2. For each ReplaceTextOp: Redact original area, insert new text
+      // 3. For each InsertImageOp: Insert image at position
+      // 4. For each DrawShapeOp: Draw shape on page
+
+      // Clear edits after successful apply
+      // editsStore.clearOps();
+      // showEditTools = false;
+
+    } catch (err) {
+      console.error('[MuPDFViewer] Failed to apply edits:', err);
+      await message(`Failed to apply edits: ${err}`, { title: 'Error', kind: 'error' });
+    } finally {
+      editsStore.setApplying(false);
     }
   }
 
@@ -1530,13 +1613,27 @@
 
         <!-- Annotation tools toggle -->
         <button
-          onclick={() => showAnnotationTools = !showAnnotationTools}
+          onclick={toggleAnnotationMode}
           class="p-2 rounded-lg transition-colors"
           class:bg-[var(--nord8)]={showAnnotationTools}
           style="color: {showAnnotationTools ? 'var(--nord0)' : 'var(--nord4)'};"
           title="Annotation tools"
         >
           <PenTool size={16} />
+        </button>
+
+        <!-- Edit mode toggle -->
+        <button
+          onclick={toggleEditMode}
+          class="p-2 rounded-lg transition-colors"
+          class:bg-[var(--nord10)]={showEditTools}
+          style="color: {showEditTools ? 'var(--nord6)' : 'var(--nord4)'};"
+          title="Edit mode - Modify PDF content"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+          </svg>
         </button>
 
         <!-- Form mode toggle (only shown when PDF has forms) -->
@@ -1705,6 +1802,20 @@
         />
       </div>
     {/if}
+
+    <!-- Edit Toolbar -->
+    {#if showEditTools}
+      <div
+        class="flex items-center justify-center px-3 py-2 border-b"
+        style="background-color: var(--nord1); border-color: var(--nord3);"
+      >
+        <EditToolbar
+          store={editsStore}
+          onApply={applyEdits}
+          onDiscard={() => { editsStore.clearOps(); showEditTools = false; }}
+        />
+      </div>
+    {/if}
   {/if}
 
   <div class="flex-1 flex overflow-hidden">
@@ -1811,6 +1922,18 @@
                       scale={1}
                       interactive={showAnnotationTools}
                       onRemoveMark={(id) => redactionsStore.removeMark(id)}
+                    />
+                  {/if}
+
+                  <!-- Edit overlay (shows edit operations) -->
+                  {#if showEditTools}
+                    <EditOverlay
+                      store={editsStore}
+                      page={pageNum}
+                      pageWidth={loadedPage.width}
+                      pageHeight={loadedPage.height}
+                      scale={1}
+                      interactive={true}
                     />
                   {/if}
 
