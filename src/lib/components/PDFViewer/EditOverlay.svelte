@@ -122,18 +122,6 @@
     return blockArea > 0 ? overlapArea / blockArea : 0;
   }
 
-  // Estimate font size from block dimensions
-  function estimateFontSize(block: TextBlockInfo): number {
-    const lineCount = block.lines.length || 1;
-    // Convert normalized height to pixels, then estimate font size
-    // Font size is typically ~80% of line height
-    const blockHeightPx = block.rect.height * pageHeight;
-    const avgLineHeight = blockHeightPx / lineCount;
-    const estimatedSize = Math.round(avgLineHeight * 0.85);
-    // Clamp to reasonable range
-    return Math.max(8, Math.min(72, estimatedSize));
-  }
-
   // Handle click on an existing text block
   function handleTextBlockClick(block: TextBlockInfo) {
     if (!interactive) return;
@@ -141,18 +129,16 @@
 
     // Create a ReplaceTextOp for this block
     const text = getBlockText(block);
-    const estimatedFontSize = estimateFontSize(block);
 
+    // TODO: Extract actual font info from PDF using Python backend
+    // For now, use the default text style from toolbar
     const op = store.addOp<ReplaceTextOp>({
       type: 'replace_text',
       page,
       rect: { ...block.rect },
       originalText: text,
       text: text, // Start with original text
-      style: {
-        ...store.activeTextStyle,
-        fontSize: estimatedFontSize,
-      },
+      style: { ...store.activeTextStyle },
     });
 
     // Start editing immediately
