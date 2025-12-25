@@ -1,0 +1,681 @@
+"""
+PDF Edit operations - Extract and modify PDF content.
+
+Provides text block detection and content editing capabilities.
+Uses PyMuPDF for extraction and manipulation.
+
+CLI usage (dev):
+  python pdf_edit.py text-blocks --input doc.pdf --page 0
+  python pdf_edit.py insert-text --input doc.pdf --output out.pdf --page 0 --x 100 --y 100 --text "Hello"
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+import json
+from pathlib import Path
+from typing import Optional
+
+import fitz  # PyMuPDF
+
+
+def get_text_blocks(
+    input_path: Path,
+    page_num: int,
+) -> dict:
+    """
+    Extract text blocks from a PDF page with their positions.
+
+    Returns blocks with coordinates in PDF points (origin bottom-left).
+    Each block contains lines, and each line contains spans with font info.
+    """
+    result = {
+        "success": False,
+        "page": page_num,
+        "blocks": [],
+        "error": None,
+    }
+
+    try:
+        doc = fitz.open(input_path)
+
+        if page_num < 0 or page_num >= len(doc):
+            result["error"] = f"Invalid page number: {page_num}"
+            doc.close()
+            return result
+
+        page = doc[page_num]
+        page_height = page.rect.height
+
+        # Get text as dictionary with full details
+        text_dict = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+
+        blocks = []
+        for block in text_dict.get("blocks", []):
+            # Skip image blocks
+            if block.get("type") != 0:
+                continue
+
+            block_data = {
+                "id": f"block_{page_num}_{len(blocks)}",
+                "bbox": {
+                    "x0": block["bbox"][0],
+                    "y0": block["bbox"][1],
+                    "x1": block["bbox"][2],
+                    "y1": block["bbox"][3],
+                },
+                # Normalized coordinates (0-1) for frontend
+                "rect": {
+                    "x": block["bbox"][0] / page.rect.width,
+                    "y": block["bbox"][1] / page_height,
+                    "width": (block["bbox"][2] - block["bbox"][0]) / page.rect.width,
+                    "height": (block["bbox"][3] - block["bbox"][1]) / page_height,
+                },
+                "lines": [],
+            }
+
+            for line in block.get("lines", []):
+                line_data = {
+                    "bbox": {
+                        "x0": line["bbox"][0],
+                        "y0": line["bbox"][1],
+                        "x1": line["bbox"][2],
+                        "y1": line["bbox"][3],
+                    },
+                    "spans": [],
+                }
+
+                for span in line.get("spans", []):
+                    span_data = {
+                        "text": span.get("text", ""),
+                        "font": span.get("font", ""),
+                        "size": span.get("size", 12),
+                        "color": span.get("color", 0),  # Integer color
+                        "flags": span.get("flags", 0),  # Bold, italic, etc.
+                        "bbox": {
+                            "x0": span["bbox"][0],
+                            "y0": span["bbox"][1],
+                            "x1": span["bbox"][2],
+                            "y1": span["bbox"][3],
+                        },
+                    }
+                    line_data["spans"].append(span_data)
+
+                block_data["lines"].append(line_data)
+
+            # Get full text of block
+            block_text = ""
+            for line in block_data["lines"]:
+                for span in line["spans"]:
+                    block_text += span["text"]
+                block_text += "\n"
+            block_data["text"] = block_text.strip()
+
+            blocks.append(block_data)
+
+        result["success"] = True
+        result["blocks"] = blocks
+        result["page_width"] = page.rect.width
+        result["page_height"] = page_height
+        doc.close()
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
+
+
+def get_all_text_blocks(input_path: Path) -> dict:
+    """
+    Extract text blocks from all pages.
+    """
+    result = {
+        "success": False,
+        "pages": [],
+        "error": None,
+    }
+
+    try:
+        doc = fitz.open(input_path)
+
+        for page_num in range(len(doc)):
+            page_result = get_text_blocks(input_path, page_num)
+            if page_result["success"]:
+                result["pages"].append({
+                    "page": page_num,
+                    "blocks": page_result["blocks"],
+                    "width": page_result["page_width"],
+                    "height": page_result["page_height"],
+                })
+
+        result["success"] = True
+        doc.close()
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
+
+
+def insert_text(
+    input_path: Path,
+    output_path: Path,
+    page_num: int,
+    x: float,
+    y: float,
+    text: str,
+    font_name: str = "helv",
+    font_size: float = 12,
+    color: tuple = (0, 0, 0),
+) -> dict:
+    """
+    Insert text at a specific position on a page.
+
+    Coordinates are in PDF points, origin at bottom-left.
+    """
+    result = {
+        "success": False,
+        "message": "",
+    }
+
+    try:
+        doc = fitz.open(input_path)
+
+        if page_num < 0 or page_num >= len(doc):
+            result["message"] = f"Invalid page number: {page_num}"
+            doc.close()
+            return result
+
+        page = doc[page_num]
+
+        # Insert text
+        point = fitz.Point(x, y)
+        rc = page.insert_text(
+            point,
+            text,
+            fontname=font_name,
+            fontsize=font_size,
+            color=color,
+        )
+
+        if rc < 0:
+            result["message"] = "Failed to insert text"
+            doc.close()
+            return result
+
+        doc.save(output_path)
+        doc.close()
+
+        result["success"] = True
+        result["message"] = f"Text inserted at ({x}, {y})"
+
+    except Exception as e:
+        result["message"] = str(e)
+
+    return result
+
+
+def replace_text_area(
+    input_path: Path,
+    output_path: Path,
+    page_num: int,
+    x0: float,
+    y0: float,
+    x1: float,
+    y1: float,
+    new_text: str,
+    font_name: str = "helv",
+    font_size: float = 12,
+    color: tuple = (0, 0, 0),
+) -> dict:
+    """
+    Replace text in a rectangular area.
+
+    1. Adds a redaction annotation to remove existing content
+    2. Applies the redaction
+    3. Inserts new text at the position
+    """
+    result = {
+        "success": False,
+        "message": "",
+    }
+
+    try:
+        doc = fitz.open(input_path)
+
+        if page_num < 0 or page_num >= len(doc):
+            result["message"] = f"Invalid page number: {page_num}"
+            doc.close()
+            return result
+
+        page = doc[page_num]
+        rect = fitz.Rect(x0, y0, x1, y1)
+
+        # Step 1: Add redaction to remove existing content
+        page.add_redact_annot(rect, fill=(1, 1, 1))  # White fill
+
+        # Step 2: Apply redaction
+        page.apply_redactions()
+
+        # Step 3: Insert new text
+        # Position at top-left of the rect, adjusted for text baseline
+        text_point = fitz.Point(x0, y0 + font_size)
+        page.insert_text(
+            text_point,
+            new_text,
+            fontname=font_name,
+            fontsize=font_size,
+            color=color,
+        )
+
+        doc.save(output_path, garbage=4, deflate=True)
+        doc.close()
+
+        result["success"] = True
+        result["message"] = f"Text replaced in area"
+
+    except Exception as e:
+        result["message"] = str(e)
+
+    return result
+
+
+def insert_image(
+    input_path: Path,
+    output_path: Path,
+    image_path: Path,
+    page_num: int,
+    x0: float,
+    y0: float,
+    x1: float,
+    y1: float,
+    keep_aspect: bool = True,
+) -> dict:
+    """
+    Insert an image at a specific position on a page.
+    """
+    result = {
+        "success": False,
+        "message": "",
+    }
+
+    try:
+        doc = fitz.open(input_path)
+
+        if page_num < 0 or page_num >= len(doc):
+            result["message"] = f"Invalid page number: {page_num}"
+            doc.close()
+            return result
+
+        page = doc[page_num]
+        rect = fitz.Rect(x0, y0, x1, y1)
+
+        # Insert image
+        page.insert_image(rect, filename=str(image_path), keep_proportion=keep_aspect)
+
+        doc.save(output_path)
+        doc.close()
+
+        result["success"] = True
+        result["message"] = f"Image inserted"
+
+    except Exception as e:
+        result["message"] = str(e)
+
+    return result
+
+
+def apply_edits(
+    input_path: Path,
+    output_path: Path,
+    edits_json: str,
+) -> dict:
+    """
+    Apply multiple edit operations to a PDF.
+
+    edits_json format:
+    {
+        "ops": [
+            {
+                "type": "insert_text" | "replace_text" | "draw_shape",
+                "page": 0,  # 0-indexed
+                "rect": { "x": 0.1, "y": 0.1, "width": 0.3, "height": 0.05 },  # normalized
+                "text": "Hello",  # for text ops
+                "style": { "fontFamily": "Helvetica", "fontSize": 12, "color": "#000000" },
+                "shape": "rect" | "ellipse" | "line",  # for draw_shape
+                "strokeColor": "#000000",
+                "strokeWidth": 1,
+                "fillColor": "#FFFFFF"  # optional
+            }
+        ],
+        "pageWidths": { "0": 612, "1": 612 },   # page width in points
+        "pageHeights": { "0": 792, "1": 792 }   # page height in points
+    }
+    """
+    result = {
+        "success": False,
+        "message": "",
+        "applied": 0,
+    }
+
+    try:
+        edits = json.loads(edits_json)
+        ops = edits.get("ops", [])
+        page_widths = edits.get("pageWidths", {})
+        page_heights = edits.get("pageHeights", {})
+
+        if not ops:
+            result["success"] = True
+            result["message"] = "No operations to apply"
+            return result
+
+        doc = fitz.open(input_path)
+        applied_count = 0
+
+        for op in ops:
+            op_type = op.get("type")
+            page_num = op.get("page", 0)
+
+            if page_num < 0 or page_num >= len(doc):
+                continue
+
+            page = doc[page_num]
+            page_width = float(page_widths.get(str(page_num), page.rect.width))
+            page_height = float(page_heights.get(str(page_num), page.rect.height))
+
+            # Convert normalized rect to PDF points
+            rect = op.get("rect", {})
+            x0 = rect.get("x", 0) * page_width
+            y0 = rect.get("y", 0) * page_height
+            w = rect.get("width", 0) * page_width
+            h = rect.get("height", 0) * page_height
+            x1 = x0 + w
+            y1 = y0 + h
+
+            if op_type == "insert_text":
+                text = op.get("text", "")
+                style = op.get("style", {})
+                font_name = style.get("fontFamily", "helv")
+                font_size = style.get("fontSize", 12)
+                color_str = style.get("color", "#000000")
+
+                # Parse hex color to RGB tuple
+                color = parse_hex_color(color_str)
+
+                # Map common font names to PyMuPDF names
+                font_map = {
+                    "Helvetica": "helv",
+                    "Times New Roman": "tiro",
+                    "Times": "tiro",
+                    "Courier": "cour",
+                    "Arial": "helv",
+                }
+                font_name = font_map.get(font_name, "helv")
+
+                # Insert at top-left of rect, adjusted for baseline
+                point = fitz.Point(x0, y0 + font_size)
+                page.insert_text(
+                    point,
+                    text,
+                    fontname=font_name,
+                    fontsize=font_size,
+                    color=color,
+                )
+                applied_count += 1
+
+            elif op_type == "replace_text":
+                text = op.get("text", "")
+                style = op.get("style", {})
+                font_name = style.get("fontFamily", "helv")
+                font_size = style.get("fontSize", 12)
+                color_str = style.get("color", "#000000")
+                color = parse_hex_color(color_str)
+
+                font_map = {
+                    "Helvetica": "helv",
+                    "Times New Roman": "tiro",
+                    "Times": "tiro",
+                    "Courier": "cour",
+                    "Arial": "helv",
+                }
+                font_name = font_map.get(font_name, "helv")
+
+                # Redact original area
+                redact_rect = fitz.Rect(x0, y0, x1, y1)
+                page.add_redact_annot(redact_rect, fill=(1, 1, 1))  # White fill
+                page.apply_redactions()
+
+                # Insert new text
+                point = fitz.Point(x0, y0 + font_size)
+                page.insert_text(
+                    point,
+                    text,
+                    fontname=font_name,
+                    fontsize=font_size,
+                    color=color,
+                )
+                applied_count += 1
+
+            elif op_type == "draw_shape":
+                shape_type = op.get("shape", "rect")
+                stroke_color_str = op.get("strokeColor", "#000000")
+                stroke_width = op.get("strokeWidth", 1)
+                fill_color_str = op.get("fillColor")
+
+                stroke_color = parse_hex_color(stroke_color_str)
+                fill_color = parse_hex_color(fill_color_str) if fill_color_str else None
+
+                shape = page.new_shape()
+                draw_rect = fitz.Rect(x0, y0, x1, y1)
+
+                if shape_type == "rect":
+                    shape.draw_rect(draw_rect)
+                elif shape_type == "ellipse":
+                    shape.draw_oval(draw_rect)
+                elif shape_type == "line":
+                    shape.draw_line(fitz.Point(x0, y1), fitz.Point(x1, y0))
+
+                shape.finish(
+                    color=stroke_color,
+                    fill=fill_color,
+                    width=stroke_width,
+                )
+                shape.commit()
+                applied_count += 1
+
+        doc.save(output_path, garbage=4, deflate=True)
+        doc.close()
+
+        result["success"] = True
+        result["message"] = f"Applied {applied_count} edit(s)"
+        result["applied"] = applied_count
+
+    except Exception as e:
+        result["message"] = str(e)
+
+    return result
+
+
+def parse_hex_color(hex_str: str) -> tuple:
+    """Parse hex color string to RGB tuple (0-1 range)."""
+    if not hex_str:
+        return (0, 0, 0)
+    hex_str = hex_str.lstrip("#")
+    if len(hex_str) == 6:
+        r = int(hex_str[0:2], 16) / 255
+        g = int(hex_str[2:4], 16) / 255
+        b = int(hex_str[4:6], 16) / 255
+        return (r, g, b)
+    return (0, 0, 0)
+
+
+def draw_shape(
+    input_path: Path,
+    output_path: Path,
+    page_num: int,
+    shape_type: str,  # 'rect', 'ellipse', 'line'
+    x0: float,
+    y0: float,
+    x1: float,
+    y1: float,
+    stroke_color: tuple = (0, 0, 0),
+    stroke_width: float = 1,
+    fill_color: Optional[tuple] = None,
+) -> dict:
+    """
+    Draw a shape on a page.
+    """
+    result = {
+        "success": False,
+        "message": "",
+    }
+
+    try:
+        doc = fitz.open(input_path)
+
+        if page_num < 0 or page_num >= len(doc):
+            result["message"] = f"Invalid page number: {page_num}"
+            doc.close()
+            return result
+
+        page = doc[page_num]
+        shape = page.new_shape()
+
+        rect = fitz.Rect(x0, y0, x1, y1)
+
+        if shape_type == "rect":
+            shape.draw_rect(rect)
+        elif shape_type == "ellipse":
+            shape.draw_oval(rect)
+        elif shape_type == "line":
+            shape.draw_line(fitz.Point(x0, y1), fitz.Point(x1, y0))
+        else:
+            result["message"] = f"Unknown shape type: {shape_type}"
+            doc.close()
+            return result
+
+        shape.finish(
+            color=stroke_color,
+            fill=fill_color,
+            width=stroke_width,
+        )
+        shape.commit()
+
+        doc.save(output_path)
+        doc.close()
+
+        result["success"] = True
+        result["message"] = f"Shape drawn"
+
+    except Exception as e:
+        result["message"] = str(e)
+
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description="PDF Edit operations")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Text blocks command
+    blocks_parser = subparsers.add_parser("text-blocks", help="Get text blocks from page")
+    blocks_parser.add_argument("--input", "-i", required=True, help="Input PDF path")
+    blocks_parser.add_argument("--page", "-p", type=int, required=True, help="Page number (0-indexed)")
+    blocks_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Insert text command
+    insert_parser = subparsers.add_parser("insert-text", help="Insert text")
+    insert_parser.add_argument("--input", "-i", required=True, help="Input PDF path")
+    insert_parser.add_argument("--output", "-o", required=True, help="Output PDF path")
+    insert_parser.add_argument("--page", "-p", type=int, required=True, help="Page number")
+    insert_parser.add_argument("--x", type=float, required=True, help="X coordinate")
+    insert_parser.add_argument("--y", type=float, required=True, help="Y coordinate")
+    insert_parser.add_argument("--text", "-t", required=True, help="Text to insert")
+    insert_parser.add_argument("--font", default="helv", help="Font name")
+    insert_parser.add_argument("--size", type=float, default=12, help="Font size")
+    insert_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Replace text command
+    replace_parser = subparsers.add_parser("replace-text", help="Replace text in area")
+    replace_parser.add_argument("--input", "-i", required=True, help="Input PDF path")
+    replace_parser.add_argument("--output", "-o", required=True, help="Output PDF path")
+    replace_parser.add_argument("--page", "-p", type=int, required=True, help="Page number")
+    replace_parser.add_argument("--x0", type=float, required=True)
+    replace_parser.add_argument("--y0", type=float, required=True)
+    replace_parser.add_argument("--x1", type=float, required=True)
+    replace_parser.add_argument("--y1", type=float, required=True)
+    replace_parser.add_argument("--text", "-t", required=True, help="New text")
+    replace_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Apply edits batch command
+    apply_parser = subparsers.add_parser("apply-edits", help="Apply multiple edits from JSON")
+    apply_parser.add_argument("--input", "-i", required=True, help="Input PDF path")
+    apply_parser.add_argument("--output", "-o", required=True, help="Output PDF path")
+    apply_parser.add_argument("--edits", "-e", required=True, help="JSON string with edit operations")
+    apply_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    args = parser.parse_args()
+
+    if args.command == "text-blocks":
+        result = get_text_blocks(Path(args.input), args.page)
+        if hasattr(args, 'json') and args.json:
+            print(json.dumps(result))
+        else:
+            if result["success"]:
+                print(f"Found {len(result['blocks'])} text blocks on page {args.page + 1}")
+                for block in result["blocks"]:
+                    print(f"  [{block['id']}] {block['text'][:50]}...")
+            else:
+                print(f"Error: {result['error']}")
+                sys.exit(1)
+
+    elif args.command == "insert-text":
+        result = insert_text(
+            Path(args.input),
+            Path(args.output),
+            args.page,
+            args.x,
+            args.y,
+            args.text,
+            args.font,
+            args.size,
+        )
+        if hasattr(args, 'json') and args.json:
+            print(json.dumps(result))
+        else:
+            print(result["message"])
+            sys.exit(0 if result["success"] else 1)
+
+    elif args.command == "replace-text":
+        result = replace_text_area(
+            Path(args.input),
+            Path(args.output),
+            args.page,
+            args.x0,
+            args.y0,
+            args.x1,
+            args.y1,
+            args.text,
+        )
+        if hasattr(args, 'json') and args.json:
+            print(json.dumps(result))
+        else:
+            print(result["message"])
+            sys.exit(0 if result["success"] else 1)
+
+    elif args.command == "apply-edits":
+        result = apply_edits(
+            Path(args.input),
+            Path(args.output),
+            args.edits,
+        )
+        if hasattr(args, 'json') and args.json:
+            print(json.dumps(result))
+        else:
+            print(result["message"])
+            sys.exit(0 if result["success"] else 1)
+
+
+if __name__ == "__main__":
+    main()

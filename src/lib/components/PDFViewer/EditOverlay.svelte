@@ -7,9 +7,12 @@
    * - Select and move existing edit operations
    * - Resize operations using handles
    * - Edit text content inline
+   * - Click existing PDF text blocks to edit them
    */
 
-  import { X, Move } from 'lucide-svelte';
+  import { X, Move, Type } from 'lucide-svelte';
+  import { invoke } from '@tauri-apps/api/core';
+  import { onMount } from 'svelte';
   import type {
     EditsStore,
     EditorOp,
@@ -17,18 +20,36 @@
     InsertTextOp,
     InsertImageOp,
     DrawShapeOp,
+    ReplaceTextOp,
   } from '$lib/stores/edits.svelte';
+
+  // Types for text blocks from Tauri
+  interface TextLineInfo {
+    text: string;
+    rect: NormalizedRect;
+  }
+
+  interface TextBlockInfo {
+    rect: NormalizedRect;
+    lines: TextLineInfo[];
+  }
+
+  interface PageTextContent {
+    page: number;
+    blocks: TextBlockInfo[];
+  }
 
   interface Props {
     store: EditsStore;
     page: number;
     pageWidth: number;
     pageHeight: number;
+    pdfPath: string;
     scale?: number;
     interactive?: boolean;
   }
 
-  let { store, page, pageWidth, pageHeight, scale = 1, interactive = true }: Props = $props();
+  let { store, page, pageWidth, pageHeight, pdfPath, scale = 1, interactive = true }: Props = $props();
 
   let overlayElement: HTMLDivElement;
 
@@ -45,8 +66,90 @@
   let editingTextId = $state<string | null>(null);
   let editingTextContent = $state('');
 
+  // PDF text blocks (existing text in the document)
+  let textBlocks = $state<TextBlockInfo[]>([]);
+  let isLoadingBlocks = $state(false);
+  let showTextBlocks = $state(true); // Toggle to show/hide existing text highlights
+
   // Operations for this page
   const pageOps = $derived(store.getOpsForPage(page));
+
+  // Fetch text blocks from the PDF
+  async function fetchTextBlocks() {
+    if (!pdfPath) return;
+
+    isLoadingBlocks = true;
+    try {
+      const result = await invoke<PageTextContent>('pdf_get_text_blocks', {
+        path: pdfPath,
+        page: page, // 1-indexed
+      });
+      textBlocks = result.blocks;
+    } catch (e) {
+      console.error('[EditOverlay] Failed to fetch text blocks:', e);
+      textBlocks = [];
+    } finally {
+      isLoadingBlocks = false;
+    }
+  }
+
+  // Get combined text from a block
+  function getBlockText(block: TextBlockInfo): string {
+    return block.lines.map(line => line.text).join('\n');
+  }
+
+  // Check if a block is already being edited (has a ReplaceTextOp)
+  function isBlockBeingEdited(block: TextBlockInfo): boolean {
+    return pageOps.some(op => {
+      if (op.type !== 'replace_text') return false;
+      // Check if the op rect overlaps significantly with the block
+      const overlap = rectsOverlap(op.rect, block.rect);
+      return overlap > 0.5; // 50% overlap threshold
+    });
+  }
+
+  // Calculate overlap ratio between two rects
+  function rectsOverlap(a: NormalizedRect, b: NormalizedRect): number {
+    const x0 = Math.max(a.x, b.x);
+    const y0 = Math.max(a.y, b.y);
+    const x1 = Math.min(a.x + a.width, b.x + b.width);
+    const y1 = Math.min(a.y + a.height, b.y + b.height);
+
+    if (x1 <= x0 || y1 <= y0) return 0;
+
+    const overlapArea = (x1 - x0) * (y1 - y0);
+    const blockArea = b.width * b.height;
+    return blockArea > 0 ? overlapArea / blockArea : 0;
+  }
+
+  // Handle click on an existing text block
+  function handleTextBlockClick(block: TextBlockInfo) {
+    if (!interactive) return;
+    if (store.activeTool !== 'select' && store.activeTool !== 'text' && store.activeTool !== null) return;
+
+    // Create a ReplaceTextOp for this block
+    const text = getBlockText(block);
+    const op = store.addOp<ReplaceTextOp>({
+      type: 'replace_text',
+      page,
+      rect: { ...block.rect },
+      originalText: text,
+      text: text, // Start with original text
+      style: { ...store.activeTextStyle },
+    });
+
+    // Start editing immediately
+    editingTextId = op.id;
+    editingTextContent = text;
+    store.selectOp(op.id);
+  }
+
+  // Fetch blocks when page or path changes
+  $effect(() => {
+    if (pdfPath && page) {
+      fetchTextBlocks();
+    }
+  });
 
   // Convert normalized coords to pixels
   function toPixels(rect: NormalizedRect): { x: number; y: number; width: number; height: number } {
@@ -282,6 +385,44 @@
   role="application"
   aria-label="Edit overlay"
 >
+  <!-- Render existing PDF text blocks (clickable to edit) -->
+  {#if showTextBlocks && interactive && (store.activeTool === 'select' || store.activeTool === 'text' || store.activeTool === null)}
+    {#each textBlocks as block}
+      {#if !isBlockBeingEdited(block)}
+        {@const px = toPixels(block.rect)}
+        <button
+          type="button"
+          class="absolute transition-all duration-150 cursor-pointer group"
+          style="
+            left: {px.x}px;
+            top: {px.y}px;
+            width: {px.width}px;
+            height: {px.height}px;
+          "
+          onclick={() => handleTextBlockClick(block)}
+          title="Click to edit this text"
+        >
+          <!-- Subtle highlight on hover -->
+          <div
+            class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+            style="
+              background-color: rgba(136, 192, 208, 0.15);
+              border: 1px dashed var(--nord8);
+            "
+          ></div>
+          <!-- Edit indicator on hover -->
+          <div
+            class="absolute -top-5 left-0 opacity-0 group-hover:opacity-100 transition-opacity text-xs px-1 py-0.5 rounded flex items-center gap-1"
+            style="background-color: var(--nord10); color: var(--nord6);"
+          >
+            <Type size={10} />
+            <span>Edit</span>
+          </div>
+        </button>
+      {/if}
+    {/each}
+  {/if}
+
   <!-- Render existing operations -->
   {#each pageOps as op}
     {@const px = toPixels(op.rect)}

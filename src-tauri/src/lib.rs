@@ -1434,6 +1434,134 @@ fn pdf_watermark_image(
 }
 
 // ============================================================================
+// PDF Edit Commands (PythonBridge)
+// Note: pdf_get_text_blocks is already defined in pdf_viewer.rs using native MuPDF
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+struct EditResult {
+    success: bool,
+    message: String,
+}
+
+/// Insert text at a position
+#[tauri::command]
+fn pdf_insert_text(
+    app: AppHandle,
+    input: String,
+    output: String,
+    page: i32,
+    x: f64,
+    y: f64,
+    text: String,
+    font: Option<String>,
+    size: Option<f64>,
+) -> Result<EditResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let page_str = page.to_string();
+    let x_str = x.to_string();
+    let y_str = y.to_string();
+    let font_val = font.unwrap_or_else(|| "helv".to_string());
+    let size_val = size.unwrap_or(12.0).to_string();
+
+    let args: Vec<&str> = vec![
+        "insert-text",
+        "--input", &input,
+        "--output", &output,
+        "--page", &page_str,
+        "--x", &x_str,
+        "--y", &y_str,
+        "--text", &text,
+        "--font", &font_val,
+        "--size", &size_val,
+        "--json",
+    ];
+
+    let result = bridge
+        .run_script("pdf_edit.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+/// Replace text in an area
+#[tauri::command]
+fn pdf_replace_text(
+    app: AppHandle,
+    input: String,
+    output: String,
+    page: i32,
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+    text: String,
+) -> Result<EditResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let page_str = page.to_string();
+    let x0_str = x0.to_string();
+    let y0_str = y0.to_string();
+    let x1_str = x1.to_string();
+    let y1_str = y1.to_string();
+
+    let args: Vec<&str> = vec![
+        "replace-text",
+        "--input", &input,
+        "--output", &output,
+        "--page", &page_str,
+        "--x0", &x0_str,
+        "--y0", &y0_str,
+        "--x1", &x1_str,
+        "--y1", &y1_str,
+        "--text", &text,
+        "--json",
+    ];
+
+    let result = bridge
+        .run_script("pdf_edit.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ApplyEditsResult {
+    success: bool,
+    message: String,
+    applied: i32,
+}
+
+/// Apply multiple edit operations from JSON
+#[tauri::command]
+fn pdf_apply_edits(
+    app: AppHandle,
+    input: String,
+    output: String,
+    edits_json: String,
+) -> Result<ApplyEditsResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec![
+        "apply-edits",
+        "--input", &input,
+        "--output", &output,
+        "--edits", &edits_json,
+        "--json",
+    ];
+
+    let result = bridge
+        .run_script("pdf_edit.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+// ============================================================================
 // PDF Attachments Commands (PythonBridge)
 // ============================================================================
 
@@ -1938,7 +2066,11 @@ pub fn run() {
       pdf_sanitize,
       // Watermark
       pdf_watermark_text,
-      pdf_watermark_image
+      pdf_watermark_image,
+      // PDF Edit (pdf_get_text_blocks is in pdf_viewer)
+      pdf_insert_text,
+      pdf_replace_text,
+      pdf_apply_edits
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

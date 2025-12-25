@@ -698,23 +698,77 @@
     editsStore.setApplying(true);
 
     try {
-      // For Phase 2, we'll implement the actual edit application
-      // For now, show a placeholder message
-      // TODO: Implement backend integration for text/image edits
-      await message(
-        'Edit mode is in development.\n\nThis will apply text insertions, image replacements, and shape additions to your PDF.',
-        { title: 'Coming Soon', kind: 'info' }
+      // Build page dimensions map for coordinate conversion
+      const pageWidths: Record<string, number> = {};
+      const pageHeights: Record<string, number> = {};
+
+      if (pdfInfo?.page_sizes) {
+        pdfInfo.page_sizes.forEach((size, index) => {
+          pageWidths[String(index)] = size.width;
+          pageHeights[String(index)] = size.height;
+        });
+      }
+
+      // Convert EditorOps to the format expected by the backend
+      const ops = editsStore.ops.map(op => {
+        // Page is 1-indexed in our store, 0-indexed in backend
+        const backendPage = op.page - 1;
+
+        const baseOp = {
+          type: op.type,
+          page: backendPage,
+          rect: op.rect,
+        };
+
+        if (op.type === 'insert_text' || op.type === 'replace_text') {
+          return {
+            ...baseOp,
+            text: op.text,
+            style: op.style,
+          };
+        } else if (op.type === 'draw_shape') {
+          return {
+            ...baseOp,
+            shape: op.shape,
+            strokeColor: op.strokeColor,
+            strokeWidth: op.strokeWidth,
+            fillColor: op.fillColor,
+          };
+        }
+        return baseOp;
+      });
+
+      const editsJson = JSON.stringify({
+        ops,
+        pageWidths,
+        pageHeights,
+      });
+
+      const result = await invoke<{ success: boolean; message: string; applied: number }>(
+        'pdf_apply_edits',
+        {
+          input: filePath,
+          output: outputPath,
+          editsJson,
+        }
       );
 
-      // When implemented, this will:
-      // 1. For each InsertTextOp: Insert text at position
-      // 2. For each ReplaceTextOp: Redact original area, insert new text
-      // 3. For each InsertImageOp: Insert image at position
-      // 4. For each DrawShapeOp: Draw shape on page
+      if (!result.success) {
+        throw new Error(result.message);
+      }
 
       // Clear edits after successful apply
-      // editsStore.clearOps();
-      // showEditTools = false;
+      editsStore.clearOps();
+      showEditTools = false;
+
+      // Show success message
+      await message(
+        `Edits applied successfully!\n${result.applied} operation(s) applied.`,
+        { title: 'Edits Applied', kind: 'info' }
+      );
+
+      // Switch to the edited file
+      window.dispatchEvent(new CustomEvent('open-pdf-file', { detail: { path: outputPath, replaceTab: tabId } }));
 
     } catch (err) {
       console.error('[MuPDFViewer] Failed to apply edits:', err);
@@ -1932,6 +1986,7 @@
                       page={pageNum}
                       pageWidth={loadedPage.width}
                       pageHeight={loadedPage.height}
+                      pdfPath={filePath}
                       scale={1}
                       interactive={true}
                     />
