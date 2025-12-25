@@ -400,22 +400,16 @@ def apply_edits(
             if op_type == "insert_text":
                 text = op.get("text", "")
                 style = op.get("style", {})
-                font_name = style.get("fontFamily", "helv")
+                css_font = style.get("fontFamily", "helv")
                 font_size = style.get("fontSize", 12)
                 color_str = style.get("color", "#000000")
+                rotation = style.get("rotation", 0)  # Text rotation in degrees
 
                 # Parse hex color to RGB tuple
                 color = parse_hex_color(color_str)
 
-                # Map common font names to PyMuPDF names
-                font_map = {
-                    "Helvetica": "helv",
-                    "Times New Roman": "tiro",
-                    "Times": "tiro",
-                    "Courier": "cour",
-                    "Arial": "helv",
-                }
-                font_name = font_map.get(font_name, "helv")
+                # Parse CSS font-family to PyMuPDF font name
+                font_name = parse_css_font_family(css_font)
 
                 # Insert at top-left of rect, adjusted for baseline
                 point = fitz.Point(x0, y0 + font_size)
@@ -425,32 +419,30 @@ def apply_edits(
                     fontname=font_name,
                     fontsize=font_size,
                     color=color,
+                    rotate=int(rotation) if rotation else 0,
                 )
                 applied_count += 1
 
             elif op_type == "replace_text":
                 text = op.get("text", "")
                 style = op.get("style", {})
-                font_name = style.get("fontFamily", "helv")
+                css_font = style.get("fontFamily", "helv")
                 font_size = style.get("fontSize", 12)
                 color_str = style.get("color", "#000000")
+                rotation = style.get("rotation", 0)  # Text rotation in degrees
                 color = parse_hex_color(color_str)
 
-                font_map = {
-                    "Helvetica": "helv",
-                    "Times New Roman": "tiro",
-                    "Times": "tiro",
-                    "Courier": "cour",
-                    "Arial": "helv",
-                }
-                font_name = font_map.get(font_name, "helv")
+                # Parse CSS font-family to PyMuPDF font name
+                font_name = parse_css_font_family(css_font)
 
-                # Redact original area
-                redact_rect = fitz.Rect(x0, y0, x1, y1)
+                # Extend redaction rect downward to cover descenders (letters like p, g, j, q)
+                # Descenders typically extend ~25% of font size below baseline
+                descender_extension = font_size * 0.3
+                redact_rect = fitz.Rect(x0, y0, x1, y1 + descender_extension)
                 page.add_redact_annot(redact_rect, fill=(1, 1, 1))  # White fill
                 page.apply_redactions()
 
-                # Insert new text
+                # Insert new text with rotation if applicable
                 point = fitz.Point(x0, y0 + font_size)
                 page.insert_text(
                     point,
@@ -458,6 +450,7 @@ def apply_edits(
                     fontname=font_name,
                     fontsize=font_size,
                     color=color,
+                    rotate=int(rotation) if rotation else 0,
                 )
                 applied_count += 1
 
@@ -512,6 +505,76 @@ def parse_hex_color(hex_str: str) -> tuple:
         b = int(hex_str[4:6], 16) / 255
         return (r, g, b)
     return (0, 0, 0)
+
+
+def parse_css_font_family(css_font: str) -> str:
+    """
+    Parse CSS font-family string and return PyMuPDF font name.
+
+    CSS font families look like: '"Times New Roman", Times, Georgia, serif'
+    We extract the first font name and map it to PyMuPDF's built-in fonts.
+    """
+    if not css_font:
+        return "helv"
+
+    # Split by comma and get individual font names
+    fonts = [f.strip().strip('"').strip("'") for f in css_font.split(",")]
+
+    # Check the last token for font category (serif, sans-serif, monospace)
+    category = fonts[-1].lower() if fonts else ""
+
+    # Map specific fonts to PyMuPDF names
+    font_map = {
+        # Serif fonts
+        "times new roman": "tiro",
+        "times": "tiro",
+        "georgia": "tiro",
+        "palatino": "tiro",
+        "palatino linotype": "tiro",
+        "book antiqua": "tiro",
+        "garamond": "tiro",
+        "cambria": "tiro",
+        "dejavu serif": "tiro",
+        "liberation serif": "tiro",
+        "noto serif": "tiro",
+        "freeserif": "tiro",
+
+        # Sans-serif fonts
+        "arial": "helv",
+        "helvetica": "helv",
+        "verdana": "helv",
+        "tahoma": "helv",
+        "trebuchet ms": "helv",
+        "calibri": "helv",
+        "dejavu sans": "helv",
+        "liberation sans": "helv",
+        "noto sans": "helv",
+        "freesans": "helv",
+
+        # Monospace fonts
+        "courier": "cour",
+        "courier new": "cour",
+        "consolas": "cour",
+        "monaco": "cour",
+        "dejavu sans mono": "cour",
+        "liberation mono": "cour",
+        "noto mono": "cour",
+        "freemono": "cour",
+    }
+
+    # Try to match specific fonts first
+    for font in fonts:
+        font_lower = font.lower()
+        if font_lower in font_map:
+            return font_map[font_lower]
+
+    # Fall back to category
+    if category == "serif":
+        return "tiro"  # Times Roman
+    elif category == "monospace":
+        return "cour"  # Courier
+    else:
+        return "helv"  # Helvetica (default sans-serif)
 
 
 def int_color_to_hex(color_int: int) -> str:
@@ -580,20 +643,14 @@ def render_page_preview(
                 if not text:
                     continue
                 style = op.get("style", {})
-                font_name = style.get("fontFamily", "helv")
+                css_font = style.get("fontFamily", "helv")
                 font_size = style.get("fontSize", 12)
                 color_str = style.get("color", "#000000")
+                rotation = style.get("rotation", 0)
                 color = parse_hex_color(color_str)
 
-                # Map font names
-                font_map = {
-                    "Helvetica": "helv",
-                    "Times New Roman": "tiro",
-                    "Times": "tiro",
-                    "Courier": "cour",
-                    "Arial": "helv",
-                }
-                font_name = font_map.get(font_name, "helv")
+                # Parse CSS font-family to PyMuPDF font name
+                font_name = parse_css_font_family(css_font)
 
                 point = fitz.Point(x0, y0 + font_size)
                 page.insert_text(
@@ -602,27 +659,24 @@ def render_page_preview(
                     fontname=font_name,
                     fontsize=font_size,
                     color=color,
+                    rotate=int(rotation) if rotation else 0,
                 )
 
             elif op_type == "replace_text":
                 text = op.get("text", "")
                 style = op.get("style", {})
-                font_name = style.get("fontFamily", "helv")
+                css_font = style.get("fontFamily", "helv")
                 font_size = style.get("fontSize", 12)
                 color_str = style.get("color", "#000000")
+                rotation = style.get("rotation", 0)
                 color = parse_hex_color(color_str)
 
-                font_map = {
-                    "Helvetica": "helv",
-                    "Times New Roman": "tiro",
-                    "Times": "tiro",
-                    "Courier": "cour",
-                    "Arial": "helv",
-                }
-                font_name = font_map.get(font_name, "helv")
+                # Parse CSS font-family to PyMuPDF font name
+                font_name = parse_css_font_family(css_font)
 
-                # Redact original area with white
-                redact_rect = fitz.Rect(x0, y0, x1, y1)
+                # Extend redaction rect for descenders (letters like p, g, j, q)
+                descender_extension = font_size * 0.3
+                redact_rect = fitz.Rect(x0, y0, x1, y1 + descender_extension)
                 page.add_redact_annot(redact_rect, fill=(1, 1, 1))
                 page.apply_redactions()
 
@@ -635,6 +689,7 @@ def render_page_preview(
                         fontname=font_name,
                         fontsize=font_size,
                         color=color,
+                        rotate=int(rotation) if rotation else 0,
                     )
 
             elif op_type == "draw_shape":
