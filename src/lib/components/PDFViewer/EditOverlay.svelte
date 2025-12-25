@@ -31,6 +31,8 @@
     color: string;
     bold: boolean;
     italic: boolean;
+    serif?: boolean;  // From PyMuPDF font flags (bit 2)
+    mono?: boolean;   // From PyMuPDF font flags (bit 3)
     rect: NormalizedRect;
   }
 
@@ -38,6 +40,7 @@
     text: string;
     rect: NormalizedRect;
     spans: SpanInfo[];
+    rotation?: number; // Rotation angle in degrees from line direction
   }
 
   interface TextBlockInfo {
@@ -47,6 +50,9 @@
     dominantFont: string | null;
     dominantSize: number | null;
     dominantColor: string | null;
+    isSerif?: boolean;   // Aggregated: >50% of chars are serif
+    isMono?: boolean;    // Aggregated: >50% of chars are monospace
+    rotation?: number;   // Average rotation across lines
   }
 
   interface PageTextContent {
@@ -91,6 +97,37 @@
   // Editing text state
   let editingTextId = $state<string | null>(null);
   let editingTextContent = $state('');
+
+  // Undo history for text editing (Ctrl+Z support)
+  let textUndoHistory = $state<string[]>([]);
+  let textRedoHistory = $state<string[]>([]);
+  const MAX_UNDO_HISTORY = 50;
+
+  // Track text changes for undo
+  function pushTextUndo(text: string) {
+    textUndoHistory = [...textUndoHistory.slice(-MAX_UNDO_HISTORY + 1), text];
+    textRedoHistory = []; // Clear redo on new change
+  }
+
+  function undoText(): boolean {
+    if (textUndoHistory.length === 0) return false;
+    const current = editingTextContent;
+    const previous = textUndoHistory[textUndoHistory.length - 1];
+    textUndoHistory = textUndoHistory.slice(0, -1);
+    textRedoHistory = [...textRedoHistory, current];
+    editingTextContent = previous;
+    return true;
+  }
+
+  function redoText(): boolean {
+    if (textRedoHistory.length === 0) return false;
+    const current = editingTextContent;
+    const next = textRedoHistory[textRedoHistory.length - 1];
+    textRedoHistory = textRedoHistory.slice(0, -1);
+    textUndoHistory = [...textUndoHistory, current];
+    editingTextContent = next;
+    return true;
+  }
 
   // PDF text blocks (existing text in the document)
   let textBlocks = $state<TextBlockInfo[]>([]);
@@ -137,13 +174,37 @@
   }
 
   // Map PDF font names to CSS-friendly font families
-  // Strategy: Include original font name first (browser may have it), then fallbacks
-  function mapFontFamily(pdfFont: string | null): string {
-    if (!pdfFont) return 'Arial, Helvetica, sans-serif';
-
-    const fontLower = pdfFont.toLowerCase();
+  // Uses PyMuPDF font flags (isSerif, isMono) when available, falls back to name matching
+  function mapFontFamily(pdfFont: string | null, isSerif?: boolean, isMono?: boolean): string {
     // Clean font name (remove subset prefix like "ABCDEF+")
-    const cleanFont = pdfFont.replace(/^[A-Z]{6}\+/, '');
+    const cleanFont = pdfFont ? pdfFont.replace(/^[A-Z]{6}\+/, '') : null;
+    const fontLower = pdfFont?.toLowerCase() ?? '';
+
+    // If we have PyMuPDF font flags, use them directly (most reliable)
+    if (isMono === true) {
+      if (cleanFont) {
+        return `"${cleanFont}", "Courier New", Courier, monospace`;
+      }
+      return '"Courier New", Courier, monospace';
+    }
+
+    if (isSerif === true) {
+      if (cleanFont) {
+        return `"${cleanFont}", "Times New Roman", Times, Georgia, serif`;
+      }
+      return '"Times New Roman", Times, Georgia, serif';
+    }
+
+    // isSerif === false means explicitly sans-serif from PyMuPDF flags
+    if (isSerif === false && isMono === false) {
+      if (cleanFont) {
+        return `"${cleanFont}", Arial, Helvetica, sans-serif`;
+      }
+      return 'Arial, Helvetica, sans-serif';
+    }
+
+    // No font flags available - fall back to name-based detection
+    if (!pdfFont) return 'Arial, Helvetica, sans-serif';
 
     // OCRmyPDF invisible text layer font - use system sans-serif
     if (fontLower.includes('glyphless') || fontLower === 'none' || fontLower === '[none]') {
@@ -316,19 +377,24 @@
     const text = getBlockText(block);
 
     // Use the block's font info if available, otherwise fall back to toolbar defaults
+    // Pass isSerif/isMono flags for accurate font type detection
     const style = {
-      fontFamily: mapFontFamily(block.dominantFont),
+      fontFamily: mapFontFamily(block.dominantFont, block.isSerif, block.isMono),
       fontSize: block.dominantSize || store.activeTextStyle.fontSize,
       color: block.dominantColor || store.activeTextStyle.color,
       bold: hasBlockBold(block),
       italic: hasBlockItalic(block),
       align: store.activeTextStyle.align, // Keep alignment from toolbar
+      rotation: block.rotation || 0, // Text rotation from scanned documents
     };
 
     console.log('[EditOverlay] Block font info:', {
       dominantFont: block.dominantFont,
       dominantSize: block.dominantSize,
       dominantColor: block.dominantColor,
+      isSerif: block.isSerif,
+      isMono: block.isMono,
+      rotation: block.rotation,
       mappedStyle: style,
     });
 
@@ -341,9 +407,13 @@
       style,
     });
 
-    // Start editing immediately
+    // Initialize undo history and start editing
+    textUndoHistory = [];
+    textRedoHistory = [];
+    pushTextUndo(text);
     editingTextId = op.id;
     editingTextContent = text;
+    lastInputTime = Date.now();
     store.selectOp(op.id);
   }
 
@@ -552,6 +622,22 @@
   }
 
   function handleTextKeydown(e: KeyboardEvent) {
+    // Ctrl+Z: Undo
+    if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
+      e.preventDefault();
+      e.stopPropagation();
+      undoText();
+      return;
+    }
+
+    // Ctrl+Y or Ctrl+Shift+Z: Redo
+    if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'Z')) {
+      e.preventDefault();
+      e.stopPropagation();
+      redoText();
+      return;
+    }
+
     if (e.key === 'Escape') {
       // Stop propagation to prevent closing the tab
       e.preventDefault();
@@ -581,15 +667,39 @@
         }
       }
 
+      // Clear undo/redo history when exiting edit mode
+      textUndoHistory = [];
+      textRedoHistory = [];
       editingTextId = null;
       editingTextContent = '';
     }
   }
 
+  // Track text input for undo history (debounced to avoid flooding)
+  let lastInputTime = 0;
+  const INPUT_DEBOUNCE_MS = 500;
+
+  function handleTextInput(e: Event) {
+    const target = e.target as HTMLTextAreaElement;
+    const now = Date.now();
+
+    // Save undo state periodically (not on every keystroke)
+    if (now - lastInputTime > INPUT_DEBOUNCE_MS && editingTextContent !== target.value) {
+      pushTextUndo(editingTextContent);
+      lastInputTime = now;
+    }
+  }
+
   function startEditingText(op: EditorOp) {
     if (op.type === 'insert_text' || op.type === 'replace_text') {
+      // Initialize undo history with the original text
+      textUndoHistory = [];
+      textRedoHistory = [];
+      pushTextUndo(op.text);
+
       editingTextId = op.id;
       editingTextContent = op.text;
+      lastInputTime = Date.now();
     }
   }
 
@@ -707,9 +817,11 @@
             bind:value={editingTextContent}
             onblur={() => handleTextBlur(op)}
             onkeydown={(e) => handleTextKeydown(e)}
+            oninput={(e) => handleTextInput(e)}
           ></textarea>
         {:else if showVisuals}
           {@const scaledFontSize = textOp.style.fontSize * pdfToPixelScale}
+          {@const rotationDeg = textOp.style.rotation || 0}
           <div
             class="w-full h-full p-1 overflow-hidden cursor-text"
             style="
@@ -722,6 +834,8 @@
               background-color: {isReplaceOp ? 'white' : (textOp.text ? 'transparent' : 'rgba(136, 192, 208, 0.1)')};
               border: 1px dashed {textOp.text ? 'transparent' : 'var(--nord8)'};
               line-height: 1.3;
+              transform: rotate({rotationDeg}deg);
+              transform-origin: top left;
             "
             ondblclick={() => startEditingText(op)}
           >

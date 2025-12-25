@@ -25,6 +25,7 @@ export interface TextStyle {
   bold?: boolean;
   italic?: boolean;
   align?: 'left' | 'center' | 'right';
+  rotation?: number;  // Text rotation in degrees (from scanned document detection)
 }
 
 // Base operation with common fields

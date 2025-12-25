@@ -17,6 +17,7 @@ import sys
 import json
 import base64
 import io
+import math
 from pathlib import Path
 from typing import Optional
 
@@ -741,7 +742,18 @@ def get_text_blocks_with_fonts(
             size_counts = {}
             color_counts = {}
 
+            # Track serif/monospace flags
+            serif_count = 0
+            mono_count = 0
+            total_char_count = 0
+
             for line in block.get("lines", []):
+                # Get line direction/rotation (dir is a tuple [cos, sin] of the angle)
+                line_dir = line.get("dir", (1.0, 0.0))  # Default horizontal
+                # Calculate rotation angle in degrees from direction vector
+                rotation_rad = math.atan2(line_dir[1], line_dir[0])
+                rotation_deg = math.degrees(rotation_rad)
+
                 line_data = {
                     "rect": {
                         "x": line["bbox"][0] / page_width,
@@ -749,6 +761,7 @@ def get_text_blocks_with_fonts(
                         "width": (line["bbox"][2] - line["bbox"][0]) / page_width,
                         "height": (line["bbox"][3] - line["bbox"][1]) / page_height,
                     },
+                    "rotation": round(rotation_deg, 2),  # Text rotation angle
                     "spans": [],
                 }
 
@@ -765,13 +778,28 @@ def get_text_blocks_with_fonts(
                     size_counts[size] = size_counts.get(size, 0) + text_len
                     color_counts[color_int] = color_counts.get(color_int, 0) + text_len
 
+                    # Font type flags from PyMuPDF:
+                    # bit 0 = superscript, bit 1 = italic, bit 2 = serifed,
+                    # bit 3 = monospaced, bit 4 = bold
+                    is_serif = bool(flags & (1 << 2))  # bit 2
+                    is_mono = bool(flags & (1 << 3))   # bit 3
+
+                    if text.strip():
+                        total_char_count += text_len
+                        if is_serif:
+                            serif_count += text_len
+                        if is_mono:
+                            mono_count += text_len
+
                     span_data = {
                         "text": text,
                         "font": font,
                         "size": round(size, 1),
                         "color": int_color_to_hex(color_int),
-                        "bold": bool(flags & 2**4),  # bit 4 = bold
-                        "italic": bool(flags & 2**1),  # bit 1 = italic
+                        "bold": bool(flags & (1 << 4)),  # bit 4 = bold
+                        "italic": bool(flags & (1 << 1)),  # bit 1 = italic
+                        "serif": is_serif,  # bit 2 = serifed
+                        "mono": is_mono,    # bit 3 = monospaced
                         "rect": {
                             "x": span["bbox"][0] / page_width,
                             "y": span["bbox"][1] / page_height,
@@ -782,6 +810,21 @@ def get_text_blocks_with_fonts(
                     line_data["spans"].append(span_data)
 
                 block_data["lines"].append(line_data)
+
+            # Determine dominant font type (serif/mono/sans)
+            if total_char_count > 0:
+                block_data["isSerif"] = serif_count > total_char_count * 0.5
+                block_data["isMono"] = mono_count > total_char_count * 0.5
+            else:
+                block_data["isSerif"] = False
+                block_data["isMono"] = False
+
+            # Calculate average rotation for the block
+            rotations = [line["rotation"] for line in block_data["lines"] if line.get("rotation") is not None]
+            if rotations:
+                block_data["rotation"] = round(sum(rotations) / len(rotations), 2)
+            else:
+                block_data["rotation"] = 0.0
 
             # Set dominant font info
             if font_counts:

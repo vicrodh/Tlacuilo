@@ -1618,12 +1618,18 @@ struct FontSpanInfo {
     color: String,
     bold: bool,
     italic: bool,
+    #[serde(default)]
+    serif: bool,
+    #[serde(default)]
+    mono: bool,
     rect: NormalizedRectF64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct FontLineInfo {
     rect: NormalizedRectF64,
+    #[serde(default)]
+    rotation: Option<f64>,
     spans: Vec<FontSpanInfo>,
 }
 
@@ -1638,6 +1644,12 @@ struct FontBlockInfo {
     dominant_size: Option<f64>,
     #[serde(rename = "dominantColor")]
     dominant_color: Option<String>,
+    #[serde(rename = "isSerif", default)]
+    is_serif: bool,
+    #[serde(rename = "isMono", default)]
+    is_mono: bool,
+    #[serde(default)]
+    rotation: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
