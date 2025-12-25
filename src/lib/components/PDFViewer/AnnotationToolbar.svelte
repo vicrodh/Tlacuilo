@@ -509,6 +509,36 @@
           </div>
         {/if}
 
+        <!-- Saved Initials -->
+        {#if signaturesStore.initials.length > 0}
+          <div class="px-3 py-2" style="border-top: 1px solid var(--nord3);">
+            <div class="text-[10px] uppercase opacity-40 mb-1 flex items-center gap-1">
+              <Type size={10} />
+              Saved Initials
+            </div>
+            <div class="flex flex-wrap gap-1">
+              {#each signaturesStore.initials.slice(0, 6) as ini}
+                <button
+                  onclick={() => selectSignature(ini.dataUrl)}
+                  class="p-1 rounded transition-colors hover:bg-[var(--nord2)]"
+                  style="background-color: var(--nord6);"
+                  title={ini.name}
+                >
+                  <img
+                    src={ini.thumbnail}
+                    alt={ini.name}
+                    class="h-5 w-auto"
+                    style="max-width: 32px; object-fit: contain;"
+                  />
+                </button>
+              {/each}
+            </div>
+            {#if signaturesStore.initials.length > 6}
+              <p class="text-[9px] opacity-40 mt-1">+{signaturesStore.initials.length - 6} more in Signatures view</p>
+            {/if}
+          </div>
+        {/if}
+
         <!-- Rotation -->
         <div class="px-3 py-2" style="border-top: 1px solid var(--nord3);">
           <div class="text-[10px] uppercase opacity-40 mb-1">Rotation</div>

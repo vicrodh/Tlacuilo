@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PenTool, Upload, ShieldCheck, Image, Trash2, Plus, FileText, Download, X, Check, Edit2 } from 'lucide-svelte';
+  import { PenTool, Upload, ShieldCheck, Image, Trash2, Plus, FileText, Download, X, Check, Edit2, Type } from 'lucide-svelte';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
@@ -8,9 +8,11 @@
   import {
     getSignaturesStore,
     addSignature,
+    addInitial,
     removeSignature,
     renameSignature,
-    type SavedSignature
+    type SavedSignature,
+    type SignatureCategory
   } from '$lib/stores/signatures.svelte';
   import { log, logSuccess, logError, registerFile, unregisterModule } from '$lib/stores/status.svelte';
 
@@ -25,6 +27,7 @@
   const signaturesStore = getSignaturesStore();
 
   // State
+  let activeTab = $state<'signatures' | 'initials'>('signatures');
   let activeSection = $state<'draw' | 'upload' | 'certificate' | null>(null);
   let selectedSignature = $state<SavedSignature | null>(null);
   let editingName = $state<string | null>(null);
@@ -38,6 +41,7 @@
 
   // Canvas ref
   let canvasComponent: SignatureCanvas;
+  let initialsCanvasComponent: SignatureCanvas;
 
   // Drag and drop listener
   let unlistenDrop: (() => void) | null = null;
@@ -99,7 +103,7 @@
 
   async function handleSaveDrawnSignature(dataUrl: string) {
     try {
-      const sig = await addSignature(dataUrl, '', 'freehand');
+      const sig = await addSignature(dataUrl, '', 'freehand', undefined, undefined, 'signature');
       logSuccess(MODULE, `Signature saved: ${sig.name}`);
       selectedSignature = sig;
       canvasComponent?.clearCanvas();
@@ -108,7 +112,18 @@
     }
   }
 
-  async function handleImageUpload(path?: string) {
+  async function handleSaveDrawnInitial(dataUrl: string) {
+    try {
+      const sig = await addInitial(dataUrl, '', 'freehand');
+      logSuccess(MODULE, `Initial saved: ${sig.name}`);
+      selectedSignature = sig;
+      initialsCanvasComponent?.clearCanvas();
+    } catch (err) {
+      logError(MODULE, `Failed to save initial: ${err}`);
+    }
+  }
+
+  async function handleImageUpload(path?: string, category: SignatureCategory = 'signature') {
     try {
       let imagePath = path;
       if (!imagePath) {
@@ -125,11 +140,15 @@
       const blob = await response.blob();
       const dataUrl = await blobToDataUrl(blob);
 
-      const sig = await addSignature(dataUrl, imagePath.split('/').pop() || 'Uploaded', 'image');
-      logSuccess(MODULE, `Signature uploaded: ${sig.name}`);
+      const label = category === 'initial' ? 'Initial' : 'Signature';
+      const sig = category === 'initial'
+        ? await addInitial(dataUrl, imagePath.split('/').pop() || 'Uploaded', 'image')
+        : await addSignature(dataUrl, imagePath.split('/').pop() || 'Uploaded', 'image', undefined, undefined, 'signature');
+      logSuccess(MODULE, `${label} uploaded: ${sig.name}`);
       selectedSignature = sig;
     } catch (err) {
-      logError(MODULE, `Failed to upload signature: ${err}`);
+      const label = category === 'initial' ? 'initial' : 'signature';
+      logError(MODULE, `Failed to upload ${label}: ${err}`);
     }
   }
 
@@ -250,15 +269,39 @@
         <PenTool size={20} style="color: var(--nord6);" />
       </div>
       <div>
-        <h1 class="text-lg font-semibold" style="color: var(--nord6);">Signatures</h1>
-        <p class="text-xs opacity-60">Add graphical signatures to PDF documents</p>
+        <h1 class="text-lg font-semibold" style="color: var(--nord6);">Signatures & Initials</h1>
+        <p class="text-xs opacity-60">Add graphical signatures and initials to PDF documents</p>
       </div>
+    </div>
+
+    <!-- Tab Selector -->
+    <div class="flex rounded-lg overflow-hidden" style="background-color: var(--nord0);">
+      <button
+        onclick={() => { activeTab = 'signatures'; activeSection = null; }}
+        class="px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2"
+        style="background-color: {activeTab === 'signatures' ? 'var(--nord10)' : 'transparent'};
+               color: {activeTab === 'signatures' ? 'var(--nord6)' : 'var(--nord4)'};"
+      >
+        <PenTool size={14} />
+        Signatures ({signaturesStore.signatureCount})
+      </button>
+      <button
+        onclick={() => { activeTab = 'initials'; activeSection = null; }}
+        class="px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2"
+        style="background-color: {activeTab === 'initials' ? 'var(--nord10)' : 'transparent'};
+               color: {activeTab === 'initials' ? 'var(--nord6)' : 'var(--nord4)'};"
+      >
+        <Type size={14} />
+        Initials ({signaturesStore.initialCount})
+      </button>
     </div>
   </header>
 
   <!-- Content -->
   <div class="flex-1 overflow-auto p-6">
     <div class="max-w-4xl mx-auto">
+      {#if activeTab === 'signatures'}
+      <!-- SIGNATURES TAB -->
       <!-- Signature Options Grid -->
       <section class="mb-8">
         <h2 class="text-sm font-medium mb-4 opacity-60 uppercase tracking-wider">Sign Methods</h2>
@@ -533,6 +576,252 @@
             Note: Graphical signatures are visual overlays only, not cryptographic digital signatures.
           </p>
         </section>
+      {/if}
+
+      {:else}
+      <!-- INITIALS TAB -->
+      <!-- Initials Creation Options -->
+      <section class="mb-8">
+        <h2 class="text-sm font-medium mb-4 opacity-60 uppercase tracking-wider">Create Initials</h2>
+        <div class="grid grid-cols-2 gap-4">
+          <button
+            onclick={() => activeSection = 'draw'}
+            class="flex flex-col items-center gap-3 p-6 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
+            style="background-color: {activeSection === 'draw' ? 'var(--nord2)' : 'var(--nord1)'};
+                   border: 1px solid {activeSection === 'draw' ? 'var(--nord8)' : 'var(--nord3)'};"
+          >
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background-color: var(--nord2);">
+              <PenTool size={24} style="color: var(--nord8);" />
+            </div>
+            <div class="text-center">
+              <h3 class="font-medium mb-1" style="color: var(--nord6);">Draw Initials</h3>
+              <p class="text-xs opacity-50">Quick handwritten initials (e.g., JD)</p>
+            </div>
+          </button>
+          <button
+            onclick={() => activeSection = 'upload'}
+            class="flex flex-col items-center gap-3 p-6 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
+            style="background-color: {activeSection === 'upload' ? 'var(--nord2)' : 'var(--nord1)'};
+                   border: 1px solid {activeSection === 'upload' ? 'var(--nord8)' : 'var(--nord3)'};"
+          >
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background-color: var(--nord2);">
+              <Upload size={24} style="color: var(--nord8);" />
+            </div>
+            <div class="text-center">
+              <h3 class="font-medium mb-1" style="color: var(--nord6);">Upload Image</h3>
+              <p class="text-xs opacity-50">Upload initials image</p>
+            </div>
+          </button>
+        </div>
+      </section>
+
+      <!-- Active Section Content for Initials -->
+      {#if activeSection === 'draw'}
+        <section
+          class="rounded-xl p-6 mb-8"
+          style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+        >
+          <h3 class="font-medium mb-4" style="color: var(--nord8);">Draw Your Initials</h3>
+          <SignatureCanvas
+            bind:this={initialsCanvasComponent}
+            width={300}
+            height={150}
+            strokeColor="#2E3440"
+            strokeWidth={3}
+            onSave={handleSaveDrawnInitial}
+          />
+          <p class="text-xs opacity-40 mt-3">
+            Draw your initials (typically 2-3 letters). Click Save to add to your library.
+          </p>
+        </section>
+      {:else if activeSection === 'upload'}
+        <section
+          class="rounded-xl p-6 mb-8"
+          style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+        >
+          <h3 class="font-medium mb-4" style="color: var(--nord8);">Upload Initials Image</h3>
+          <button
+            onclick={() => handleImageUpload(undefined, 'initial')}
+            class="w-full h-24 rounded-lg flex flex-col items-center justify-center gap-2 transition-colors hover:bg-[var(--nord2)]"
+            style="background-color: var(--nord0); border: 2px dashed var(--nord3);"
+          >
+            <Upload size={24} style="color: var(--nord4);" />
+            <p class="text-sm opacity-60">Click to upload or drag and drop</p>
+          </button>
+        </section>
+      {/if}
+
+      <!-- Initials Library -->
+      <section class="mb-8">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-medium opacity-60 uppercase tracking-wider">
+            Saved Initials ({signaturesStore.initialCount})
+          </h2>
+        </div>
+
+        <div
+          class="rounded-xl p-4"
+          style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+        >
+          {#if signaturesStore.initials.length === 0}
+            <div class="py-8 text-center">
+              <Type size={32} class="mx-auto mb-3 opacity-20" />
+              <p class="text-sm opacity-40 mb-2">No saved initials</p>
+              <p class="text-xs opacity-30">
+                Draw or upload initials to get started
+              </p>
+            </div>
+          {:else}
+            <div class="grid grid-cols-4 gap-4">
+              {#each signaturesStore.initials as ini}
+                <button
+                  onclick={() => selectedSignature = ini}
+                  class="relative p-3 rounded-lg transition-all hover:scale-[1.02] text-left"
+                  style="background-color: {selectedSignature?.id === ini.id ? 'var(--nord2)' : 'var(--nord0)'};
+                         border: 2px solid {selectedSignature?.id === ini.id ? 'var(--nord8)' : 'transparent'};"
+                >
+                  <!-- Initial preview -->
+                  <div class="h-12 flex items-center justify-center mb-2 rounded" style="background-color: var(--nord6);">
+                    <img
+                      src={ini.thumbnail}
+                      alt={ini.name}
+                      class="max-h-full max-w-full object-contain"
+                    />
+                  </div>
+
+                  <!-- Name and actions -->
+                  {#if editingName === ini.id}
+                    <div class="flex items-center gap-1">
+                      <input
+                        type="text"
+                        bind:value={newName}
+                        class="flex-1 text-xs px-1 py-0.5 rounded"
+                        style="background-color: var(--nord2); color: var(--nord5);"
+                        onkeydown={(e) => e.key === 'Enter' && handleRenameSignature(ini)}
+                      />
+                      <button
+                        onclick={() => handleRenameSignature(ini)}
+                        class="p-0.5 rounded hover:bg-[var(--nord3)]"
+                      >
+                        <Check size={10} style="color: var(--nord14);" />
+                      </button>
+                    </div>
+                  {:else}
+                    <div class="flex items-center justify-between">
+                      <p class="text-[10px] truncate flex-1" style="color: var(--nord4);">{ini.name}</p>
+                      <div class="flex items-center gap-0.5">
+                        <button
+                          onclick={(e) => { e.stopPropagation(); editingName = ini.id; newName = ini.name; }}
+                          class="p-0.5 rounded hover:bg-[var(--nord3)] opacity-50 hover:opacity-100"
+                          title="Rename"
+                        >
+                          <Edit2 size={8} style="color: var(--nord4);" />
+                        </button>
+                        <button
+                          onclick={(e) => { e.stopPropagation(); handleDeleteSignature(ini); }}
+                          class="p-0.5 rounded hover:bg-[var(--nord3)] opacity-50 hover:opacity-100"
+                          title="Delete"
+                        >
+                          <Trash2 size={8} style="color: var(--nord11);" />
+                        </button>
+                      </div>
+                    </div>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      </section>
+
+      <!-- Apply Initial to PDF (similar to signatures) -->
+      {#if selectedSignature && selectedSignature.category === 'initial'}
+        <section
+          class="rounded-xl p-6"
+          style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+        >
+          <h3 class="font-medium mb-4" style="color: var(--nord8);">Apply Initial to PDF</h3>
+
+          <!-- Selected initial preview -->
+          <div class="flex items-center gap-4 mb-4 p-3 rounded-lg" style="background-color: var(--nord2);">
+            <div class="w-16 h-10 rounded flex items-center justify-center" style="background-color: var(--nord6);">
+              <img
+                src={selectedSignature.thumbnail}
+                alt={selectedSignature.name}
+                class="max-h-full max-w-full object-contain"
+              />
+            </div>
+            <div class="flex-1">
+              <p class="text-sm font-medium" style="color: var(--nord5);">{selectedSignature.name}</p>
+              <p class="text-xs opacity-50">Selected for initialing</p>
+            </div>
+            <button
+              onclick={() => selectedSignature = null}
+              class="p-2 rounded hover:bg-[var(--nord3)]"
+            >
+              <X size={16} style="color: var(--nord4);" />
+            </button>
+          </div>
+
+          <!-- PDF Selection -->
+          {#if !selectedPdf}
+            <button
+              onclick={selectPdf}
+              class="w-full p-6 rounded-lg flex flex-col items-center gap-2 transition-colors hover:bg-[var(--nord2)]"
+              style="background-color: var(--nord0); border: 2px dashed var(--nord3);"
+            >
+              <FileText size={24} style="color: var(--nord4);" />
+              <p class="text-sm opacity-60">Select PDF to initial</p>
+            </button>
+          {:else}
+            <div class="flex items-center gap-3 mb-4 p-3 rounded-lg" style="background-color: var(--nord2);">
+              <FileText size={20} style="color: var(--nord8);" />
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium truncate" style="color: var(--nord5);">{selectedPdfName}</p>
+              </div>
+              <button onclick={clearPdf} class="p-2 rounded hover:bg-[var(--nord3)]">
+                <X size={16} style="color: var(--nord4);" />
+              </button>
+            </div>
+
+            <button
+              onclick={applySignatureToPdf}
+              disabled={isApplying}
+              class="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all disabled:opacity-50"
+              style="background-color: var(--nord10); color: var(--nord6);"
+            >
+              {#if isApplying}
+                <div class="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style="border-color: var(--nord6);"></div>
+                Applying...
+              {:else}
+                <Download size={18} />
+                Apply Initial & Save
+              {/if}
+            </button>
+
+            {#if applyResult}
+              <div
+                class="mt-4 p-3 rounded-lg flex items-center gap-2"
+                style="background-color: {applyResult.success ? 'rgba(163, 190, 140, 0.1)' : 'rgba(191, 97, 106, 0.1)'};
+                       border: 1px solid {applyResult.success ? 'var(--nord14)' : 'var(--nord11)'};"
+              >
+                {#if applyResult.success}
+                  <Check size={16} style="color: var(--nord14);" />
+                {:else}
+                  <X size={16} style="color: var(--nord11);" />
+                {/if}
+                <span style="color: {applyResult.success ? 'var(--nord14)' : 'var(--nord11)'};">
+                  {applyResult.message}
+                </span>
+              </div>
+            {/if}
+          {/if}
+
+          <p class="text-xs opacity-40 mt-4 text-center">
+            Initials are typically used to acknowledge individual pages or sections.
+          </p>
+        </section>
+      {/if}
       {/if}
     </div>
   </div>
