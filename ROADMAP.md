@@ -43,6 +43,7 @@ The viewer is usable for daily work. Manipulation tools (merge, split, rotate, c
 - [x] Annotations panel with search
 - [x] Change existing annotation color
 - [x] Stamps (predefined, custom text, image, with rotation)
+- [x] Watermarks (text and image, configurable position/opacity/rotation)
 
 ### Bookmarks
 - [x] PDF Outlines (Table of Contents) reader

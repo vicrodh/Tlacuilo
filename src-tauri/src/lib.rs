@@ -1330,6 +1330,110 @@ fn pdf_sanitize(
 }
 
 // ============================================================================
+// PDF Watermark Commands (PythonBridge)
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WatermarkResult {
+    success: bool,
+    message: String,
+    #[serde(default)]
+    pages_processed: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WatermarkTextOptions {
+    #[serde(default = "default_font_size")]
+    font_size: f32,
+    #[serde(default = "default_font_color")]
+    font_color: Vec<f32>,
+    #[serde(default = "default_opacity")]
+    opacity: f32,
+    #[serde(default = "default_rotation")]
+    rotation: f32,
+    #[serde(default = "default_position")]
+    position: String,
+    #[serde(default = "default_pages")]
+    pages: String,
+    #[serde(default = "default_layer")]
+    layer: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WatermarkImageOptions {
+    #[serde(default = "default_opacity")]
+    opacity: f32,
+    #[serde(default = "default_scale")]
+    scale: f32,
+    #[serde(default = "default_zero_rotation")]
+    rotation: f32,
+    #[serde(default = "default_position")]
+    position: String,
+    #[serde(default = "default_pages")]
+    pages: String,
+    #[serde(default = "default_layer")]
+    layer: String,
+}
+
+fn default_font_size() -> f32 { 48.0 }
+fn default_font_color() -> Vec<f32> { vec![0.5, 0.5, 0.5] }
+fn default_opacity() -> f32 { 0.3 }
+fn default_rotation() -> f32 { -45.0 }
+fn default_zero_rotation() -> f32 { 0.0 }
+fn default_position() -> String { "center".to_string() }
+fn default_pages() -> String { "all".to_string() }
+fn default_layer() -> String { "under".to_string() }
+fn default_scale() -> f32 { 0.5 }
+
+/// Add text watermark to PDF
+#[tauri::command]
+fn pdf_watermark_text(
+    app: AppHandle,
+    input: String,
+    output: String,
+    text: String,
+    options: WatermarkTextOptions,
+) -> Result<WatermarkResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let options_json = serde_json::to_string(&options)
+        .map_err(|e| format!("Failed to serialize options: {}", e))?;
+
+    let args: Vec<&str> = vec!["text", &input, &output, &text, &options_json];
+
+    let result = bridge
+        .run_script("pdf_watermark.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+/// Add image watermark to PDF
+#[tauri::command]
+fn pdf_watermark_image(
+    app: AppHandle,
+    input: String,
+    output: String,
+    image_path: String,
+    options: WatermarkImageOptions,
+) -> Result<WatermarkResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let options_json = serde_json::to_string(&options)
+        .map_err(|e| format!("Failed to serialize options: {}", e))?;
+
+    let args: Vec<&str> = vec!["image", &input, &output, &image_path, &options_json];
+
+    let result = bridge
+        .run_script("pdf_watermark.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+// ============================================================================
 // PDF Attachments Commands (PythonBridge)
 // ============================================================================
 
@@ -1831,7 +1935,10 @@ pub fn run() {
       pdf_verify_redaction,
       // Sanitization
       pdf_sanitization_info,
-      pdf_sanitize
+      pdf_sanitize,
+      // Watermark
+      pdf_watermark_text,
+      pdf_watermark_image
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

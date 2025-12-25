@@ -25,6 +25,7 @@
   import EncryptPDF from './lib/views/EncryptPDF.svelte';
   import RedactPDF from './lib/views/RedactPDF.svelte';
   import SanitizePDF from './lib/views/SanitizePDF.svelte';
+  import WatermarkPDF from './lib/views/WatermarkPDF.svelte';
   import { getStatus, toggleExpanded, clearLogs, setPendingOpenFile, type LogLevel } from './lib/stores/status.svelte';
   import { getGlobalTabsStore } from './lib/stores/tabs.svelte';
   import { getSettings } from '$lib/stores/settings.svelte';
@@ -246,6 +247,8 @@
         <RedactPDF />
       {:else if currentPage === 'sanitize'}
         <SanitizePDF />
+      {:else if currentPage === 'watermark'}
+        <WatermarkPDF />
       {:else if currentPage !== 'viewer'}
         <PlaceholderPage pageName={currentPage} />
       {/if}
