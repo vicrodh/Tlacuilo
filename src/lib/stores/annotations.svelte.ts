@@ -29,6 +29,7 @@ export type ToolMode =
   | 'sequenceNumber' // Numbered circles
   | 'stamp'         // Stamp annotations
   | 'move'          // Move/drag annotations
+  | 'redact'        // Mark areas for redaction (permanent content removal)
   | null;           // No tool active (pointer mode)
 
 // Predefined stamp types

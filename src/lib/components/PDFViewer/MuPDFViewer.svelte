@@ -25,7 +25,9 @@
   import { debugLog } from '$lib/stores/debugLog.svelte';
   import AnnotationToolbar from './AnnotationToolbar.svelte';
   import AnnotationOverlay from './AnnotationOverlay.svelte';
+  import RedactionOverlay from './RedactionOverlay.svelte';
   import FormFieldsOverlay from './FormFieldsOverlay.svelte';
+  import { createRedactionsStore, setRedactionsStore } from '$lib/stores/redactions.svelte';
   import ViewerRightSidebar from './ViewerRightSidebar.svelte';
   import TextLayer from './TextLayer.svelte';
   import SearchHighlightLayer from './SearchHighlightLayer.svelte';
@@ -95,6 +97,9 @@
 
   // Annotations
   const annotationsStore = createAnnotationsStore();
+  const redactionsStore = createRedactionsStore();
+  setRedactionsStore(redactionsStore);
+
   let showAnnotationTools = $state(false);
   let showAnnotationOverlay = $state(true); // Toggle visibility of overlay
   let annotationsDirty = $state(false);
@@ -527,6 +532,112 @@
       await message(`Failed to save form: ${err}`, { title: 'Error', kind: 'error' });
     } finally {
       isSavingForm = false;
+    }
+  }
+
+  // Apply redactions permanently
+  let isApplyingRedactions = $state(false);
+
+  async function applyRedactions() {
+    if (!pdfInfo || redactionsStore.markCount === 0) return;
+
+    // Confirm with user - this is destructive!
+    const confirmed = await ask(
+      `This will PERMANENTLY remove content from ${redactionsStore.markCount} marked area(s).\n\nThis action cannot be undone. The content will be completely deleted from the PDF.\n\nContinue?`,
+      { title: 'Apply Redactions', kind: 'warning', okLabel: 'Apply', cancelLabel: 'Cancel' }
+    );
+
+    if (!confirmed) return;
+
+    // Ask where to save
+    const defaultPath = filePath.replace('.pdf', '-redacted.pdf');
+    const outputPath = await save({
+      title: 'Save Redacted PDF',
+      defaultPath,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+
+    if (!outputPath) return;
+
+    isApplyingRedactions = true;
+    redactionsStore.setApplying(true);
+
+    try {
+      // Step 1: Add all redaction marks to a temp file
+      let currentPath = filePath;
+      const tempPath = filePath.replace('.pdf', '-temp-redact-marks.pdf');
+
+      for (const mark of redactionsStore.marks) {
+        // Get page size in PDF points
+        const pageSize = pdfInfo.page_sizes[mark.page - 1];
+        if (!pageSize) {
+          console.warn(`[Redaction] Invalid page ${mark.page}`);
+          continue;
+        }
+
+        // Convert normalized coords to PDF points
+        // Frontend: origin top-left, Y goes down, coords 0-1
+        // PDF: origin bottom-left, Y goes up, coords in points
+        const x0 = mark.rect.x * pageSize.width;
+        const x1 = (mark.rect.x + mark.rect.width) * pageSize.width;
+        // Flip Y axis: PDF y0 (bottom) = pageHeight - frontend (y + height)
+        const y0 = pageSize.height - (mark.rect.y + mark.rect.height) * pageSize.height;
+        const y1 = pageSize.height - mark.rect.y * pageSize.height;
+
+        const markResult = await invoke<{ success: boolean; message: string }>(
+          'pdf_add_redaction',
+          {
+            input: currentPath,
+            output: tempPath,
+            page: mark.page - 1, // Backend uses 0-indexed pages
+            x0,
+            y0,
+            x1,
+            y1,
+          }
+        );
+
+        if (!markResult.success) {
+          throw new Error(`Failed to add redaction mark: ${markResult.message}`);
+        }
+
+        // Use temp file for next mark
+        currentPath = tempPath;
+      }
+
+      // Step 2: Apply all redactions
+      const result = await invoke<{ success: boolean; message: string; redactions_applied: number }>(
+        'pdf_apply_redactions',
+        {
+          input: tempPath,
+          output: outputPath,
+          redactImages: true,
+          redactGraphics: true,
+        }
+      );
+
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+
+      // Clear redaction marks from store
+      redactionsStore.clearMarks();
+
+      // Show success message
+      await message(
+        `Redaction complete!\n${result.redactions_applied} area(s) permanently removed.`,
+        { title: 'Redactions Applied', kind: 'info' }
+      );
+
+      // Switch to the redacted file
+      window.dispatchEvent(new CustomEvent('open-pdf-file', { detail: { path: outputPath, replaceTab: tabId } }));
+
+    } catch (err) {
+      console.error('[MuPDFViewer] Failed to apply redactions:', err);
+      await message(`Failed to apply redactions: ${err}`, { title: 'Error', kind: 'error' });
+    } finally {
+      isApplyingRedactions = false;
+      redactionsStore.setApplying(false);
     }
   }
 
@@ -1589,6 +1700,8 @@
           store={annotationsStore}
           showOverlay={showAnnotationOverlay}
           onToggleOverlay={() => showAnnotationOverlay = !showAnnotationOverlay}
+          redactionCount={redactionsStore.markCount}
+          onApplyRedactions={applyRedactions}
         />
       </div>
     {/if}
@@ -1685,6 +1798,19 @@
                       pageHeight={loadedPage.height}
                       scale={1}
                       interactive={showAnnotationTools && annotationsStore.activeTool !== 'text-select'}
+                      redactionsStore={redactionsStore}
+                    />
+                  {/if}
+
+                  <!-- Redaction overlay (shows pending redaction marks) -->
+                  {#if redactionsStore.getMarksForPage(pageNum).length > 0}
+                    <RedactionOverlay
+                      marks={redactionsStore.getMarksForPage(pageNum)}
+                      pageWidth={loadedPage.width}
+                      pageHeight={loadedPage.height}
+                      scale={1}
+                      interactive={showAnnotationTools}
+                      onRemoveMark={(id) => redactionsStore.removeMark(id)}
                     />
                   {/if}
 

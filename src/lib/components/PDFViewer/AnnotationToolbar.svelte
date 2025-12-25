@@ -23,6 +23,7 @@
     Move,
     Stamp,
     PenTool,
+    Eraser,
   } from 'lucide-svelte';
   import { ask, open } from '@tauri-apps/plugin-dialog';
   import { readFile } from '@tauri-apps/plugin-fs';
@@ -45,9 +46,11 @@
     onClearAll?: () => void;
     showOverlay?: boolean;
     onToggleOverlay?: () => void;
+    redactionCount?: number;
+    onApplyRedactions?: () => void;
   }
 
-  let { store, onClearAll, showOverlay = true, onToggleOverlay }: Props = $props();
+  let { store, onClearAll, showOverlay = true, onToggleOverlay, redactionCount = 0, onApplyRedactions }: Props = $props();
 
   let showColorPicker = $state(false);
   let showShapesMenu = $state(false);
@@ -867,6 +870,34 @@
         </div>
       {/if}
     </div>
+  </div>
+
+  <!-- Separator -->
+  <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
+
+  <!-- Redact tool -->
+  <div class="flex items-center gap-1">
+    <button
+      onclick={() => selectTool('redact')}
+      class="p-2 rounded transition-colors flex items-center gap-1"
+      class:bg-[var(--nord11)]={store.activeTool === 'redact'}
+      style="color: {store.activeTool === 'redact' ? 'var(--nord6)' : 'var(--nord4)'};"
+      title="Redact - Mark areas to permanently remove"
+    >
+      <Eraser size={16} />
+    </button>
+
+    {#if redactionCount > 0}
+      <button
+        onclick={onApplyRedactions}
+        class="px-2 py-1 rounded text-xs font-medium flex items-center gap-1 transition-colors hover:opacity-90"
+        style="background-color: var(--nord11); color: var(--nord6);"
+        title="Apply {redactionCount} redaction(s) permanently"
+      >
+        <span>{redactionCount}</span>
+        <span class="hidden sm:inline">Apply</span>
+      </button>
+    {/if}
   </div>
 
   <!-- Separator -->

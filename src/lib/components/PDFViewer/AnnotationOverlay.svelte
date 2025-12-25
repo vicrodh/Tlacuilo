@@ -12,6 +12,7 @@
     STAMP_PRESETS,
   } from '$lib/stores/annotations.svelte';
   import { getAuthorString } from '$lib/stores/settings.svelte';
+  import type { RedactionsStore } from '$lib/stores/redactions.svelte';
 
   interface Props {
     store: AnnotationsStore;
@@ -20,9 +21,10 @@
     pageHeight: number;
     scale?: number;
     interactive?: boolean; // Whether to enable drawing/selection
+    redactionsStore?: RedactionsStore; // For redaction tool
   }
 
-  let { store, page, pageWidth, pageHeight, scale = 1, interactive = true }: Props = $props();
+  let { store, page, pageWidth, pageHeight, scale = 1, interactive = true, redactionsStore }: Props = $props();
 
   let overlayElement: SVGSVGElement;
   let isDrawing = $state(false);
@@ -485,6 +487,9 @@
             stampRotation: store.stampRotation,
             author,
           });
+        } else if (store.activeTool === 'redact' && redactionsStore) {
+          // Add redaction mark to the redactions store
+          redactionsStore.addMark(page, drawRect);
         }
       }
     }
@@ -598,6 +603,7 @@
     if (store.activeTool === 'line' || store.activeTool === 'arrow') return 'crosshair';
     if (store.activeTool === 'sequenceNumber') return 'crosshair';
     if (store.activeTool === 'stamp') return 'crosshair';
+    if (store.activeTool === 'redact') return 'crosshair';
     return 'crosshair';
   });
 
@@ -1206,6 +1212,37 @@
             </text>
           {/if}
         </g>
+      {:else if store.activeTool === 'redact'}
+        <!-- Redaction preview - red dashed rectangle -->
+        <rect
+          x={previewRect.x}
+          y={previewRect.y}
+          width={previewRect.width}
+          height={previewRect.height}
+          fill="rgba(191, 97, 106, 0.3)"
+          stroke="var(--nord11)"
+          stroke-width="2"
+          stroke-dasharray="4"
+        />
+        <!-- Diagonal pattern preview -->
+        <defs>
+          <pattern
+            id="redact-preview-pattern"
+            width="10"
+            height="10"
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <line x1="0" y1="0" x2="0" y2="10" stroke="var(--nord11)" stroke-width="2" opacity="0.3" />
+          </pattern>
+        </defs>
+        <rect
+          x={previewRect.x}
+          y={previewRect.y}
+          width={previewRect.width}
+          height={previewRect.height}
+          fill="url(#redact-preview-pattern)"
+        />
       {/if}
     {/if}
   {/if}
