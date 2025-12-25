@@ -23,20 +23,39 @@
     ReplaceTextOp,
   } from '$lib/stores/edits.svelte';
 
-  // Types for text blocks from Tauri
+  // Types for text blocks with font info from Tauri
+  interface SpanInfo {
+    text: string;
+    font: string;
+    size: number;
+    color: string;
+    bold: boolean;
+    italic: boolean;
+    rect: NormalizedRect;
+  }
+
   interface TextLineInfo {
     text: string;
     rect: NormalizedRect;
+    spans: SpanInfo[];
   }
 
   interface TextBlockInfo {
     rect: NormalizedRect;
     lines: TextLineInfo[];
+    text: string;
+    dominantFont: string | null;
+    dominantSize: number | null;
+    dominantColor: string | null;
   }
 
   interface PageTextContent {
+    success: boolean;
     page: number;
     blocks: TextBlockInfo[];
+    pageWidth: number;
+    pageHeight: number;
+    error?: string;
   }
 
   interface Props {
@@ -47,9 +66,10 @@
     pdfPath: string;
     scale?: number;
     interactive?: boolean;
+    hasPreview?: boolean; // When true, hide operation visuals (preview image shows them)
   }
 
-  let { store, page, pageWidth, pageHeight, pdfPath, scale = 1, interactive = true }: Props = $props();
+  let { store, page, pageWidth, pageHeight, pdfPath, scale = 1, interactive = true, hasPreview = false }: Props = $props();
 
   let overlayElement: HTMLDivElement;
 
@@ -74,17 +94,23 @@
   // Operations for this page
   const pageOps = $derived(store.getOpsForPage(page));
 
-  // Fetch text blocks from the PDF
+  // Fetch text blocks with font info from the PDF
   async function fetchTextBlocks() {
     if (!pdfPath) return;
 
     isLoadingBlocks = true;
     try {
-      const result = await invoke<PageTextContent>('pdf_get_text_blocks', {
+      // Use font-aware command to get detailed font info
+      const result = await invoke<PageTextContent>('pdf_get_text_blocks_with_fonts', {
         path: pdfPath,
-        page: page, // 1-indexed
+        page: page - 1, // 0-indexed for backend
       });
-      textBlocks = result.blocks;
+      if (result.success) {
+        textBlocks = result.blocks;
+      } else {
+        console.error('[EditOverlay] Failed to fetch text blocks:', result.error);
+        textBlocks = [];
+      }
     } catch (e) {
       console.error('[EditOverlay] Failed to fetch text blocks:', e);
       textBlocks = [];
@@ -95,7 +121,53 @@
 
   // Get combined text from a block
   function getBlockText(block: TextBlockInfo): string {
-    return block.lines.map(line => line.text).join('\n');
+    // Use the pre-extracted text if available
+    if (block.text) return block.text;
+    // Fallback: reconstruct from lines
+    return block.lines.map(line =>
+      line.spans ? line.spans.map(s => s.text).join('') : line.text
+    ).join('\n');
+  }
+
+  // Map PDF font names to CSS-friendly font families
+  function mapFontFamily(pdfFont: string | null): string {
+    if (!pdfFont) return 'Helvetica';
+
+    const fontLower = pdfFont.toLowerCase();
+
+    // Common font mappings
+    if (fontLower.includes('arial') || fontLower.includes('helv')) return 'Helvetica';
+    if (fontLower.includes('times') || fontLower.includes('tiro')) return 'Times New Roman';
+    if (fontLower.includes('courier')) return 'Courier';
+    if (fontLower.includes('georgia')) return 'Georgia';
+    if (fontLower.includes('verdana')) return 'Verdana';
+
+    // Return the original if no mapping found - browsers may have it
+    return pdfFont;
+  }
+
+  // Check if block has bold text
+  function hasBlockBold(block: TextBlockInfo): boolean {
+    for (const line of block.lines) {
+      if (line.spans) {
+        for (const span of line.spans) {
+          if (span.bold && span.text.trim()) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Check if block has italic text
+  function hasBlockItalic(block: TextBlockInfo): boolean {
+    for (const line of block.lines) {
+      if (line.spans) {
+        for (const span of line.spans) {
+          if (span.italic && span.text.trim()) return true;
+        }
+      }
+    }
+    return false;
   }
 
   // Check if a block is already being edited (has a ReplaceTextOp)
@@ -130,15 +202,30 @@
     // Create a ReplaceTextOp for this block
     const text = getBlockText(block);
 
-    // TODO: Extract actual font info from PDF using Python backend
-    // For now, use the default text style from toolbar
+    // Use the block's font info if available, otherwise fall back to toolbar defaults
+    const style = {
+      fontFamily: mapFontFamily(block.dominantFont),
+      fontSize: block.dominantSize || store.activeTextStyle.fontSize,
+      color: block.dominantColor || store.activeTextStyle.color,
+      bold: hasBlockBold(block),
+      italic: hasBlockItalic(block),
+      align: store.activeTextStyle.align, // Keep alignment from toolbar
+    };
+
+    console.log('[EditOverlay] Block font info:', {
+      dominantFont: block.dominantFont,
+      dominantSize: block.dominantSize,
+      dominantColor: block.dominantColor,
+      mappedStyle: style,
+    });
+
     const op = store.addOp<ReplaceTextOp>({
       type: 'replace_text',
       page,
       rect: { ...block.rect },
       originalText: text,
       text: text, // Start with original text
-      style: { ...store.activeTextStyle },
+      style,
     });
 
     // Start editing immediately
@@ -431,11 +518,13 @@
   {#each pageOps as op}
     {@const px = toPixels(op.rect)}
     {@const isSelected = store.selectedId === op.id}
+    {@const isActivelyEditing = editingTextId === op.id}
+    {@const showVisuals = !hasPreview || isActivelyEditing}
 
     <div
       class="absolute"
-      class:ring-2={isSelected}
-      class:ring-[var(--nord8)]={isSelected}
+      class:ring-2={isSelected && showVisuals}
+      class:ring-[var(--nord8)]={isSelected && showVisuals}
       style="
         left: {px.x}px;
         top: {px.y}px;
@@ -446,7 +535,7 @@
       {#if op.type === 'insert_text' || op.type === 'replace_text'}
         {@const textOp = op as InsertTextOp}
         {@const isReplaceOp = op.type === 'replace_text'}
-        <!-- Text box -->
+        <!-- Text box - always show textarea when actively editing -->
         {#if editingTextId === op.id}
           <textarea
             class="w-full h-full p-1 resize-none outline-none"
@@ -464,7 +553,7 @@
             onblur={() => handleTextBlur(op)}
             onkeydown={(e) => handleTextKeydown(e)}
           ></textarea>
-        {:else}
+        {:else if showVisuals}
           <div
             class="w-full h-full p-1 overflow-hidden cursor-text"
             style="
@@ -482,7 +571,7 @@
             {textOp.text || 'Double-click to edit...'}
           </div>
         {/if}
-      {:else if op.type === 'insert_image'}
+      {:else if op.type === 'insert_image' && showVisuals}
         {@const imgOp = op as InsertImageOp}
         <!-- Image placeholder -->
         <div
@@ -502,7 +591,7 @@
             <span class="text-xs opacity-50">Click to select image</span>
           {/if}
         </div>
-      {:else if op.type === 'draw_shape'}
+      {:else if op.type === 'draw_shape' && showVisuals}
         {@const shapeOp = op as DrawShapeOp}
         <!-- Shape -->
         <svg class="w-full h-full" viewBox="0 0 {px.width} {px.height}">

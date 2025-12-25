@@ -114,6 +114,91 @@
   // Edit mode (mutually exclusive with annotation mode per EDITOR_MODE_PLAN)
   let showEditTools = $state(false);
 
+  // Live preview for edit mode
+  let previewImages = $state<Map<number, string>>(new Map()); // page -> base64 image
+  let previewPending = $state<Set<number>>(new Set()); // pages with pending preview requests
+  let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Request preview for a specific page
+  async function requestPagePreview(pageNum: number) {
+    if (!filePath || !showEditTools) return;
+
+    // Get edits for this page (convert to 0-indexed for backend)
+    const pageOps = editsStore.ops
+      .filter(op => op.page === pageNum)
+      .map(op => ({
+        ...op,
+        page: op.page - 1, // Convert to 0-indexed
+      }));
+
+    // If no edits on this page, clear preview
+    if (pageOps.length === 0) {
+      previewImages = new Map(previewImages);
+      previewImages.delete(pageNum);
+      return;
+    }
+
+    previewPending = new Set(previewPending).add(pageNum);
+
+    try {
+      const editsJson = JSON.stringify({ ops: pageOps });
+      const result = await invoke<{ success: boolean; image: string; error?: string }>(
+        'pdf_render_preview',
+        {
+          input: filePath,
+          page: pageNum - 1, // 0-indexed for backend
+          editsJson,
+          dpi: 150,
+        }
+      );
+
+      if (result.success && result.image) {
+        previewImages = new Map(previewImages);
+        previewImages.set(pageNum, result.image);
+      }
+    } catch (e) {
+      console.error(`[MuPDFViewer] Preview failed for page ${pageNum}:`, e);
+    } finally {
+      previewPending = new Set(previewPending);
+      previewPending.delete(pageNum);
+    }
+  }
+
+  // Debounced preview update - triggers when edits change
+  function schedulePreviewUpdate() {
+    if (previewDebounceTimer) {
+      clearTimeout(previewDebounceTimer);
+    }
+    previewDebounceTimer = setTimeout(() => {
+      // Find all pages with edits and request previews
+      const pagesWithEdits = new Set(editsStore.ops.map(op => op.page));
+      pagesWithEdits.forEach(pageNum => {
+        requestPagePreview(pageNum);
+      });
+
+      // Clear previews for pages that no longer have edits
+      const currentPreviewPages = Array.from(previewImages.keys());
+      currentPreviewPages.forEach(pageNum => {
+        if (!pagesWithEdits.has(pageNum)) {
+          previewImages = new Map(previewImages);
+          previewImages.delete(pageNum);
+        }
+      });
+    }, 300); // 300ms debounce
+  }
+
+  // Watch for edit changes and schedule preview updates
+  $effect(() => {
+    if (showEditTools && editsStore.ops.length > 0) {
+      // Track ops to detect changes
+      const opsSnapshot = JSON.stringify(editsStore.ops);
+      schedulePreviewUpdate();
+    } else if (!showEditTools) {
+      // Clear all previews when exiting edit mode
+      previewImages = new Map();
+    }
+  });
+
   // Toggle annotation mode (disables edit mode)
   function toggleAnnotationMode() {
     if (showAnnotationTools) {
@@ -1920,14 +2005,22 @@
                 style="width: {dims.width}px; min-height: {dims.height}px;"
               >
                 {#if loadedPage}
-                  <!-- Loaded page -->
+                  <!-- Loaded page - show preview if available in edit mode -->
+                  {@const previewImage = previewImages.get(pageNum)}
+                  {@const isPreviewing = previewPending.has(pageNum)}
                   <img
-                    src="data:image/png;base64,{loadedPage.data}"
+                    src="data:image/png;base64,{previewImage || loadedPage.data}"
                     alt="Page {pageNum}"
                     class="block"
-                    style="background: white; transform: rotate({rotation}deg);"
+                    class:opacity-70={isPreviewing}
+                    style="background: white; transform: rotate({rotation}deg); transition: opacity 0.15s;"
                     draggable="false"
                   />
+                  {#if isPreviewing}
+                    <div class="absolute top-2 left-2 px-2 py-1 rounded text-xs" style="background-color: var(--nord10); color: var(--nord6);">
+                      Updating preview...
+                    </div>
+                  {/if}
 
                   <!-- Text layer for text selection (disabled when Edit Mode is active) -->
                   <TextLayer
@@ -1990,6 +2083,7 @@
                       pdfPath={filePath}
                       scale={1}
                       interactive={true}
+                      hasPreview={previewImages.has(pageNum)}
                     />
                   {/if}
 

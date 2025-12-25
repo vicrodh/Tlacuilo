@@ -7,6 +7,7 @@ Uses PyMuPDF for extraction and manipulation.
 CLI usage (dev):
   python pdf_edit.py text-blocks --input doc.pdf --page 0
   python pdf_edit.py insert-text --input doc.pdf --output out.pdf --page 0 --x 100 --y 100 --text "Hello"
+  python pdf_edit.py preview --input doc.pdf --page 0 --edits '{"ops": [...]}'
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ from __future__ import annotations
 import argparse
 import sys
 import json
+import base64
+import io
 from pathlib import Path
 from typing import Optional
 
@@ -510,6 +513,306 @@ def parse_hex_color(hex_str: str) -> tuple:
     return (0, 0, 0)
 
 
+def int_color_to_hex(color_int: int) -> str:
+    """Convert PyMuPDF integer color to hex string."""
+    # PyMuPDF stores color as integer: 0xRRGGBB
+    r = (color_int >> 16) & 0xFF
+    g = (color_int >> 8) & 0xFF
+    b = color_int & 0xFF
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def render_page_preview(
+    input_path: Path,
+    page_num: int,
+    edits_json: str,
+    dpi: int = 150,
+) -> dict:
+    """
+    Render a page with edits applied as a PNG image (base64).
+
+    This provides live preview without saving the file.
+    Returns base64-encoded PNG data.
+    """
+    result = {
+        "success": False,
+        "image": "",  # base64 PNG
+        "width": 0,
+        "height": 0,
+        "error": None,
+    }
+
+    try:
+        edits = json.loads(edits_json) if edits_json else {"ops": []}
+        ops = edits.get("ops", [])
+
+        doc = fitz.open(input_path)
+
+        if page_num < 0 or page_num >= len(doc):
+            result["error"] = f"Invalid page number: {page_num}"
+            doc.close()
+            return result
+
+        page = doc[page_num]
+        page_width = page.rect.width
+        page_height = page.rect.height
+
+        # Apply edits to this page
+        for op in ops:
+            op_page = op.get("page", 0)
+            if op_page != page_num:
+                continue
+
+            op_type = op.get("type")
+            rect = op.get("rect", {})
+
+            # Convert normalized rect to PDF points
+            x0 = rect.get("x", 0) * page_width
+            y0 = rect.get("y", 0) * page_height
+            w = rect.get("width", 0) * page_width
+            h = rect.get("height", 0) * page_height
+            x1 = x0 + w
+            y1 = y0 + h
+
+            if op_type == "insert_text":
+                text = op.get("text", "")
+                if not text:
+                    continue
+                style = op.get("style", {})
+                font_name = style.get("fontFamily", "helv")
+                font_size = style.get("fontSize", 12)
+                color_str = style.get("color", "#000000")
+                color = parse_hex_color(color_str)
+
+                # Map font names
+                font_map = {
+                    "Helvetica": "helv",
+                    "Times New Roman": "tiro",
+                    "Times": "tiro",
+                    "Courier": "cour",
+                    "Arial": "helv",
+                }
+                font_name = font_map.get(font_name, "helv")
+
+                point = fitz.Point(x0, y0 + font_size)
+                page.insert_text(
+                    point,
+                    text,
+                    fontname=font_name,
+                    fontsize=font_size,
+                    color=color,
+                )
+
+            elif op_type == "replace_text":
+                text = op.get("text", "")
+                style = op.get("style", {})
+                font_name = style.get("fontFamily", "helv")
+                font_size = style.get("fontSize", 12)
+                color_str = style.get("color", "#000000")
+                color = parse_hex_color(color_str)
+
+                font_map = {
+                    "Helvetica": "helv",
+                    "Times New Roman": "tiro",
+                    "Times": "tiro",
+                    "Courier": "cour",
+                    "Arial": "helv",
+                }
+                font_name = font_map.get(font_name, "helv")
+
+                # Redact original area with white
+                redact_rect = fitz.Rect(x0, y0, x1, y1)
+                page.add_redact_annot(redact_rect, fill=(1, 1, 1))
+                page.apply_redactions()
+
+                # Insert new text
+                if text:
+                    point = fitz.Point(x0, y0 + font_size)
+                    page.insert_text(
+                        point,
+                        text,
+                        fontname=font_name,
+                        fontsize=font_size,
+                        color=color,
+                    )
+
+            elif op_type == "draw_shape":
+                shape_type = op.get("shape", "rect")
+                stroke_color_str = op.get("strokeColor", "#000000")
+                stroke_width = op.get("strokeWidth", 1)
+                fill_color_str = op.get("fillColor")
+
+                stroke_color = parse_hex_color(stroke_color_str)
+                fill_color = parse_hex_color(fill_color_str) if fill_color_str else None
+
+                shape = page.new_shape()
+                draw_rect = fitz.Rect(x0, y0, x1, y1)
+
+                if shape_type == "rect":
+                    shape.draw_rect(draw_rect)
+                elif shape_type == "ellipse":
+                    shape.draw_oval(draw_rect)
+                elif shape_type == "line":
+                    shape.draw_line(fitz.Point(x0, y1), fitz.Point(x1, y0))
+
+                shape.finish(
+                    color=stroke_color,
+                    fill=fill_color,
+                    width=stroke_width,
+                )
+                shape.commit()
+
+        # Render page to pixmap
+        zoom = dpi / 72.0
+        mat = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat)
+
+        # Convert to PNG bytes
+        png_bytes = pix.tobytes("png")
+
+        # Encode as base64
+        b64_data = base64.b64encode(png_bytes).decode("utf-8")
+
+        result["success"] = True
+        result["image"] = b64_data
+        result["width"] = pix.width
+        result["height"] = pix.height
+
+        doc.close()
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
+
+
+def get_text_blocks_with_fonts(
+    input_path: Path,
+    page_num: int,
+) -> dict:
+    """
+    Extract text blocks with detailed font information.
+
+    Returns blocks with font name, size, color for each span.
+    This uses PyMuPDF's dict extraction which has full font details.
+    """
+    result = {
+        "success": False,
+        "page": page_num,
+        "blocks": [],
+        "error": None,
+    }
+
+    try:
+        doc = fitz.open(input_path)
+
+        if page_num < 0 or page_num >= len(doc):
+            result["error"] = f"Invalid page number: {page_num}"
+            doc.close()
+            return result
+
+        page = doc[page_num]
+        page_width = page.rect.width
+        page_height = page.rect.height
+
+        # Get text with full details
+        text_dict = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+
+        blocks = []
+        for block in text_dict.get("blocks", []):
+            if block.get("type") != 0:  # Skip image blocks
+                continue
+
+            block_data = {
+                "rect": {
+                    "x": block["bbox"][0] / page_width,
+                    "y": block["bbox"][1] / page_height,
+                    "width": (block["bbox"][2] - block["bbox"][0]) / page_width,
+                    "height": (block["bbox"][3] - block["bbox"][1]) / page_height,
+                },
+                "lines": [],
+                "dominantFont": None,
+                "dominantSize": None,
+                "dominantColor": None,
+            }
+
+            # Track font usage to find dominant style
+            font_counts = {}
+            size_counts = {}
+            color_counts = {}
+
+            for line in block.get("lines", []):
+                line_data = {
+                    "rect": {
+                        "x": line["bbox"][0] / page_width,
+                        "y": line["bbox"][1] / page_height,
+                        "width": (line["bbox"][2] - line["bbox"][0]) / page_width,
+                        "height": (line["bbox"][3] - line["bbox"][1]) / page_height,
+                    },
+                    "spans": [],
+                }
+
+                for span in line.get("spans", []):
+                    font = span.get("font", "")
+                    size = span.get("size", 12)
+                    color_int = span.get("color", 0)
+                    flags = span.get("flags", 0)
+                    text = span.get("text", "")
+
+                    # Count for dominant detection
+                    text_len = len(text)
+                    font_counts[font] = font_counts.get(font, 0) + text_len
+                    size_counts[size] = size_counts.get(size, 0) + text_len
+                    color_counts[color_int] = color_counts.get(color_int, 0) + text_len
+
+                    span_data = {
+                        "text": text,
+                        "font": font,
+                        "size": round(size, 1),
+                        "color": int_color_to_hex(color_int),
+                        "bold": bool(flags & 2**4),  # bit 4 = bold
+                        "italic": bool(flags & 2**1),  # bit 1 = italic
+                        "rect": {
+                            "x": span["bbox"][0] / page_width,
+                            "y": span["bbox"][1] / page_height,
+                            "width": (span["bbox"][2] - span["bbox"][0]) / page_width,
+                            "height": (span["bbox"][3] - span["bbox"][1]) / page_height,
+                        },
+                    }
+                    line_data["spans"].append(span_data)
+
+                block_data["lines"].append(line_data)
+
+            # Set dominant font info
+            if font_counts:
+                block_data["dominantFont"] = max(font_counts, key=font_counts.get)
+            if size_counts:
+                block_data["dominantSize"] = max(size_counts, key=size_counts.get)
+            if color_counts:
+                dominant_color = max(color_counts, key=color_counts.get)
+                block_data["dominantColor"] = int_color_to_hex(dominant_color)
+
+            # Get full text
+            text_parts = []
+            for line in block_data["lines"]:
+                line_text = "".join(s["text"] for s in line["spans"])
+                text_parts.append(line_text)
+            block_data["text"] = "\n".join(text_parts)
+
+            blocks.append(block_data)
+
+        result["success"] = True
+        result["blocks"] = blocks
+        result["pageWidth"] = page_width
+        result["pageHeight"] = page_height
+        doc.close()
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
+
+
 def draw_shape(
     input_path: Path,
     output_path: Path,
@@ -615,6 +918,20 @@ def main():
     apply_parser.add_argument("--edits", "-e", required=True, help="JSON string with edit operations")
     apply_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
+    # Preview command - render page with edits as PNG
+    preview_parser = subparsers.add_parser("preview", help="Render page preview with edits")
+    preview_parser.add_argument("--input", "-i", required=True, help="Input PDF path")
+    preview_parser.add_argument("--page", "-p", type=int, required=True, help="Page number (0-indexed)")
+    preview_parser.add_argument("--edits", "-e", default="{}", help="JSON string with edit operations")
+    preview_parser.add_argument("--dpi", type=int, default=150, help="Render DPI")
+    preview_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Text blocks with fonts command
+    fonts_parser = subparsers.add_parser("text-blocks-fonts", help="Get text blocks with font info")
+    fonts_parser.add_argument("--input", "-i", required=True, help="Input PDF path")
+    fonts_parser.add_argument("--page", "-p", type=int, required=True, help="Page number (0-indexed)")
+    fonts_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
     args = parser.parse_args()
 
     if args.command == "text-blocks":
@@ -675,6 +992,37 @@ def main():
         else:
             print(result["message"])
             sys.exit(0 if result["success"] else 1)
+
+    elif args.command == "preview":
+        result = render_page_preview(
+            Path(args.input),
+            args.page,
+            args.edits,
+            args.dpi,
+        )
+        if hasattr(args, 'json') and args.json:
+            print(json.dumps(result))
+        else:
+            if result["success"]:
+                print(f"Preview rendered: {result['width']}x{result['height']}")
+                # For non-JSON, just show info (image is too big to print)
+            else:
+                print(f"Error: {result['error']}")
+                sys.exit(1)
+
+    elif args.command == "text-blocks-fonts":
+        result = get_text_blocks_with_fonts(Path(args.input), args.page)
+        if hasattr(args, 'json') and args.json:
+            print(json.dumps(result))
+        else:
+            if result["success"]:
+                print(f"Found {len(result['blocks'])} text blocks with font info")
+                for i, block in enumerate(result["blocks"]):
+                    print(f"  Block {i}: {block['dominantFont']} {block['dominantSize']}pt {block['dominantColor']}")
+                    print(f"    Text: {block['text'][:60]}...")
+            else:
+                print(f"Error: {result['error']}")
+                sys.exit(1)
 
 
 if __name__ == "__main__":

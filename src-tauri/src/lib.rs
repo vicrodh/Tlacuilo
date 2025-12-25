@@ -1561,6 +1561,123 @@ fn pdf_apply_edits(
         .map_err(|e| format!("Failed to parse result: {}", e))
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct PreviewResult {
+    success: bool,
+    image: String,  // base64 PNG
+    width: u32,
+    height: u32,
+    error: Option<String>,
+}
+
+/// Render a page preview with edits applied (without saving)
+#[tauri::command]
+fn pdf_render_preview(
+    app: AppHandle,
+    input: String,
+    page: i32,
+    edits_json: String,
+    dpi: Option<i32>,
+) -> Result<PreviewResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let page_str = page.to_string();
+    let dpi_str = dpi.unwrap_or(150).to_string();
+
+    let args: Vec<&str> = vec![
+        "preview",
+        "--input", &input,
+        "--page", &page_str,
+        "--edits", &edits_json,
+        "--dpi", &dpi_str,
+        "--json",
+    ];
+
+    let result = bridge
+        .run_script("pdf_edit.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
+// Normalized rect for font info (separate from pdf_viewer's version for f64 compatibility)
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct NormalizedRectF64 {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FontSpanInfo {
+    text: String,
+    font: String,
+    size: f64,
+    color: String,
+    bold: bool,
+    italic: bool,
+    rect: NormalizedRectF64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FontLineInfo {
+    rect: NormalizedRectF64,
+    spans: Vec<FontSpanInfo>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FontBlockInfo {
+    rect: NormalizedRectF64,
+    lines: Vec<FontLineInfo>,
+    text: String,
+    #[serde(rename = "dominantFont")]
+    dominant_font: Option<String>,
+    #[serde(rename = "dominantSize")]
+    dominant_size: Option<f64>,
+    #[serde(rename = "dominantColor")]
+    dominant_color: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TextBlocksFontsResult {
+    success: bool,
+    page: i32,
+    blocks: Vec<FontBlockInfo>,
+    #[serde(rename = "pageWidth")]
+    page_width: Option<f64>,
+    #[serde(rename = "pageHeight")]
+    page_height: Option<f64>,
+    error: Option<String>,
+}
+
+/// Get text blocks with detailed font information
+#[tauri::command]
+fn pdf_get_text_blocks_with_fonts(
+    app: AppHandle,
+    input: String,
+    page: i32,
+) -> Result<TextBlocksFontsResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let page_str = page.to_string();
+
+    let args: Vec<&str> = vec![
+        "text-blocks-fonts",
+        "--input", &input,
+        "--page", &page_str,
+        "--json",
+    ];
+
+    let result = bridge
+        .run_script("pdf_edit.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse result: {}", e))
+}
+
 // ============================================================================
 // PDF Attachments Commands (PythonBridge)
 // ============================================================================
@@ -2070,7 +2187,9 @@ pub fn run() {
       // PDF Edit (pdf_get_text_blocks is in pdf_viewer)
       pdf_insert_text,
       pdf_replace_text,
-      pdf_apply_edits
+      pdf_apply_edits,
+      pdf_render_preview,
+      pdf_get_text_blocks_with_fonts
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
