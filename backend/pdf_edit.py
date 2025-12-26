@@ -986,6 +986,244 @@ def draw_shape(
     return result
 
 
+def analyze_fonts(input_path: Path) -> dict:
+    """
+    Analyze fonts used in a PDF document.
+
+    Returns information about each font including:
+    - Font name and properties
+    - Whether it's embedded/subset
+    - System font availability
+    - Suggested alternatives with similarity scores
+    """
+    result = {
+        "success": False,
+        "fonts": [],
+        "summary": {
+            "total": 0,
+            "embedded": 0,
+            "missing": 0,
+            "low_match": 0,
+        },
+        "error": None,
+    }
+
+    # Known system fonts and their properties for matching
+    SYSTEM_FONTS = {
+        # Serif fonts
+        "times new roman": {"type": "serif", "weight": "normal", "style": "normal"},
+        "times": {"type": "serif", "weight": "normal", "style": "normal"},
+        "georgia": {"type": "serif", "weight": "normal", "style": "normal"},
+        "palatino": {"type": "serif", "weight": "normal", "style": "normal"},
+        "garamond": {"type": "serif", "weight": "normal", "style": "normal"},
+        "cambria": {"type": "serif", "weight": "normal", "style": "normal"},
+        "book antiqua": {"type": "serif", "weight": "normal", "style": "normal"},
+        "liberation serif": {"type": "serif", "weight": "normal", "style": "normal"},
+        "dejavu serif": {"type": "serif", "weight": "normal", "style": "normal"},
+        "noto serif": {"type": "serif", "weight": "normal", "style": "normal"},
+        "tiro": {"type": "serif", "weight": "normal", "style": "normal"},
+
+        # Sans-serif fonts
+        "arial": {"type": "sans", "weight": "normal", "style": "normal"},
+        "helvetica": {"type": "sans", "weight": "normal", "style": "normal"},
+        "verdana": {"type": "sans", "weight": "normal", "style": "normal"},
+        "tahoma": {"type": "sans", "weight": "normal", "style": "normal"},
+        "calibri": {"type": "sans", "weight": "normal", "style": "normal"},
+        "trebuchet ms": {"type": "sans", "weight": "normal", "style": "normal"},
+        "liberation sans": {"type": "sans", "weight": "normal", "style": "normal"},
+        "dejavu sans": {"type": "sans", "weight": "normal", "style": "normal"},
+        "noto sans": {"type": "sans", "weight": "normal", "style": "normal"},
+        "helv": {"type": "sans", "weight": "normal", "style": "normal"},
+
+        # Monospace fonts
+        "courier": {"type": "mono", "weight": "normal", "style": "normal"},
+        "courier new": {"type": "mono", "weight": "normal", "style": "normal"},
+        "consolas": {"type": "mono", "weight": "normal", "style": "normal"},
+        "monaco": {"type": "mono", "weight": "normal", "style": "normal"},
+        "liberation mono": {"type": "mono", "weight": "normal", "style": "normal"},
+        "dejavu sans mono": {"type": "mono", "weight": "normal", "style": "normal"},
+        "noto mono": {"type": "mono", "weight": "normal", "style": "normal"},
+        "cour": {"type": "mono", "weight": "normal", "style": "normal"},
+    }
+
+    def get_font_type(font_name: str, flags: int) -> str:
+        """Determine font type from name and flags."""
+        name_lower = font_name.lower()
+
+        # Check name first
+        if any(x in name_lower for x in ["courier", "mono", "consol", "fixed"]):
+            return "mono"
+        if any(x in name_lower for x in ["times", "roman", "serif", "georgia", "palatino", "garamond"]):
+            if "sans" not in name_lower:
+                return "serif"
+        if any(x in name_lower for x in ["arial", "helv", "helvetica", "verdana", "calibri", "sans", "gothic"]):
+            return "sans"
+
+        # Fall back to flags
+        # bit 2 = serif, bit 3 = monospace
+        if flags & (1 << 3):  # monospace
+            return "mono"
+        if flags & (1 << 2):  # serif
+            return "serif"
+
+        return "sans"  # Default
+
+    def calculate_similarity(pdf_font: dict, system_font: dict) -> float:
+        """Calculate similarity score between PDF font and system font."""
+        score = 0.0
+
+        # Type match is most important (50%)
+        if pdf_font["type"] == system_font["type"]:
+            score += 0.5
+        elif pdf_font["type"] == "serif" and system_font["type"] == "sans":
+            score += 0.1  # Low match
+        elif pdf_font["type"] == "sans" and system_font["type"] == "serif":
+            score += 0.1
+
+        # Weight match (25%)
+        if pdf_font.get("bold") == (system_font.get("weight") == "bold"):
+            score += 0.25
+        else:
+            score += 0.1
+
+        # Style match (25%)
+        if pdf_font.get("italic") == (system_font.get("style") == "italic"):
+            score += 0.25
+        else:
+            score += 0.1
+
+        return score
+
+    def find_best_matches(font_info: dict) -> list:
+        """Find best matching system fonts."""
+        matches = []
+
+        for sys_name, sys_props in SYSTEM_FONTS.items():
+            similarity = calculate_similarity(font_info, sys_props)
+
+            # Bonus for name similarity
+            pdf_name = font_info["name"].lower()
+            if sys_name in pdf_name or pdf_name in sys_name:
+                similarity = min(1.0, similarity + 0.3)
+
+            matches.append({
+                "name": sys_name.title(),
+                "similarity": round(similarity * 100),
+            })
+
+        # Sort by similarity and return top 3
+        matches.sort(key=lambda x: x["similarity"], reverse=True)
+        return matches[:3]
+
+    try:
+        doc = fitz.open(input_path)
+
+        # Collect all fonts from all pages
+        all_fonts = {}  # font_name -> font_info
+
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+
+            # Get fonts used on this page
+            font_list = page.get_fonts(full=True)
+
+            for font in font_list:
+                # font tuple: (xref, ext, type, basefont, name, encoding, ref_name)
+                xref, ext, font_type, basefont, name, encoding, ref_name = font[:7] if len(font) >= 7 else (font + (None,) * (7 - len(font)))
+
+                # Use basefont or name
+                font_name = basefont or name or f"Unknown-{xref}"
+
+                # Clean up font name (remove subset prefix like ABCDEF+)
+                clean_name = font_name
+                if "+" in font_name:
+                    clean_name = font_name.split("+", 1)[1]
+
+                if clean_name not in all_fonts:
+                    all_fonts[clean_name] = {
+                        "original_name": font_name,
+                        "clean_name": clean_name,
+                        "xref": xref,
+                        "type": font_type,
+                        "encoding": encoding,
+                        "pages": [],
+                        "is_subset": "+" in font_name,
+                        "is_embedded": ext not in ["", None, "n/a"],
+                    }
+
+                if page_num + 1 not in all_fonts[clean_name]["pages"]:
+                    all_fonts[clean_name]["pages"].append(page_num + 1)
+
+        # Analyze each font
+        fonts_list = []
+        missing_count = 0
+        low_match_count = 0
+        embedded_count = 0
+
+        for font_name, font_data in all_fonts.items():
+            # Determine font properties
+            name_lower = font_name.lower()
+
+            # Detect bold/italic from name
+            is_bold = any(x in name_lower for x in ["bold", "black", "heavy", "demi"])
+            is_italic = any(x in name_lower for x in ["italic", "oblique", "slant"])
+
+            # Detect font type
+            font_type = get_font_type(font_name, 0)
+
+            font_info = {
+                "name": font_name,
+                "originalName": font_data["original_name"],
+                "type": font_type,
+                "bold": is_bold,
+                "italic": is_italic,
+                "embedded": font_data["is_embedded"],
+                "subset": font_data["is_subset"],
+                "pages": font_data["pages"],
+                "pageCount": len(font_data["pages"]),
+            }
+
+            # Find best matches
+            matches = find_best_matches(font_info)
+            font_info["matches"] = matches
+            font_info["bestMatch"] = matches[0] if matches else None
+            font_info["bestMatchScore"] = matches[0]["similarity"] if matches else 0
+
+            # Check if we have a good match
+            if font_info["bestMatchScore"] < 85:
+                low_match_count += 1
+                font_info["status"] = "low_match"
+            elif not font_data["is_embedded"]:
+                missing_count += 1
+                font_info["status"] = "missing"
+            else:
+                font_info["status"] = "ok"
+
+            if font_data["is_embedded"]:
+                embedded_count += 1
+
+            fonts_list.append(font_info)
+
+        # Sort by page count (most used first)
+        fonts_list.sort(key=lambda x: x["pageCount"], reverse=True)
+
+        result["success"] = True
+        result["fonts"] = fonts_list
+        result["summary"] = {
+            "total": len(fonts_list),
+            "embedded": embedded_count,
+            "missing": missing_count,
+            "low_match": low_match_count,
+        }
+
+        doc.close()
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description="PDF Edit operations")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1040,6 +1278,11 @@ def main():
     fonts_parser.add_argument("--input", "-i", required=True, help="Input PDF path")
     fonts_parser.add_argument("--page", "-p", type=int, required=True, help="Page number (0-indexed)")
     fonts_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # Analyze fonts command
+    analyze_parser = subparsers.add_parser("analyze-fonts", help="Analyze fonts in PDF")
+    analyze_parser.add_argument("--input", "-i", required=True, help="Input PDF path")
+    analyze_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     args = parser.parse_args()
 
@@ -1129,6 +1372,31 @@ def main():
                 for i, block in enumerate(result["blocks"]):
                     print(f"  Block {i}: {block['dominantFont']} {block['dominantSize']}pt {block['dominantColor']}")
                     print(f"    Text: {block['text'][:60]}...")
+            else:
+                print(f"Error: {result['error']}")
+                sys.exit(1)
+
+    elif args.command == "analyze-fonts":
+        result = analyze_fonts(Path(args.input))
+        if hasattr(args, 'json') and args.json:
+            print(json.dumps(result))
+        else:
+            if result["success"]:
+                summary = result["summary"]
+                print(f"\nFont Analysis for: {args.input}")
+                print(f"{'=' * 50}")
+                print(f"Total fonts: {summary['total']}")
+                print(f"Embedded: {summary['embedded']}")
+                print(f"Missing: {summary['missing']}")
+                print(f"Low match (<85%): {summary['low_match']}")
+                print(f"\n{'Font Name':<30} {'Type':<8} {'Match':<20} {'Score'}")
+                print(f"{'-' * 70}")
+                for font in result["fonts"]:
+                    status_icon = "✓" if font["status"] == "ok" else "⚠" if font["status"] == "low_match" else "✗"
+                    best = font.get("bestMatch", {})
+                    match_name = best.get("name", "N/A") if best else "N/A"
+                    match_score = f"{best.get('similarity', 0)}%" if best else "N/A"
+                    print(f"{status_icon} {font['name']:<28} {font['type']:<8} {match_name:<20} {match_score}")
             else:
                 print(f"Error: {result['error']}")
                 sys.exit(1)

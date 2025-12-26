@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { LayoutList, MessageSquare, Bookmark, Search, Info, Paperclip, Layers, ChevronRight, ChevronLeft } from 'lucide-svelte';
+  import { LayoutList, MessageSquare, Bookmark, Search, Info, Paperclip, Layers, Type, ChevronRight, ChevronLeft } from 'lucide-svelte';
   import type { AnnotationsStore } from '$lib/stores/annotations.svelte';
   import PagesTab from './sidebar/PagesTab.svelte';
   import AnnotationsTab from './sidebar/AnnotationsTab.svelte';
@@ -8,6 +8,7 @@
   import MetadataTab from './sidebar/MetadataTab.svelte';
   import AttachmentsTab from './sidebar/AttachmentsTab.svelte';
   import LayersTab from './sidebar/LayersTab.svelte';
+  import FontsTab from './sidebar/FontsTab.svelte';
 
   interface RenderedPage {
     data: string;
@@ -55,7 +56,7 @@
   // State for passing search query to SearchTab
   let externalSearchQuery = $state('');
 
-  type TabId = 'pages' | 'annotations' | 'bookmarks' | 'search' | 'info' | 'attachments' | 'layers';
+  type TabId = 'pages' | 'annotations' | 'bookmarks' | 'search' | 'info' | 'attachments' | 'layers' | 'fonts';
 
   let activeTab = $state<TabId>('pages');
   let isCollapsed = $state(false);
@@ -68,6 +69,7 @@
     { id: 'info', icon: Info, label: 'Document Info' },
     { id: 'attachments', icon: Paperclip, label: 'Attachments' },
     { id: 'layers', icon: Layers, label: 'Layers' },
+    { id: 'fonts', icon: Type, label: 'Fonts' },
   ];
 
   function handleTabClick(tabId: TabId) {
@@ -148,6 +150,10 @@
         <LayersTab
           {filePath}
           onReload={onFileReload}
+        />
+      {:else if activeTab === 'fonts'}
+        <FontsTab
+          {filePath}
         />
       {/if}
     </div>

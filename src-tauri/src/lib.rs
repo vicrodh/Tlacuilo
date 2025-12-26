@@ -1979,6 +1979,66 @@ fn form_fields_fill(
 // File Utilities
 // ============================================================================
 
+// Font Analysis Types
+#[derive(Debug, Serialize, Deserialize)]
+struct FontMatch {
+    name: String,
+    similarity: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FontInfo {
+    name: String,
+    #[serde(rename = "originalName")]
+    original_name: String,
+    #[serde(rename = "type")]
+    font_type: String,
+    bold: bool,
+    italic: bool,
+    embedded: bool,
+    subset: bool,
+    pages: Vec<i32>,
+    #[serde(rename = "pageCount")]
+    page_count: i32,
+    matches: Vec<FontMatch>,
+    #[serde(rename = "bestMatch")]
+    best_match: Option<FontMatch>,
+    #[serde(rename = "bestMatchScore")]
+    best_match_score: i32,
+    status: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FontAnalysisSummary {
+    total: i32,
+    embedded: i32,
+    missing: i32,
+    low_match: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FontAnalysisResult {
+    success: bool,
+    fonts: Vec<FontInfo>,
+    summary: FontAnalysisSummary,
+    error: Option<String>,
+}
+
+/// Analyze fonts in a PDF document
+#[tauri::command]
+fn pdf_analyze_fonts(app: AppHandle, input: String) -> Result<FontAnalysisResult, String> {
+    let bridge = PythonBridge::new(&app).map_err(|e| e.to_string())?;
+
+    let args: Vec<&str> = vec!["analyze-fonts", "--input", &input, "--json"];
+
+    let result = bridge
+        .run_script("pdf_edit.py", &args)
+        .map_err(|e| e.to_string())?;
+
+    serde_json::from_str(&result.stdout)
+        .map_err(|e| format!("Failed to parse font analysis result: {}\nStdout: {}", e, result.stdout))
+}
+
 /// Replace a file with another file (atomic rename for in-place save)
 #[tauri::command]
 fn replace_file(from: String, to: String) -> Result<(), String> {
@@ -2231,6 +2291,7 @@ pub fn run() {
       pdf_apply_edits,
       pdf_render_preview,
       pdf_get_text_blocks_with_fonts,
+      pdf_analyze_fonts,
       // File utilities
       replace_file
     ])
