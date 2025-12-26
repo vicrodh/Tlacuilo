@@ -8,6 +8,10 @@ reportlab>=4.2.5
 
 # Image processing
 pillow>=11.0.0
+numpy>=1.26.4
+opencv-python-headless>=4.10.0
+fonttools>=4.54.1
+brotli>=1.1.0
 
 # OCR
 ocrmypdf>=16.0.0

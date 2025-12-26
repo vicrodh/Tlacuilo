@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 mod annotations;
+mod font_detect;
 mod pdf_compress;
 mod pdf_ocr;
 mod pdf_viewer;
@@ -160,6 +161,33 @@ fn ocr_run(
 
     let opts = options.unwrap_or_default();
     pdf_ocr::run_ocr(&app, &input, &output_path, opts)
+}
+
+// ============================================================================
+// Font Detection Commands
+// ============================================================================
+
+/// Check font detection dependencies
+#[tauri::command]
+fn font_detect_check(app: AppHandle) -> Result<font_detect::FontDetectCheckResult, String> {
+    font_detect::check(&app)
+}
+
+/// Build or refresh font detection index
+#[tauri::command]
+fn font_detect_index(app: AppHandle, force: bool) -> Result<font_detect::FontDetectIndexResult, String> {
+    font_detect::index(&app, force)
+}
+
+/// Match font from an image
+#[tauri::command]
+fn font_detect_match(
+    app: AppHandle,
+    input: String,
+    engine: String,
+    topk: i32,
+) -> Result<font_detect::FontDetectMatchResult, String> {
+    font_detect::match_image(&app, &input, &engine, topk)
 }
 
 // ============================================================================
@@ -2243,6 +2271,10 @@ pub fn run() {
       ocr_check_dependencies,
       ocr_analyze_pdf,
       ocr_run,
+      // Font Detection (Python)
+      font_detect_check,
+      font_detect_index,
+      font_detect_match,
       // PDF operations (PythonBridge)
       merge_pdfs,
       merge_pages,
