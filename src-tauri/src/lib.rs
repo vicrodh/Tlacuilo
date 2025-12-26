@@ -1557,8 +1557,13 @@ fn pdf_apply_edits(
         .run_script("pdf_edit.py", &args)
         .map_err(|e| e.to_string())?;
 
+    // Log stderr for debugging (shows in terminal when running tauri:dev)
+    if !result.stderr.is_empty() {
+        eprintln!("[pdf_apply_edits] Python stderr:\n{}", result.stderr);
+    }
+
     serde_json::from_str(&result.stdout)
-        .map_err(|e| format!("Failed to parse result: {}", e))
+        .map_err(|e| format!("Failed to parse result: {}\nStdout was: {}", e, result.stdout))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1597,8 +1602,13 @@ fn pdf_render_preview(
         .run_script("pdf_edit.py", &args)
         .map_err(|e| e.to_string())?;
 
+    // Log stderr for debugging
+    if !result.stderr.is_empty() {
+        eprintln!("[pdf_render_preview] Python stderr:\n{}", result.stderr);
+    }
+
     serde_json::from_str(&result.stdout)
-        .map_err(|e| format!("Failed to parse result: {}", e))
+        .map_err(|e| format!("Failed to parse result: {}\nStdout was: {}", e, result.stdout))
 }
 
 // Normalized rect for font info (separate from pdf_viewer's version for f64 compatibility)
@@ -1686,8 +1696,13 @@ fn pdf_get_text_blocks_with_fonts(
         .run_script("pdf_edit.py", &args)
         .map_err(|e| e.to_string())?;
 
+    // Log stderr for debugging
+    if !result.stderr.is_empty() {
+        eprintln!("[pdf_get_text_blocks_with_fonts] Python stderr:\n{}", result.stderr);
+    }
+
     serde_json::from_str(&result.stdout)
-        .map_err(|e| format!("Failed to parse result: {}", e))
+        .map_err(|e| format!("Failed to parse result: {}\nStdout was: {}", e, result.stdout))
 }
 
 // ============================================================================
