@@ -9,7 +9,9 @@
   } from 'lucide-svelte';
   import { listen } from '@tauri-apps/api/event';
   import { open } from '@tauri-apps/plugin-dialog';
+  import { mkdir, writeFile } from '@tauri-apps/plugin-fs';
   import { invoke } from '@tauri-apps/api/core';
+  import { appCacheDir, join } from '@tauri-apps/api/path';
   import { onMount, onDestroy } from 'svelte';
   import { log, logSuccess, logError, registerFile, unregisterModule } from '$lib/stores/status.svelte';
   import OcrProgressSplash from '$lib/components/OcrProgressSplash.svelte';
@@ -90,11 +92,6 @@
   let unlistenDrop: (() => void) | null = null;
   let helperText = $state('Run Check, then Index, then Match to see results.');
 
-  interface PackageCheckResult {
-    all_installed: boolean;
-    missing: string[];
-  }
-
   const filePattern = /\.(png|jpe?g|bmp|tiff|pdf)$/i;
 
   onMount(async () => {
@@ -122,7 +119,7 @@
     registerFile(path, fileName, MODULE);
     log(`Loaded ${fileName}`, 'info', MODULE);
     helperText = inputKind === 'pdf'
-      ? 'Run Check, then Index, then Match. PDF will be converted to an image automatically.'
+      ? 'Run Check, then Index, then Match. PDF will be rendered to an image automatically.'
       : 'Run Check, then Index, then Match to see results.';
   }
 
@@ -186,14 +183,6 @@
     log('Matching font...', 'info', MODULE);
 
     try {
-      if (inputKind === 'pdf') {
-        const deps = await invoke<PackageCheckResult>('python_check_packages', { packages: ['fitz'] });
-        if (!deps.all_installed) {
-          logError('PyMuPDF (fitz) is not installed. Install with: pip install pymupdf', MODULE);
-          isMatching = false;
-          return;
-        }
-      }
       const inputImage = await resolveMatchImage();
       matchResult = await invoke<MatchResult>('font_detect_match', {
         input: inputImage,
@@ -232,18 +221,39 @@
       return renderedImagePath;
     }
 
-    const images = await invoke<string[]>('pdf_to_images', {
-      input: filePath,
-      format: 'png',
-      dpi: 200,
-      pages: '1',
-    });
+    const rendered = await invoke<{ data: string; width: number; height: number; page: number }>(
+      'pdf_render_page',
+      {
+        path: filePath,
+        page: 1,
+        dpi: 200,
+      }
+    );
 
-    if (!images || images.length === 0) {
-      throw new Error('PDF to image conversion returned no files');
+    if (!rendered?.data) {
+      throw new Error('PDF render returned no image data');
     }
-    renderedImagePath = images[0];
-    return images[0];
+
+    const cacheBase = await appCacheDir();
+    const cacheDir = await join(cacheBase, 'font-detect', 'quicktool');
+    await mkdir(cacheDir, { recursive: true });
+
+    const fileNameSafe = fileName.replace(/[^a-z0-9._-]/gi, '_');
+    const outputPath = await join(cacheDir, `page1_${Date.now()}_${fileNameSafe}.png`);
+    const bytes = base64ToBytes(rendered.data);
+    await writeFile(outputPath, bytes);
+
+    renderedImagePath = outputPath;
+    return outputPath;
+  }
+
+  function base64ToBytes(data: string): Uint8Array {
+    const binary = atob(data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
   }
 </script>
 
