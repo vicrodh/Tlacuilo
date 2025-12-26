@@ -15,6 +15,7 @@
   import RotatePDF from './lib/views/RotatePDF.svelte';
   import CompressPDF from './lib/views/CompressPDF.svelte';
   import OCRPDF from './lib/views/OCRPDF.svelte';
+  import FontDetect from './lib/views/FontDetect.svelte';
   import ConvertToPDF from './lib/views/ConvertToPDF.svelte';
   import ConvertFromPDF from './lib/views/ConvertFromPDF.svelte';
   import TabViewerContainer from './lib/components/TabViewerContainer.svelte';
@@ -231,6 +232,8 @@
         <CompressPDF />
       {:else if currentPage === 'ocr'}
         <OCRPDF onOpenInViewer={openFileInViewer} />
+      {:else if currentPage === 'font-detect'}
+        <FontDetect />
       {:else if currentPage === 'convert'}
         <ConvertToPDF onOpenInViewer={openFileInViewer} />
       {:else if currentPage === 'export'}

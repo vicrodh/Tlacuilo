@@ -26,6 +26,7 @@
     Stamp,
     Upload,
     ShieldCheck,
+    Type,
     X
   } from 'lucide-svelte';
   import { onMount } from 'svelte';
@@ -51,7 +52,7 @@
   const iconMap: Record<string, typeof Merge> = {
     BookOpen, Merge, Scissors, RotateCw, RefreshCw, Shield, Pencil, PenTool,
     FileArchive, ScanText, Image, Images, FileText, FileOutput,
-    Lock, Unlock, EyeOff, Droplet, Hash, Stamp, Upload, ShieldCheck
+    Lock, Unlock, EyeOff, Droplet, Hash, Stamp, Upload, ShieldCheck, Type
   };
 
   // Tool groups with their children
@@ -107,6 +108,7 @@
     { id: 'rotate', label: 'Rotate', icon: RotateCw, page: 'rotate' },
     { id: 'compress', label: 'Compress', icon: FileArchive, page: 'compress' },
     { id: 'ocr', label: 'OCR', icon: ScanText, page: 'ocr' },
+    { id: 'font-detect', label: 'Font Detection', icon: Type, page: 'font-detect' },
   ];
 
   // Expanded dropdown state

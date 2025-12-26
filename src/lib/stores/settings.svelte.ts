@@ -160,6 +160,7 @@ export const TOOL_CATALOG: Tool[] = [
   { id: 'rotate', label: 'Rotate PDF', icon: 'RotateCw', page: 'rotate', description: 'Rotate pages in a PDF' },
   { id: 'compress', label: 'Compress PDF', icon: 'FileArchive', page: 'compress', description: 'Reduce PDF file size' },
   { id: 'ocr', label: 'OCR', icon: 'ScanText', page: 'ocr', description: 'Extract text from scanned PDFs' },
+  { id: 'font-detect', label: 'Font Detection', icon: 'Type', page: 'font-detect', description: 'Identify fonts from images' },
 
   // Convert group
   { id: 'convert-images-to-pdf', label: 'Images to PDF', icon: 'Image', page: 'convert', group: 'convert', description: 'Convert images to PDF' },
