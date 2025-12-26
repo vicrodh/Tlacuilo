@@ -911,12 +911,13 @@
                 font-weight: {textOp.style.bold ? 'bold' : 'normal'};
                 font-style: {textOp.style.italic ? 'italic' : 'normal'};
                 text-align: {textOp.style.align || 'left'};
-                background-color: rgba(255, 255, 255, 0.98);
+                text-decoration: none;
+                background-color: white;
                 border: 2px solid var(--nord10);
                 border-radius: 4px;
                 min-height: {minEditHeight}px;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                line-height: 1.3;
+                line-height: 1.4;
               "
               bind:value={editingTextContent}
               onkeydown={(e) => handleTextKeydown(e)}
@@ -954,11 +955,13 @@
               font-weight: {textOp.style.bold ? 'bold' : 'normal'};
               font-style: {textOp.style.italic ? 'italic' : 'normal'};
               text-align: {textOp.style.align || 'left'};
+              text-decoration: none;
               background-color: white;
-              border: {textOp.text ? 'none' : '1px dashed var(--nord8)'};
-              line-height: 1.3;
+              border: {textOp.text ? '1px solid rgba(136, 192, 208, 0.3)' : '1px dashed var(--nord8)'};
+              line-height: 1.4;
               transform: rotate({rotationDeg}deg);
               transform-origin: top left;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             "
             ondblclick={() => startEditingText(op)}
           >
