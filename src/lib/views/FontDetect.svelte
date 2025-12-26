@@ -88,6 +88,12 @@
   let engine = $state<'auto' | 'baseline' | 'ml'>('auto');
   let topk = $state(5);
   let unlistenDrop: (() => void) | null = null;
+  let helperText = $state('Run Check, then Index, then Match to see results.');
+
+  interface PackageCheckResult {
+    all_installed: boolean;
+    missing: string[];
+  }
 
   const filePattern = /\.(png|jpe?g|bmp|tiff|pdf)$/i;
 
@@ -115,6 +121,9 @@
 
     registerFile(path, fileName, MODULE);
     log(`Loaded ${fileName}`, 'info', MODULE);
+    helperText = inputKind === 'pdf'
+      ? 'Run Check, then Index, then Match. PDF will be converted to an image automatically.'
+      : 'Run Check, then Index, then Match to see results.';
   }
 
   async function handleFilePicker() {
@@ -177,6 +186,14 @@
     log('Matching font...', 'info', MODULE);
 
     try {
+      if (inputKind === 'pdf') {
+        const deps = await invoke<PackageCheckResult>('python_check_packages', { packages: ['fitz'] });
+        if (!deps.all_installed) {
+          logError('PyMuPDF (fitz) is not installed. Install with: pip install pymupdf', MODULE);
+          isMatching = false;
+          return;
+        }
+      }
       const inputImage = await resolveMatchImage();
       matchResult = await invoke<MatchResult>('font_detect_match', {
         input: inputImage,
@@ -274,6 +291,10 @@
               <Trash2 size={18} />
             </button>
           </div>
+        </div>
+
+        <div class="text-sm opacity-60">
+          {helperText}
         </div>
 
         <div class="grid grid-cols-3 gap-4">
