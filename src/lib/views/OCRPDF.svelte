@@ -327,9 +327,39 @@
   });
 </script>
 
-<div class="flex-1 flex overflow-hidden">
+<div class="flex-1 flex overflow-hidden relative">
+  <!-- Processing Modal Overlay -->
+  {#if isProcessing}
+    <div class="absolute inset-0 z-50 flex items-center justify-center" style="background-color: rgba(46, 52, 64, 0.9);">
+      <div class="flex flex-col items-center gap-6 p-8 rounded-2xl max-w-md text-center" style="background-color: var(--nord1);">
+        <div class="w-20 h-20 rounded-full flex items-center justify-center" style="background-color: var(--nord2);">
+          <div class="w-12 h-12 border-4 border-[var(--nord10)] border-t-transparent rounded-full animate-spin"></div>
+        </div>
+        <div>
+          <h3 class="text-xl font-medium mb-2" style="color: var(--nord6);">
+            {ocrMode === 'editable' ? 'Creating Editable PDF' : 'Running OCR'}
+          </h3>
+          <p class="text-sm opacity-60">
+            {ocrMode === 'editable'
+              ? 'Extracting text and calculating font sizes...'
+              : 'Adding searchable text layer...'}
+          </p>
+        </div>
+        <div class="w-full">
+          <div class="h-2 rounded-full overflow-hidden" style="background-color: var(--nord3);">
+            <div
+              class="h-full rounded-full"
+              style="background-color: var(--nord10); animation: progress-indeterminate 1.5s ease-in-out infinite;"
+            ></div>
+          </div>
+          <p class="text-xs opacity-40 mt-3">This may take several minutes for large documents</p>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Main Content Area -->
-  <div class="flex-1 flex flex-col overflow-hidden p-6">
+  <div class="flex-1 flex flex-col overflow-y-auto p-6">
     {#if isCheckingDeps}
       <!-- Checking Dependencies -->
       <div
@@ -591,70 +621,51 @@
           {/if}
         </div>
 
-        <!-- Processing Card -->
-        {#if isProcessing}
-          <div
-            class="rounded-xl p-6"
-            style="background-color: var(--nord1);"
-          >
-            <div class="flex items-center gap-4">
-              <div class="w-12 h-12 rounded-full flex items-center justify-center" style="background-color: var(--nord2);">
-                <div class="w-6 h-6 border-2 border-[var(--nord8)] border-t-transparent rounded-full animate-spin"></div>
-              </div>
-              <div class="flex-1">
-                <h4 class="text-base font-medium" style="color: var(--nord8);">Processing OCR...</h4>
-                <p class="text-sm opacity-60 mt-1">This may take a few minutes depending on the document size</p>
-              </div>
-            </div>
-            <!-- Progress bar (infinite) -->
-            <div class="mt-4 h-1 rounded-full overflow-hidden" style="background-color: var(--nord3);">
-              <div
-                class="h-full rounded-full animate-pulse"
-                style="background-color: var(--nord8); width: 100%; animation: progress-slide 1.5s ease-in-out infinite;"
-              ></div>
-            </div>
-            <p class="text-xs opacity-40 mt-2 text-center">Do not close this window while processing</p>
-          </div>
-        {/if}
-
         <!-- Result Card -->
         {#if result && !isProcessing}
           <div
             class="rounded-xl p-6"
-            style="background-color: var(--nord1);"
+            style="background-color: var(--nord1); border: 2px solid {result.success ? 'var(--nord14)' : 'var(--nord11)'};"
           >
-            <h4 class="text-sm opacity-60 uppercase mb-4">Result</h4>
             {#if result.success}
-              <div
-                class="flex items-center gap-2 px-4 py-3 rounded-lg"
-                style="background-color: rgba(163, 190, 140, 0.2);"
-              >
-                <Check size={20} style="color: var(--nord14);" />
-                <span style="color: var(--nord14);">OCR completed successfully</span>
+              <div class="flex items-center gap-4 mb-4">
+                <div class="w-14 h-14 rounded-full flex items-center justify-center" style="background-color: rgba(163, 190, 140, 0.2);">
+                  <Check size={28} style="color: var(--nord14);" />
+                </div>
+                <div class="flex-1">
+                  <h4 class="text-lg font-medium" style="color: var(--nord14);">
+                    {ocrMode === 'editable' ? 'Editable PDF Created!' : 'OCR Complete!'}
+                  </h4>
+                  {#if result.message}
+                    <p class="text-sm opacity-60">{result.message}</p>
+                  {/if}
+                </div>
               </div>
-              {#if result.message}
-                <p class="mt-2 text-sm opacity-60">{result.message}</p>
-              {/if}
-              <p class="mt-2 text-xs opacity-50">Saved to: {result.output_path}</p>
+
+              <p class="text-xs opacity-50 mb-4 truncate" title={result.output_path}>
+                Saved to: {result.output_path}
+              </p>
 
               {#if result?.output_path && onOpenInViewer}
                 {@const outputPath = result.output_path}
                 <button
                   onclick={() => onOpenInViewer(outputPath)}
-                  class="mt-4 flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg transition-colors hover:opacity-90"
-                  style="background-color: var(--nord10); color: var(--nord6);"
+                  class="flex items-center justify-center gap-3 w-full px-6 py-4 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  style="background-color: var(--nord10); color: var(--nord6); font-size: 1rem; font-weight: 500;"
                 >
-                  <BookOpen size={18} />
-                  <span>Open in Viewer</span>
+                  <BookOpen size={22} />
+                  <span>Open in Viewer / Editor</span>
                 </button>
               {/if}
             {:else}
-              <div
-                class="flex items-center gap-2 px-4 py-3 rounded-lg"
-                style="background-color: rgba(191, 97, 106, 0.2);"
-              >
-                <AlertCircle size={20} style="color: var(--nord11);" />
-                <span style="color: var(--nord11);">{result.error}</span>
+              <div class="flex items-center gap-4">
+                <div class="w-14 h-14 rounded-full flex items-center justify-center" style="background-color: rgba(191, 97, 106, 0.2);">
+                  <AlertCircle size={28} style="color: var(--nord11);" />
+                </div>
+                <div class="flex-1">
+                  <h4 class="text-lg font-medium" style="color: var(--nord11);">OCR Failed</h4>
+                  <p class="text-sm opacity-60">{result.error}</p>
+                </div>
               </div>
             {/if}
           </div>
@@ -741,6 +752,21 @@
     }
     100% {
       transform: translateX(100%);
+    }
+  }
+
+  @keyframes progress-indeterminate {
+    0% {
+      width: 0%;
+      margin-left: 0%;
+    }
+    50% {
+      width: 60%;
+      margin-left: 20%;
+    }
+    100% {
+      width: 0%;
+      margin-left: 100%;
     }
   }
 </style>
