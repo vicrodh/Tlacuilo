@@ -1553,9 +1553,15 @@ fn pdf_apply_edits(
         "--json",
     ];
 
+    eprintln!("[pdf_apply_edits] Running with input={}, output={}", input, output);
+
     let result = bridge
         .run_script("pdf_edit.py", &args)
         .map_err(|e| e.to_string())?;
+
+    // Always log execution info
+    eprintln!("[pdf_apply_edits] Python completed. stdout_len={}, stderr_len={}",
+              result.stdout.len(), result.stderr.len());
 
     // Log stderr for debugging (shows in terminal when running tauri:dev)
     if !result.stderr.is_empty() {
