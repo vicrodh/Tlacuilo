@@ -369,11 +369,11 @@ def apply_edits(
         page_widths = edits.get("pageWidths", {})
         page_heights = edits.get("pageHeights", {})
 
-        print(f"[DEBUG apply_edits] Received {len(ops)} ops")
+        print(f"[DEBUG apply_edits] Received {len(ops)} ops", file=sys.stderr)
         for i, op in enumerate(ops):
-            print(f"[DEBUG apply_edits] Op {i}: type={op.get('type')}, page={op.get('page')}, text='{op.get('text', '')[:30]}...'")
-            print(f"[DEBUG apply_edits] Op {i}: rect={op.get('rect')}")
-            print(f"[DEBUG apply_edits] Op {i}: style={op.get('style')}")
+            print(f"[DEBUG apply_edits] Op {i}: type={op.get('type')}, page={op.get('page')}, text='{op.get('text', '')[:30]}...'", file=sys.stderr)
+            print(f"[DEBUG apply_edits] Op {i}: rect={op.get('rect')}", file=sys.stderr)
+            print(f"[DEBUG apply_edits] Op {i}: style={op.get('style')}", file=sys.stderr)
 
         if not ops:
             result["success"] = True
@@ -455,8 +455,8 @@ def apply_edits(
                 page.add_redact_annot(redact_rect, fill=(1, 1, 1))  # White fill
                 page.apply_redactions()
 
-                print(f"[DEBUG replace_text] text='{text[:50] if text else ''}' font={font_name} size={font_size}")
-                print(f"[DEBUG replace_text] rect=({x0}, {y0}, {x1}, {y1}) color={color}")
+                print(f"[DEBUG replace_text] text='{text[:50] if text else ''}' font={font_name} size={font_size}", file=sys.stderr)
+                print(f"[DEBUG replace_text] rect=({x0}, {y0}, {x1}, {y1}) color={color}", file=sys.stderr)
 
                 if text:  # Only insert if there's text
                     # Use insert_text for each line - more reliable than insert_textbox
@@ -477,12 +477,12 @@ def apply_edits(
                                     color=color,
                                     rotate=int(rotation) if rotation else 0,
                                 )
-                                print(f"[DEBUG replace_text] Inserted line at y={current_y}: '{line[:30]}...'")
+                                print(f"[DEBUG replace_text] Inserted line at y={current_y}: '{line[:30]}...'", file=sys.stderr)
                             except Exception as e:
-                                print(f"[ERROR replace_text] Failed to insert text: {e}")
+                                print(f"[ERROR replace_text] Failed to insert text: {e}", file=sys.stderr)
                         current_y += line_height
                 else:
-                    print(f"[DEBUG replace_text] Skipping empty text")
+                    print(f"[DEBUG replace_text] Skipping empty text", file=sys.stderr)
 
                 applied_count += 1
 
