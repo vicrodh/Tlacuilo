@@ -882,7 +882,7 @@
         <!-- Text box - always show textarea when actively editing -->
         {#if editingTextId === op.id}
           {@const scaledFontSize = textOp.style.fontSize * pdfToPixelScale}
-          <div class="flex flex-col">
+          <div class="relative">
             <textarea
               class="w-full p-2 outline-none resize-y"
               style="
@@ -894,7 +894,7 @@
                 text-align: {textOp.style.align || 'left'};
                 background-color: rgba(255, 255, 255, 0.98);
                 border: 2px solid var(--nord10);
-                border-radius: 4px 4px 0 0;
+                border-radius: 4px;
                 min-height: {minEditHeight}px;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.15);
                 line-height: 1.3;
@@ -904,19 +904,21 @@
               oninput={(e) => handleTextInput(e)}
               onmousedown={(e) => e.stopPropagation()}
             ></textarea>
-            <!-- Done button -->
+            <!-- Done button - positioned outside bottom-left -->
             <button
               type="button"
-              class="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-colors"
+              class="absolute flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:opacity-90"
               style="
+                left: 0;
+                top: 100%;
+                margin-top: 4px;
                 background-color: var(--nord14);
                 color: var(--nord0);
-                border-radius: 0 0 4px 4px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                box-shadow: 0 2px 6px rgba(0,0,0,0.2);
               "
               onmousedown={(e) => handleDoneClick(e, op)}
             >
-              <Check size={16} />
+              <Check size={12} />
               Done
             </button>
           </div>

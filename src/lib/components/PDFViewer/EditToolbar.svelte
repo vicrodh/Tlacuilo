@@ -244,26 +244,27 @@
   <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
 
   <!-- TEXT FORMATTING CONTROLS (visible, not in dropdown) -->
-  <!-- Font Family -->
+  <!-- Note: Buttons use onmousedown preventDefault to keep focus on textarea -->
+  <!-- Font Family - applies to entire text block -->
   <select
     value={store.activeTextStyle.fontFamily}
     onchange={(e) => setTextStyle({ fontFamily: (e.target as HTMLSelectElement).value })}
-    class="px-2 py-1.5 text-xs rounded"
+    class="px-2 py-1.5 text-xs rounded cursor-pointer"
     style="background-color: var(--nord3); border: none; max-width: 110px;"
-    title="Font Family"
+    title="Font Family (applies to entire block)"
   >
     {#each fontFamilies as font}
       <option value={font.value}>{font.label}</option>
     {/each}
   </select>
 
-  <!-- Font Size -->
+  <!-- Font Size - applies to entire text block -->
   <select
     value={store.activeTextStyle.fontSize}
     onchange={(e) => setTextStyle({ fontSize: parseInt((e.target as HTMLSelectElement).value) })}
-    class="px-2 py-1.5 text-xs rounded"
+    class="px-2 py-1.5 text-xs rounded cursor-pointer"
     style="background-color: var(--nord3); border: none; width: 55px;"
-    title="Font Size"
+    title="Font Size (applies to entire block)"
   >
     {#each fontSizes as size}
       <option value={size}>{size}pt</option>
@@ -272,7 +273,7 @@
 
   <!-- Bold -->
   <button
-    onclick={() => setTextStyle({ bold: !store.activeTextStyle.bold })}
+    onmousedown={(e) => { e.preventDefault(); setTextStyle({ bold: !store.activeTextStyle.bold }); }}
     class="p-2 rounded transition-colors"
     class:bg-[var(--nord8)]={store.activeTextStyle.bold}
     style="color: {store.activeTextStyle.bold ? 'var(--nord0)' : 'var(--nord4)'};"
@@ -283,7 +284,7 @@
 
   <!-- Italic -->
   <button
-    onclick={() => setTextStyle({ italic: !store.activeTextStyle.italic })}
+    onmousedown={(e) => { e.preventDefault(); setTextStyle({ italic: !store.activeTextStyle.italic }); }}
     class="p-2 rounded transition-colors"
     class:bg-[var(--nord8)]={store.activeTextStyle.italic}
     style="color: {store.activeTextStyle.italic ? 'var(--nord0)' : 'var(--nord4)'};"
@@ -295,7 +296,7 @@
   <!-- Text Color Picker -->
   <div class="relative">
     <button
-      onclick={toggleColorPicker}
+      onmousedown={(e) => { e.preventDefault(); toggleColorPicker(); }}
       class="p-2 rounded transition-colors flex items-center"
       class:bg-[var(--nord3)]={showColorPicker}
       title="Text Color"
@@ -313,7 +314,7 @@
         <div class="grid grid-cols-5 gap-1">
           {#each colors as color}
             <button
-              onclick={() => { setTextStyle({ color }); showColorPicker = false; }}
+              onmousedown={(e) => { e.preventDefault(); setTextStyle({ color }); showColorPicker = false; }}
               class="w-6 h-6 rounded border-2 transition-transform hover:scale-110"
               style="
                 background-color: {color};

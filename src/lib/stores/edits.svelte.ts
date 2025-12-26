@@ -285,6 +285,19 @@ export function createEditsStore(): EditsStore {
 
     setTextStyle(style: Partial<TextStyle>): void {
       activeTextStyle = { ...activeTextStyle, ...style };
+      // Also update the currently selected text operation if there is one
+      if (selectedId) {
+        const op = ops.find(o => o.id === selectedId);
+        if (op && (op.type === 'insert_text' || op.type === 'replace_text')) {
+          const textOp = op as InsertTextOp | ReplaceTextOp;
+          ops = ops.map(o =>
+            o.id === selectedId
+              ? { ...o, style: { ...textOp.style, ...style } } as EditorOp
+              : o
+          );
+          isDirty = true;
+        }
+      }
     },
 
     setStrokeColor(color: string): void {
