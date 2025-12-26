@@ -169,25 +169,39 @@ fn ocr_run(
 
 /// Check font detection dependencies
 #[tauri::command]
-fn font_detect_check(app: AppHandle) -> Result<font_detect::FontDetectCheckResult, String> {
-    font_detect::check(&app)
+async fn font_detect_check(app: AppHandle) -> Result<font_detect::FontDetectCheckResult, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || font_detect::check(&app_handle))
+        .await
+        .map_err(|e| format!("Font detect check task failed: {:?}", e))?
 }
 
 /// Build or refresh font detection index
 #[tauri::command]
-fn font_detect_index(app: AppHandle, force: bool) -> Result<font_detect::FontDetectIndexResult, String> {
-    font_detect::index(&app, force)
+async fn font_detect_index(
+    app: AppHandle,
+    force: bool,
+) -> Result<font_detect::FontDetectIndexResult, String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || font_detect::index(&app_handle, force))
+        .await
+        .map_err(|e| format!("Font detect index task failed: {:?}", e))?
 }
 
 /// Match font from an image
 #[tauri::command]
-fn font_detect_match(
+async fn font_detect_match(
     app: AppHandle,
     input: String,
     engine: String,
     topk: i32,
 ) -> Result<font_detect::FontDetectMatchResult, String> {
-    font_detect::match_image(&app, &input, &engine, topk)
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        font_detect::match_image(&app_handle, &input, &engine, topk)
+    })
+    .await
+    .map_err(|e| format!("Font detect match task failed: {:?}", e))?
 }
 
 // ============================================================================

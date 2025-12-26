@@ -12,6 +12,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
   import { log, logSuccess, logError, registerFile, unregisterModule } from '$lib/stores/status.svelte';
+  import OcrProgressSplash from '$lib/components/OcrProgressSplash.svelte';
 
   const MODULE = 'FontDetect';
 
@@ -195,6 +196,13 @@
   }
 
   const canMatch = $derived(() => filePath !== null && !isMatching);
+  const splashVisible = $derived(() => isChecking || isIndexing || isMatching);
+  const splashMessage = $derived(() => {
+    if (isIndexing) return 'Indexing fonts...';
+    if (isMatching) return 'Matching fonts...';
+    if (isChecking) return 'Checking font engines...';
+    return 'Processing...';
+  });
 
   async function resolveMatchImage(): Promise<string> {
     if (!filePath) {
@@ -221,6 +229,8 @@
     return images[0];
   }
 </script>
+
+<OcrProgressSplash visible={splashVisible} message={splashMessage} />
 
 <div class="flex-1 flex overflow-hidden">
   <div class="flex-1 flex flex-col overflow-hidden p-6">
