@@ -437,6 +437,10 @@ def apply_edits(
                 # Parse CSS font-family to PyMuPDF font name
                 font_name = parse_css_font_family(css_font)
 
+                # Scale font size to compensate for PyMuPDF built-in font metrics
+                # being slightly smaller than typical document fonts
+                font_size = font_size * 1.08
+
                 # Extend redaction rect downward to cover descenders (letters like p, g, j, q)
                 # Descenders typically extend ~25% of font size below baseline
                 descender_extension = font_size * 0.3
@@ -683,6 +687,9 @@ def render_page_preview(
 
                 # Parse CSS font-family to PyMuPDF font name
                 font_name = parse_css_font_family(css_font)
+
+                # Scale font size to compensate for PyMuPDF built-in font metrics
+                font_size = font_size * 1.08
 
                 # Extend redaction rect for descenders (letters like p, g, j, q)
                 descender_extension = font_size * 0.3
