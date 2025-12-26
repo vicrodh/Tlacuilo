@@ -28,6 +28,7 @@
   import RedactionOverlay from './RedactionOverlay.svelte';
   import EditToolbar from './EditToolbar.svelte';
   import EditOverlay from './EditOverlay.svelte';
+  import OcrDialog from './OcrDialog.svelte';
   import FormFieldsOverlay from './FormFieldsOverlay.svelte';
   import { createRedactionsStore, setRedactionsStore } from '$lib/stores/redactions.svelte';
   import { createEditsStore, setEditsStore } from '$lib/stores/edits.svelte';
@@ -264,6 +265,8 @@
   let documentNeedsOcr = $state(false);
   let ocrAnalyzed = $state(false);
   let showOcrButton = $state(false);
+  let showOcrDialog = $state(false);
+  let pendingFontAnalysis = $state(false);
   let isRunningOcr = $state(false);
   let ocrMessage = $state('Processing OCR...');
   // Track if OCR was completed for this session (persists across reloads)
@@ -329,24 +332,27 @@
           );
           showOcrButton = true;
         } else {
-          // Ask user if they want to apply OCR
-          const applyOcr = await ask(
-            'This document appears to be scanned and has no searchable text.\n\nSome features (search, text selection, annotations) may not work properly without OCR.\n\nWould you like to apply OCR now?',
-            { title: 'OCR Recommended', kind: 'info', okLabel: 'Apply OCR', cancelLabel: 'Skip' }
-          );
-
-          if (applyOcr) {
-            // Run OCR directly with splash notification
-            await runOcrOnDocument();
-          } else {
-            showOcrButton = true;
-          }
+          // Show custom OCR dialog with font analysis option
+          showOcrDialog = true;
         }
       }
     } catch (err) {
       debugLog('MuPDFViewer', 'OCR analysis failed:', err, 'error');
       // Don't show error to user, just log it
     }
+  }
+
+  // Handle OCR dialog confirmation
+  async function handleOcrDialogConfirm(options: { analyzeFonts: boolean }) {
+    showOcrDialog = false;
+    pendingFontAnalysis = options.analyzeFonts;
+    await runOcrOnDocument();
+  }
+
+  // Handle OCR dialog cancel
+  function handleOcrDialogCancel() {
+    showOcrDialog = false;
+    showOcrButton = true;
   }
 
   // Run OCR on the current document (in-place, then reload)
@@ -415,10 +421,18 @@
 
         console.log('[OCR] Dispatched open-pdf-file event');
 
-        await message('OCR processing completed. You are now viewing the processed document.\n\nThe original file was not modified. Use "Save As" to keep the OCR version.', {
-          title: 'OCR Complete',
-          kind: 'info',
-        });
+        if (pendingFontAnalysis) {
+          await message('OCR processing completed. You are now viewing the processed document.\n\nTo analyze fonts for better text editing, go to the Fonts tab in the right sidebar.\n\nThe original file was not modified. Use "Save As" to keep the OCR version.', {
+            title: 'OCR Complete',
+            kind: 'info',
+          });
+          pendingFontAnalysis = false;
+        } else {
+          await message('OCR processing completed. You are now viewing the processed document.\n\nThe original file was not modified. Use "Save As" to keep the OCR version.', {
+            title: 'OCR Complete',
+            kind: 'info',
+          });
+        }
       } else if (result.success) {
         // Success but no output path - shouldn't happen
         console.warn('[OCR] Success but no output_path');
@@ -2293,6 +2307,13 @@
   annotationCount={annotationsStore.getAllAnnotations().length}
   onPrint={handlePrint}
   onCancel={() => showPrintDialog = false}
+/>
+
+<!-- OCR Recommendation Dialog -->
+<OcrDialog
+  open={showOcrDialog}
+  onConfirm={handleOcrDialogConfirm}
+  onCancel={handleOcrDialogCancel}
 />
 
 <!-- OCR Progress Splash -->

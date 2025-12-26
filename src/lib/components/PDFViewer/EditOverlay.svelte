@@ -776,13 +776,25 @@
 
   function startEditingText(op: EditorOp) {
     if (op.type === 'insert_text' || op.type === 'replace_text') {
-      // Initialize undo history with the original text
+      // Get the latest version of the op from the store
+      const currentOp = store.getOpById(op.id);
+      if (!currentOp) return;
+
+      const textOp = currentOp as InsertTextOp;
+
+      // Initialize undo history with the current text
       textUndoHistory = [];
       textRedoHistory = [];
-      pushTextUndo(op.text);
+      pushTextUndo(textOp.text);
+
+      // Select the op so toolbar shows correct styles
+      store.selectOp(op.id);
+
+      // Set the active text style to match the op's style
+      store.setTextStyle(textOp.style);
 
       editingTextId = op.id;
-      editingTextContent = op.text;
+      editingTextContent = textOp.text;
       lastInputTime = Date.now();
     }
   }
@@ -859,7 +871,10 @@
     {@const px = toPixels(op.rect)}
     {@const isSelected = store.selectedId === op.id}
     {@const isActivelyEditing = editingTextId === op.id}
-    {@const showVisuals = !hasPreview || isActivelyEditing}
+    {@const isTextOp = op.type === 'insert_text' || op.type === 'replace_text'}
+    {@const textOpWithContent = isTextOp && (op as InsertTextOp).text}
+    <!-- Always show text ops with content (preview may be stale after editing) -->
+    {@const showVisuals = !hasPreview || isActivelyEditing || textOpWithContent}
     {@const minEditWidth = Math.max(px.width, 300)}
     {@const minEditHeight = Math.max(px.height, 100)}
 
@@ -903,6 +918,7 @@
               onkeydown={(e) => handleTextKeydown(e)}
               oninput={(e) => handleTextInput(e)}
               onmousedown={(e) => e.stopPropagation()}
+              onfocus={() => { store.selectOp(op.id); }}
             ></textarea>
             <!-- Done button - positioned outside bottom-left -->
             <button
@@ -926,7 +942,7 @@
           {@const scaledFontSize = textOp.style.fontSize * pdfToPixelScale}
           {@const rotationDeg = textOp.style.rotation || 0}
           <div
-            class="w-full h-full p-1 overflow-hidden cursor-text"
+            class="w-full h-full p-1 overflow-hidden cursor-text whitespace-pre-wrap"
             style="
               font-family: {textOp.style.fontFamily};
               font-size: {scaledFontSize}px;
@@ -934,8 +950,8 @@
               font-weight: {textOp.style.bold ? 'bold' : 'normal'};
               font-style: {textOp.style.italic ? 'italic' : 'normal'};
               text-align: {textOp.style.align || 'left'};
-              background-color: {isReplaceOp ? 'white' : (textOp.text ? 'transparent' : 'rgba(136, 192, 208, 0.1)')};
-              border: 1px dashed {textOp.text ? 'transparent' : 'var(--nord8)'};
+              background-color: white;
+              border: {textOp.text ? 'none' : '1px dashed var(--nord8)'};
               line-height: 1.3;
               transform: rotate({rotationDeg}deg);
               transform-origin: top left;

@@ -308,10 +308,10 @@
     </button>
     {#if showColorPicker}
       <div
-        class="absolute top-full left-0 mt-1 rounded-lg shadow-lg p-2 z-50"
-        style="background-color: var(--nord1); border: 1px solid var(--nord3);"
+        class="absolute top-full left-0 mt-1 rounded-lg shadow-lg p-3 z-50"
+        style="background-color: var(--nord1); border: 1px solid var(--nord3); min-width: 160px;"
       >
-        <div class="grid grid-cols-5 gap-1">
+        <div class="grid grid-cols-5 gap-2">
           {#each colors as color}
             <button
               onmousedown={(e) => { e.preventDefault(); setTextStyle({ color }); showColorPicker = false; }}
