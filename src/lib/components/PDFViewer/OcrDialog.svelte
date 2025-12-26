@@ -50,7 +50,7 @@
       <!-- Header -->
       <div class="p-4 flex items-center gap-3" style="border-bottom: 1px solid var(--nord2);">
         <div class="p-2 rounded-lg" style="background-color: var(--nord10);">
-          <FileSearch size={24} style="color: var(--nord6);" />
+          <FileSearch size={24} color="white" />
         </div>
         <div>
           <h2 class="font-semibold text-lg">OCR Recommended</h2>
@@ -92,13 +92,14 @@
         <button
           onclick={handleCancel}
           class="px-4 py-2 rounded-lg text-sm transition-colors hover:bg-[var(--nord2)]"
+          style="color: var(--nord4);"
         >
           Skip
         </button>
         <button
           onclick={handleConfirm}
-          class="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          style="background-color: var(--nord10); color: var(--nord6);"
+          class="px-4 py-2 rounded-lg text-sm font-medium transition-colors hover:opacity-90"
+          style="background-color: #5E81AC; color: white;"
         >
           Apply OCR
         </button>

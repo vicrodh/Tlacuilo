@@ -60,6 +60,9 @@ export interface TabState {
   // Document state
   documentLoaded: boolean;
   documentError: string | null;
+
+  // Auto-trigger flags (one-time actions)
+  autoAnalyzeFonts: boolean;  // Trigger font analysis when tab loads
 }
 
 const TABS_KEY = Symbol('tabs');
@@ -140,6 +143,7 @@ export function createTabsStore() {
       loadedThumbnails: new Map(),
       documentLoaded: false,
       documentError: null,
+      autoAnalyzeFonts: false,
     };
   }
 
@@ -322,13 +326,18 @@ export function createTabsStore() {
   /**
    * Set the file for a tab (for empty tabs when opening a file)
    */
-  function setTabFile(tabId: string, filePath: string): void {
+  function setTabFile(tabId: string, filePath: string, options?: { autoAnalyzeFonts?: boolean }): void {
     // Check if file is already open in another tab
     const existingTab = tabs.find(t => t.filePath === filePath && t.id !== tabId);
     if (existingTab) {
       // Close the empty tab and switch to existing
       closeTab(tabId, true);
       switchTab(existingTab.id);
+      // If this existing tab should auto-analyze fonts, set it
+      if (options?.autoAnalyzeFonts) {
+        existingTab.autoAnalyzeFonts = true;
+        tabs = [...tabs];
+      }
       return;
     }
 
@@ -339,6 +348,7 @@ export function createTabsStore() {
     tab.fileName = getFileNameFromPath(filePath);
     tab.documentLoaded = false;
     tab.documentError = null;
+    tab.autoAnalyzeFonts = options?.autoAnalyzeFonts ?? false;
 
     tabs = [...tabs];
   }

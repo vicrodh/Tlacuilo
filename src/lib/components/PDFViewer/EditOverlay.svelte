@@ -84,6 +84,10 @@
   // PDF uses points (1/72 inch), rendered at specific DPI
   const pdfToPixelScale = $derived(pdfPageWidth ? pageWidth / pdfPageWidth : 150 / 72);
 
+  // Font size scale factor to match PyMuPDF built-in font metrics
+  // Must match the scale factor in backend/pdf_edit.py
+  const FONT_SIZE_SCALE = 1.08;
+
   let overlayElement: HTMLDivElement;
 
   // Drawing state
@@ -896,7 +900,7 @@
         {@const isReplaceOp = op.type === 'replace_text'}
         <!-- Text box - always show textarea when actively editing -->
         {#if editingTextId === op.id}
-          {@const scaledFontSize = textOp.style.fontSize * pdfToPixelScale}
+          {@const scaledFontSize = textOp.style.fontSize * FONT_SIZE_SCALE * pdfToPixelScale}
           <div class="relative">
             <textarea
               class="w-full p-2 outline-none resize-y"
@@ -939,7 +943,7 @@
             </button>
           </div>
         {:else if showVisuals}
-          {@const scaledFontSize = textOp.style.fontSize * pdfToPixelScale}
+          {@const scaledFontSize = textOp.style.fontSize * FONT_SIZE_SCALE * pdfToPixelScale}
           {@const rotationDeg = textOp.style.rotation || 0}
           <div
             class="w-full h-full p-1 overflow-hidden cursor-text whitespace-pre-wrap"

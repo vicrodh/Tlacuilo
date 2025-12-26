@@ -48,29 +48,19 @@
 
   interface Props {
     filePath: string;
+    autoAnalyze?: boolean;
   }
 
-  let { filePath }: Props = $props();
+  let { filePath, autoAnalyze = false }: Props = $props();
 
   let result = $state<FontAnalysisResult | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
   let expandedFonts = $state<Set<string>>(new Set());
+  let hasAutoAnalyzed = $state(false);
 
-  async function analyzefonts() {
-    // Show confirmation dialog
-    const confirmed = await ask(
-      'Font analysis scans all pages to identify fonts used in the document. This may take a moment for large files.\n\nContinue?',
-      {
-        title: 'Analyze Document Fonts',
-        kind: 'info',
-        okLabel: 'Analyze',
-        cancelLabel: 'Cancel',
-      }
-    );
-
-    if (!confirmed) return;
-
+  // Core analysis function (no confirmation dialog)
+  async function runAnalysis() {
     loading = true;
     error = null;
     result = null;
@@ -91,6 +81,31 @@
       loading = false;
     }
   }
+
+  async function analyzefonts() {
+    // Show confirmation dialog
+    const confirmed = await ask(
+      'Font analysis scans all pages to identify fonts used in the document. This may take a moment for large files.\n\nContinue?',
+      {
+        title: 'Analyze Document Fonts',
+        kind: 'info',
+        okLabel: 'Analyze',
+        cancelLabel: 'Cancel',
+      }
+    );
+
+    if (!confirmed) return;
+
+    await runAnalysis();
+  }
+
+  // Auto-analyze when prop is set (e.g., after OCR with font analysis checkbox)
+  $effect(() => {
+    if (autoAnalyze && !hasAutoAnalyzed && !loading && !result) {
+      hasAutoAnalyzed = true;
+      runAnalysis();
+    }
+  });
 
   function toggleExpanded(fontName: string) {
     const newSet = new Set(expandedFonts);

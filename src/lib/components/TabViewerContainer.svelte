@@ -36,12 +36,12 @@
   }
 
   // Handle open-pdf-file event from MuPDFViewer toolbar
-  function handleOpenPdfFile(e: CustomEvent<{ path: string; replaceTab?: string }>) {
+  function handleOpenPdfFile(e: CustomEvent<{ path: string; replaceTab?: string; autoAnalyzeFonts?: boolean }>) {
     if (e.detail.path) {
       if (e.detail.replaceTab) {
         // Replace the specified tab's file (used for OCR'd versions)
-        console.log('[TabContainer] Replacing tab file:', e.detail.replaceTab, 'with:', e.detail.path);
-        tabsStore.setTabFile(e.detail.replaceTab, e.detail.path);
+        console.log('[TabContainer] Replacing tab file:', e.detail.replaceTab, 'with:', e.detail.path, 'autoAnalyzeFonts:', e.detail.autoAnalyzeFonts);
+        tabsStore.setTabFile(e.detail.replaceTab, e.detail.path, { autoAnalyzeFonts: e.detail.autoAnalyzeFonts });
       } else {
         // Open in new tab
         openFileInNewTab(e.detail.path);
@@ -264,6 +264,7 @@
             onSave={() => handleTabSave(tab.id)}
             onSaveAs={() => handleTabSaveAs(tab.id)}
             onAnnotationsDirtyChange={(dirty) => handleAnnotationsDirtyChange(tab.id, dirty)}
+            autoAnalyzeFonts={tab.autoAnalyzeFonts}
           />
         {:else}
           <!-- Empty tab state -->

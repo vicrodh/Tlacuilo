@@ -33,6 +33,7 @@
     fileReloadVersion?: number; // Incremented when file is reloaded (e.g., after OCR)
     searchTrigger?: { text: string; timestamp: number } | null;
     onSearchStateChange?: (query: string, currentPage: number, currentIndex: number) => void;
+    autoAnalyzeFonts?: boolean; // Auto-trigger font analysis (e.g., after OCR)
   }
 
   let {
@@ -51,6 +52,7 @@
     fileReloadVersion = 0,
     searchTrigger = null,
     onSearchStateChange,
+    autoAnalyzeFonts = false,
   }: Props = $props();
 
   // State for passing search query to SearchTab
@@ -92,6 +94,15 @@
       activeTab = 'search';
       isCollapsed = false;
       externalSearchQuery = searchTrigger.text;
+    }
+  });
+
+  // React to auto-analyze fonts request (e.g., after OCR with checkbox)
+  $effect(() => {
+    if (autoAnalyzeFonts) {
+      // Switch to fonts tab so user can see the analysis
+      activeTab = 'fonts';
+      isCollapsed = false;
     }
   });
 </script>
@@ -154,6 +165,7 @@
       {:else if activeTab === 'fonts'}
         <FontsTab
           {filePath}
+          autoAnalyze={autoAnalyzeFonts}
         />
       {/if}
     </div>

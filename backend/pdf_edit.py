@@ -439,6 +439,7 @@ def apply_edits(
 
                 # Scale font size to compensate for PyMuPDF built-in font metrics
                 # being slightly smaller than typical document fonts
+                original_font_size = font_size
                 font_size = font_size * 1.08
 
                 # Extend redaction rect downward to cover descenders (letters like p, g, j, q)
@@ -448,9 +449,14 @@ def apply_edits(
                 page.add_redact_annot(redact_rect, fill=(1, 1, 1))  # White fill
                 page.apply_redactions()
 
+                # Expand text rect to accommodate the scaled font size
+                # The rect height might be too small after font scaling
+                height_scale = font_size / original_font_size if original_font_size > 0 else 1.0
+                expanded_y1 = y0 + (y1 - y0) * height_scale
+
                 # Use insert_textbox for multi-line text to properly fit within the area
                 # This handles line wrapping and vertical alignment
-                text_rect = fitz.Rect(x0, y0, x1, y1)
+                text_rect = fitz.Rect(x0, y0, x1, expanded_y1)
                 page.insert_textbox(
                     text_rect,
                     text,
@@ -689,6 +695,7 @@ def render_page_preview(
                 font_name = parse_css_font_family(css_font)
 
                 # Scale font size to compensate for PyMuPDF built-in font metrics
+                original_font_size = font_size
                 font_size = font_size * 1.08
 
                 # Extend redaction rect for descenders (letters like p, g, j, q)
@@ -697,9 +704,13 @@ def render_page_preview(
                 page.add_redact_annot(redact_rect, fill=(1, 1, 1))
                 page.apply_redactions()
 
+                # Expand text rect to accommodate the scaled font size
+                height_scale = font_size / original_font_size if original_font_size > 0 else 1.0
+                expanded_y1 = y0 + (y1 - y0) * height_scale
+
                 # Use insert_textbox for multi-line text
                 if text:
-                    text_rect = fitz.Rect(x0, y0, x1, y1)
+                    text_rect = fitz.Rect(x0, y0, x1, expanded_y1)
                     page.insert_textbox(
                         text_rect,
                         text,

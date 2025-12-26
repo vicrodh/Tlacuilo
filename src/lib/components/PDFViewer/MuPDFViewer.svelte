@@ -59,6 +59,7 @@
     onSave?: () => void;
     onSaveAs?: () => void;
     onAnnotationsDirtyChange?: (dirty: boolean) => void;
+    autoAnalyzeFonts?: boolean; // Auto-trigger font analysis when viewer loads
   }
 
   let {
@@ -73,6 +74,7 @@
     onSave,
     onSaveAs,
     onAnnotationsDirtyChange,
+    autoAnalyzeFonts = false,
   }: Props = $props();
 
   // Types from Rust backend
@@ -417,12 +419,15 @@
 
         // Update filePath to the OCR'd version and reload
         // We dispatch an event to open this in a new tab or replace current
-        window.dispatchEvent(new CustomEvent('open-pdf-file', { detail: { path: ocrFilePath, replaceTab: tabId } }));
+        // Include autoAnalyzeFonts flag if user checked the font analysis option
+        window.dispatchEvent(new CustomEvent('open-pdf-file', {
+          detail: { path: ocrFilePath, replaceTab: tabId, autoAnalyzeFonts: pendingFontAnalysis }
+        }));
 
-        console.log('[OCR] Dispatched open-pdf-file event');
+        console.log('[OCR] Dispatched open-pdf-file event, autoAnalyzeFonts:', pendingFontAnalysis);
 
         if (pendingFontAnalysis) {
-          await message('OCR processing completed. You are now viewing the processed document.\n\nTo analyze fonts for better text editing, go to the Fonts tab in the right sidebar.\n\nThe original file was not modified. Use "Save As" to keep the OCR version.', {
+          await message('OCR processing completed. Font analysis will start automatically.\n\nThe original file was not modified. Use "Save As" to keep the OCR version.', {
             title: 'OCR Complete',
             kind: 'info',
           });
@@ -785,8 +790,9 @@
 
     if (!confirmed) return;
 
-    // Ask where to save
-    const defaultPath = filePath.replace('.pdf', '-edited.pdf');
+    // Ask where to save - use original path if working on temp/OCR file
+    const basePath = originalFilePath || filePath;
+    const defaultPath = basePath.replace('.pdf', '-edited.pdf');
     const outputPath = await save({
       title: 'Save Edited PDF',
       defaultPath,
@@ -2272,6 +2278,7 @@
         onRunOcr={runOcrOnDocument}
         {searchTrigger}
         onSearchStateChange={handleSearchStateChange}
+        {autoAnalyzeFonts}
       />
     {/if}
   </div>
