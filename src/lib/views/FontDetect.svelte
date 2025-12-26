@@ -195,9 +195,9 @@
     isMatching = false;
   }
 
-  const canMatch = $derived(() => filePath !== null && !isMatching);
-  const splashVisible = $derived(() => isChecking || isIndexing || isMatching);
-  const splashMessage = $derived(() => {
+  const canMatch = $derived.by(() => filePath !== null && !isMatching);
+  const splashVisible = $derived.by(() => isChecking || isIndexing || isMatching);
+  const splashMessage = $derived.by(() => {
     if (isIndexing) return 'Indexing fonts...';
     if (isMatching) return 'Matching fonts...';
     if (isChecking) return 'Checking font engines...';
