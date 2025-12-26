@@ -162,6 +162,49 @@ fn ocr_run(
     pdf_ocr::run_ocr(&app, &input, &output_path, opts)
 }
 
+/// Run editable OCR on a PDF (creates real text objects with accurate font sizes)
+#[tauri::command]
+fn ocr_run_editable(
+    app: AppHandle,
+    input: String,
+    output: Option<String>,
+    options: Option<pdf_ocr::EditableOcrOptions>,
+) -> Result<pdf_ocr::EditableOcrResult, String> {
+    let output_path = output.unwrap_or_else(|| {
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
+
+        // Create a session directory with UUID to avoid conflicts
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let session_dir = cache_dir.join("ocr-editable-sessions").join(&session_id);
+
+        // Create the session directory if it doesn't exist
+        let _ = std::fs::create_dir_all(&session_dir);
+
+        // Preserve original filename
+        let original_filename = std::path::Path::new(&input)
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_else(|| "document.pdf".to_string());
+
+        session_dir
+            .join(&original_filename)
+            .to_string_lossy()
+            .to_string()
+    });
+
+    let opts = options.unwrap_or_default();
+    pdf_ocr::run_editable_ocr(&app, &input, &output_path, opts)
+}
+
+/// Get embedded OCR metrics from a PDF
+#[tauri::command]
+fn ocr_get_metrics(app: AppHandle, input: String) -> Result<pdf_ocr::OcrMetricsResult, String> {
+    pdf_ocr::get_ocr_metrics(&app, &input)
+}
+
 // ============================================================================
 // Annotation Embedding Commands (PythonBridge)
 // ============================================================================
@@ -2249,6 +2292,8 @@ pub fn run() {
       ocr_check_dependencies,
       ocr_analyze_pdf,
       ocr_run,
+      ocr_run_editable,
+      ocr_get_metrics,
       // PDF operations (PythonBridge)
       merge_pdfs,
       merge_pages,

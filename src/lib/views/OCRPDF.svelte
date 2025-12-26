@@ -66,6 +66,26 @@
     optimize: number;
   }
 
+  interface EditableOcrOptions {
+    language: string;
+    dpi: number;
+    font_family: string;
+    preserve_images: boolean;
+    embed_metrics: boolean;
+  }
+
+  interface EditableOcrResult {
+    success: boolean;
+    output_path?: string;
+    mode?: string;
+    pages_processed?: number;
+    total_blocks?: number;
+    metrics_embedded?: boolean;
+    error?: string;
+  }
+
+  type OcrMode = 'searchable' | 'editable';
+
   let dependencies = $state<OcrDependencies | null>(null);
   let dependencyError = $state<string | null>(null);
   let isCheckingDeps = $state(true);
@@ -79,6 +99,9 @@
   let result = $state<OcrResult | null>(null);
 
   let showAdvanced = $state(false);
+  let ocrMode = $state<OcrMode>('searchable');
+
+  // Searchable OCR options (invisible text layer)
   let options = $state<OcrOptions>({
     language: 'eng',
     deskew: true,           // Enable by default for better results
@@ -89,6 +112,15 @@
     force_ocr: true,        // Force OCR for Tagged PDFs
     redo_ocr: false,
     optimize: 1,
+  });
+
+  // Editable OCR options (real text objects with accurate font sizes)
+  let editableOptions = $state<EditableOcrOptions>({
+    language: 'eng',
+    dpi: 300,
+    font_family: 'auto',
+    preserve_images: true,
+    embed_metrics: true,
   });
 
   let unlistenDrop: (() => void) | null = null;
@@ -188,36 +220,82 @@
   async function handleOCR() {
     if (!filePath) return;
 
+    const modeLabel = ocrMode === 'editable' ? 'editable' : 'ocr';
     const outputPath = await save({
-      title: 'Save OCR PDF as',
+      title: `Save ${ocrMode === 'editable' ? 'Editable' : 'OCR'} PDF as`,
       filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
-      defaultPath: `ocr_${fileName}`,
+      defaultPath: `${modeLabel}_${fileName}`,
     });
 
     if (!outputPath) return;
 
     isProcessing = true;
     result = null;
-    log('Running OCR...', 'info', MODULE);
 
-    try {
-      result = await invoke<OcrResult>('ocr_run', {
-        input: filePath,
-        output: outputPath,
-        options: options,
-      });
+    if (ocrMode === 'editable') {
+      log('Running Editable OCR (creating real text objects)...', 'info', MODULE);
 
-      if (result.success) {
-        logSuccess(`OCR complete: ${result.output_path}`, MODULE);
-        if (result.message) {
-          log(result.message, 'info', MODULE);
+      try {
+        const editableResult = await invoke<EditableOcrResult>('ocr_run_editable', {
+          input: filePath,
+          output: outputPath,
+          options: {
+            ...editableOptions,
+            language: options.language, // Use the shared language selector
+          },
+        });
+
+        // Convert to common result format
+        result = {
+          success: editableResult.success,
+          output_path: editableResult.output_path,
+          exit_code: editableResult.success ? 0 : 1,
+          message: editableResult.success
+            ? `Processed ${editableResult.pages_processed} pages, ${editableResult.total_blocks} text blocks`
+            : undefined,
+          error: editableResult.error,
+        };
+
+        if (editableResult.success) {
+          logSuccess(`Editable OCR complete: ${editableResult.output_path}`, MODULE);
+          if (editableResult.pages_processed) {
+            log(`${editableResult.pages_processed} pages, ${editableResult.total_blocks} text blocks`, 'info', MODULE);
+          }
+        } else {
+          logError(`Editable OCR failed: ${editableResult.error}`, MODULE);
         }
-      } else {
-        logError(`OCR failed: ${result.error}`, MODULE);
+      } catch (err) {
+        console.error('Editable OCR error:', err);
+        logError(`Editable OCR failed: ${err}`, MODULE);
+        result = {
+          success: false,
+          exit_code: 1,
+          error: String(err),
+        };
       }
-    } catch (err) {
-      console.error('OCR error:', err);
-      logError(`OCR failed: ${err}`, MODULE);
+    } else {
+      // Searchable OCR mode (original behavior)
+      log('Running OCR (creating searchable text layer)...', 'info', MODULE);
+
+      try {
+        result = await invoke<OcrResult>('ocr_run', {
+          input: filePath,
+          output: outputPath,
+          options: options,
+        });
+
+        if (result.success) {
+          logSuccess(`OCR complete: ${result.output_path}`, MODULE);
+          if (result.message) {
+            log(result.message, 'info', MODULE);
+          }
+        } else {
+          logError(`OCR failed: ${result.error}`, MODULE);
+        }
+      } catch (err) {
+        console.error('OCR error:', err);
+        logError(`OCR failed: ${err}`, MODULE);
+      }
     }
 
     isProcessing = false;
@@ -363,7 +441,7 @@
           </div>
         </div>
 
-        <!-- Language & Options -->
+        <!-- OCR Mode & Settings -->
         <div
           class="rounded-xl p-6"
           style="background-color: var(--nord1);"
@@ -377,6 +455,34 @@
               <Settings2 size={14} />
               {showAdvanced ? 'Hide' : 'Show'} Advanced
             </button>
+          </div>
+
+          <!-- Mode Selector -->
+          <div class="mb-4">
+            <p class="text-xs opacity-50 mb-2">OCR Mode</p>
+            <div class="flex gap-2">
+              <button
+                onclick={() => ocrMode = 'searchable'}
+                class="flex-1 px-3 py-2 rounded-lg text-sm transition-colors"
+                style="background-color: {ocrMode === 'searchable' ? 'var(--nord8)' : 'var(--nord2)'}; color: {ocrMode === 'searchable' ? 'var(--nord0)' : 'inherit'};"
+              >
+                Searchable
+              </button>
+              <button
+                onclick={() => ocrMode = 'editable'}
+                class="flex-1 px-3 py-2 rounded-lg text-sm transition-colors"
+                style="background-color: {ocrMode === 'editable' ? 'var(--nord10)' : 'var(--nord2)'}; color: {ocrMode === 'editable' ? 'var(--nord6)' : 'inherit'};"
+              >
+                Editable
+              </button>
+            </div>
+            <p class="text-xs opacity-40 mt-2">
+              {#if ocrMode === 'searchable'}
+                Creates invisible text layer for search. Original look preserved.
+              {:else}
+                Creates real editable text. Accurate font sizes for editing.
+              {/if}
+            </p>
           </div>
 
           <div class="flex items-center gap-4 mb-4">
@@ -393,43 +499,94 @@
           </div>
 
           {#if showAdvanced}
-            <div class="grid grid-cols-2 gap-4 pt-4 border-t" style="border-color: var(--nord3);">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" bind:checked={options.deskew} class="rounded" />
-                <span class="text-sm">Deskew pages</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" bind:checked={options.rotate_pages} class="rounded" />
-                <span class="text-sm">Auto-rotate pages</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" bind:checked={options.clean} class="rounded" />
-                <span class="text-sm">Clean pages</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" bind:checked={options.remove_background} class="rounded" />
-                <span class="text-sm">Remove background</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" bind:checked={options.skip_text} class="rounded" />
-                <span class="text-sm">Skip pages with text</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" bind:checked={options.force_ocr} class="rounded" />
-                <span class="text-sm">Force OCR</span>
-              </label>
+            <div class="pt-4 border-t" style="border-color: var(--nord3);">
+              {#if ocrMode === 'searchable'}
+                <!-- Searchable OCR options -->
+                <div class="grid grid-cols-2 gap-4">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" bind:checked={options.deskew} class="rounded" />
+                    <span class="text-sm">Deskew pages</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" bind:checked={options.rotate_pages} class="rounded" />
+                    <span class="text-sm">Auto-rotate pages</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" bind:checked={options.clean} class="rounded" />
+                    <span class="text-sm">Clean pages</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" bind:checked={options.remove_background} class="rounded" />
+                    <span class="text-sm">Remove background</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" bind:checked={options.skip_text} class="rounded" />
+                    <span class="text-sm">Skip pages with text</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" bind:checked={options.force_ocr} class="rounded" />
+                    <span class="text-sm">Force OCR</span>
+                  </label>
 
-              <div class="col-span-2 flex items-center gap-4">
-                <span class="text-sm opacity-60">Optimization:</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="3"
-                  bind:value={options.optimize}
-                  class="flex-1"
-                />
-                <span class="text-sm w-8">{options.optimize}</span>
-              </div>
+                  <div class="col-span-2 flex items-center gap-4">
+                    <span class="text-sm opacity-60">Optimization:</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="3"
+                      bind:value={options.optimize}
+                      class="flex-1"
+                    />
+                    <span class="text-sm w-8">{options.optimize}</span>
+                  </div>
+                </div>
+              {:else}
+                <!-- Editable OCR options -->
+                <div class="space-y-4">
+                  <div class="flex items-center gap-4">
+                    <span class="text-sm opacity-60 w-24">DPI:</span>
+                    <select
+                      bind:value={editableOptions.dpi}
+                      class="flex-1 px-3 py-2 rounded-lg border"
+                      style="background-color: var(--nord2); border-color: var(--nord3);"
+                    >
+                      <option value={150}>150 DPI (Faster)</option>
+                      <option value={300}>300 DPI (Recommended)</option>
+                      <option value={400}>400 DPI (Higher quality)</option>
+                    </select>
+                  </div>
+
+                  <div class="flex items-center gap-4">
+                    <span class="text-sm opacity-60 w-24">Font:</span>
+                    <select
+                      bind:value={editableOptions.font_family}
+                      class="flex-1 px-3 py-2 rounded-lg border"
+                      style="background-color: var(--nord2); border-color: var(--nord3);"
+                    >
+                      <option value="auto">Auto (Serif)</option>
+                      <option value="times">Times/Serif</option>
+                      <option value="helvetica">Helvetica/Sans</option>
+                      <option value="courier">Courier/Mono</option>
+                    </select>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" bind:checked={editableOptions.preserve_images} class="rounded" />
+                      <span class="text-sm">Preserve images</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" bind:checked={editableOptions.embed_metrics} class="rounded" />
+                      <span class="text-sm">Embed metrics</span>
+                    </label>
+                  </div>
+
+                  <p class="text-xs opacity-40">
+                    Higher DPI improves font size accuracy but takes longer.
+                    Embedded metrics enable precise editing in future sessions.
+                  </p>
+                </div>
+              {/if}
             </div>
           {/if}
         </div>
@@ -530,14 +687,14 @@
           onclick={handleOCR}
           disabled={!canProcess()}
           class="flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-colors disabled:opacity-50 hover:opacity-90"
-          style="background-color: var(--nord8); color: var(--nord0);"
+          style="background-color: {ocrMode === 'editable' ? 'var(--nord10)' : 'var(--nord8)'}; color: {ocrMode === 'editable' ? 'var(--nord6)' : 'var(--nord0)'};"
         >
           {#if isProcessing}
-            <div class="w-4 h-4 border-2 border-[var(--nord0)] border-t-transparent rounded-full animate-spin"></div>
+            <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
             <span>Processing...</span>
           {:else}
             <ScanText size={18} />
-            <span>Run OCR</span>
+            <span>{ocrMode === 'editable' ? 'Run Editable OCR' : 'Run OCR'}</span>
           {/if}
         </button>
       {/if}
@@ -545,11 +702,19 @@
 
     <!-- Info -->
     <div class="text-xs opacity-50 p-3 rounded-lg" style="background-color: var(--nord2);">
-      <p class="mb-2 font-medium">About OCR</p>
+      <p class="mb-2 font-medium">
+        {ocrMode === 'editable' ? 'About Editable OCR' : 'About OCR'}
+      </p>
       <ul class="space-y-1 list-disc list-inside">
-        <li>Adds searchable text layer</li>
-        <li>Works on scanned documents</li>
-        <li>Preserves original quality</li>
+        {#if ocrMode === 'editable'}
+          <li>Creates real editable text</li>
+          <li>Accurate font sizes</li>
+          <li>Preserves images/logos</li>
+        {:else}
+          <li>Adds searchable text layer</li>
+          <li>Works on scanned documents</li>
+          <li>Preserves original quality</li>
+        {/if}
       </ul>
 
       {#if dependencies?.available_languages.length === 0}

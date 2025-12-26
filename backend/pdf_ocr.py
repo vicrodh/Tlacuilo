@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
 """
-PDF OCR module using OCRmyPDF.
+PDF OCR module using OCRmyPDF and Tesseract.
 
 Provides OCR functionality for scanned PDFs:
 - Text recognition using Tesseract
 - Multiple language support
-- PDF/A output option
-- Skip text detection (for already OCR'd PDFs)
+- Two modes:
+  - Searchable: Invisible text layer (OCRmyPDF)
+  - Editable: Real text objects with visual metrics
+- Embedded metrics for consistent editing across sessions
 """
 
 import argparse
 import json
 import sys
+import re
+import subprocess
+import tempfile
 from pathlib import Path
+from typing import List, Dict, Any, Optional
+from xml.etree import ElementTree
 
 try:
     import ocrmypdf
@@ -20,6 +27,12 @@ try:
     HAS_OCRMYPDF = True
 except ImportError:
     HAS_OCRMYPDF = False
+
+try:
+    import fitz  # PyMuPDF
+    HAS_PYMUPDF = True
+except ImportError:
+    HAS_PYMUPDF = False
 
 
 def check_dependencies() -> dict:
@@ -230,6 +243,432 @@ def analyze_pdf(input_path: str) -> dict:
         }
 
 
+# =============================================================================
+# Editable OCR Mode - Creates real text objects with visual metrics
+# =============================================================================
+
+def parse_hocr_bbox(title: str) -> Optional[tuple]:
+    """Extract bbox coordinates from hOCR title attribute."""
+    match = re.search(r'bbox\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)', title)
+    if match:
+        return tuple(map(int, match.groups()))
+    return None
+
+
+def parse_hocr_confidence(title: str) -> int:
+    """Extract confidence (x_wconf) from hOCR title attribute."""
+    match = re.search(r'x_wconf\s+(\d+)', title)
+    if match:
+        return int(match.group(1))
+    return 0
+
+
+def parse_hocr(hocr_content: str) -> List[Dict[str, Any]]:
+    """
+    Parse hOCR output from Tesseract.
+
+    Returns list of text blocks with:
+    - bbox: bounding box in pixels
+    - text: recognized text
+    - lines: list of lines with individual words
+    - confidence: OCR confidence
+    """
+    blocks = []
+
+    try:
+        # Parse as HTML/XML
+        root = ElementTree.fromstring(hocr_content)
+
+        # Find all ocr_carea (content areas) or ocr_par (paragraphs)
+        for area in root.iter():
+            if area.get('class') in ('ocr_carea', 'ocr_par'):
+                title = area.get('title', '')
+                area_bbox = parse_hocr_bbox(title)
+
+                if not area_bbox:
+                    continue
+
+                block = {
+                    'bbox': area_bbox,
+                    'lines': [],
+                    'text': '',
+                }
+
+                # Find lines within this area
+                for line_elem in area.iter():
+                    if line_elem.get('class') == 'ocr_line':
+                        line_title = line_elem.get('title', '')
+                        line_bbox = parse_hocr_bbox(line_title)
+
+                        if not line_bbox:
+                            continue
+
+                        line = {
+                            'bbox': line_bbox,
+                            'words': [],
+                            'text': '',
+                        }
+
+                        # Find words within this line
+                        for word_elem in line_elem.iter():
+                            if word_elem.get('class') == 'ocrx_word':
+                                word_title = word_elem.get('title', '')
+                                word_bbox = parse_hocr_bbox(word_title)
+                                word_conf = parse_hocr_confidence(word_title)
+                                word_text = ''.join(word_elem.itertext()).strip()
+
+                                if word_bbox and word_text:
+                                    line['words'].append({
+                                        'bbox': word_bbox,
+                                        'text': word_text,
+                                        'confidence': word_conf,
+                                    })
+
+                        if line['words']:
+                            line['text'] = ' '.join(w['text'] for w in line['words'])
+                            block['lines'].append(line)
+
+                if block['lines']:
+                    block['text'] = '\n'.join(l['text'] for l in block['lines'])
+                    blocks.append(block)
+
+    except ElementTree.ParseError as e:
+        print(f"[WARN] hOCR parse error: {e}", file=sys.stderr)
+
+    return blocks
+
+
+def calculate_visual_font_size(bbox: tuple, dpi: int = 300) -> float:
+    """
+    Calculate visual font size from bounding box.
+
+    Args:
+        bbox: (x0, y0, x1, y1) in pixels
+        dpi: image resolution (dots per inch)
+
+    Returns:
+        Font size in PDF points (1/72 inch)
+    """
+    # Height in pixels
+    pixel_height = bbox[3] - bbox[1]
+
+    # Convert to points: pixels / dpi * 72
+    points = pixel_height / dpi * 72
+
+    return round(points, 2)
+
+
+def run_editable_ocr(
+    input_path: str,
+    output_path: str,
+    language: str = "eng",
+    dpi: int = 300,
+    font_family: str = "auto",
+    preserve_images: bool = True,
+    embed_metrics: bool = True,
+) -> dict:
+    """
+    Run OCR and create editable text objects.
+
+    Unlike searchable OCR (OCRmyPDF), this mode:
+    - Creates real text objects (not invisible layer)
+    - Calculates visual font sizes from bounding boxes
+    - Preserves images/logos in their original positions
+    - Embeds metrics in PDF for future editing sessions
+
+    Args:
+        input_path: Path to input PDF
+        output_path: Path to output PDF
+        language: OCR language (e.g., "eng", "eng+spa")
+        dpi: Resolution for rendering pages (higher = more accurate)
+        font_family: Font to use ("auto", "times", "helvetica", "courier")
+        preserve_images: Keep images/logos (True) or convert everything (False)
+        embed_metrics: Embed visual metrics in PDF metadata
+
+    Returns:
+        dict with success status, metrics, and output path
+    """
+    if not HAS_PYMUPDF:
+        return {
+            "success": False,
+            "error": "PyMuPDF is required for editable OCR",
+        }
+
+    input_file = Path(input_path)
+    if not input_file.exists():
+        return {
+            "success": False,
+            "error": f"Input file not found: {input_path}",
+        }
+
+    try:
+        # Open the input PDF
+        doc = fitz.open(input_path)
+
+        # Create a new PDF for output
+        out_doc = fitz.open()
+
+        # Metrics to embed in PDF
+        all_metrics = {
+            "version": 1,
+            "dpi": dpi,
+            "language": language,
+            "font_family": font_family,
+            "pages": [],
+        }
+
+        # Map font family selection to PyMuPDF font name
+        font_map = {
+            "auto": "tiro",  # Default to serif (most common in documents)
+            "times": "tiro",
+            "helvetica": "helv",
+            "arial": "helv",
+            "courier": "cour",
+            "serif": "tiro",
+            "sans-serif": "helv",
+            "sans": "helv",
+            "monospace": "cour",
+        }
+        pymupdf_font = font_map.get(font_family.lower(), "tiro")
+
+        print(f"[INFO] Starting editable OCR: {len(doc)} pages, DPI={dpi}, lang={language}", file=sys.stderr)
+
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            page_rect = page.rect
+
+            print(f"[INFO] Processing page {page_num + 1}/{len(doc)}...", file=sys.stderr)
+
+            # Create new page with same dimensions
+            new_page = out_doc.new_page(width=page_rect.width, height=page_rect.height)
+
+            # Render page to image for OCR
+            zoom = dpi / 72.0
+            mat = fitz.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat)
+
+            # Save to temp file for Tesseract
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                pix.save(tmp.name)
+                tmp_path = tmp.name
+
+            try:
+                # Run Tesseract with hOCR output
+                result = subprocess.run(
+                    ['tesseract', tmp_path, 'stdout', '-l', language, 'hocr'],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+
+                if result.returncode != 0:
+                    print(f"[WARN] Tesseract failed on page {page_num + 1}: {result.stderr}", file=sys.stderr)
+                    # Copy original page if OCR fails
+                    new_page.show_pdf_page(page_rect, doc, page_num)
+                    continue
+
+                hocr_content = result.stdout
+
+                # Parse hOCR to get text blocks with bounding boxes
+                blocks = parse_hocr(hocr_content)
+
+                print(f"[INFO] Page {page_num + 1}: Found {len(blocks)} text blocks", file=sys.stderr)
+
+                # Page metrics
+                page_metrics = {
+                    "page": page_num,
+                    "width": page_rect.width,
+                    "height": page_rect.height,
+                    "blocks": [],
+                }
+
+                if preserve_images:
+                    # First, draw the original page as background
+                    # This preserves images and graphics
+                    new_page.show_pdf_page(page_rect, doc, page_num)
+
+                    # Then, white out text areas and insert editable text
+                    for block in blocks:
+                        # Convert pixel bbox to PDF points
+                        px_bbox = block['bbox']
+                        pdf_bbox = (
+                            px_bbox[0] / zoom,
+                            px_bbox[1] / zoom,
+                            px_bbox[2] / zoom,
+                            px_bbox[3] / zoom,
+                        )
+                        rect = fitz.Rect(pdf_bbox)
+
+                        # Expand rect slightly to cover edges
+                        rect = rect + (-2, -2, 2, 2)
+
+                        # White out the original text area
+                        shape = new_page.new_shape()
+                        shape.draw_rect(rect)
+                        shape.finish(color=None, fill=(1, 1, 1))  # White fill
+                        shape.commit()
+
+                        # Calculate font size from line height
+                        if block['lines']:
+                            first_line = block['lines'][0]
+                            line_height_px = first_line['bbox'][3] - first_line['bbox'][1]
+                            font_size = line_height_px / zoom / 1.2  # Divide by line height factor
+                        else:
+                            font_size = calculate_visual_font_size(px_bbox, dpi)
+
+                        # Insert text line by line
+                        current_y = pdf_bbox[1] + font_size
+                        line_height = font_size * 1.2
+
+                        for line in block['lines']:
+                            # Get line x position
+                            line_x = line['bbox'][0] / zoom
+
+                            try:
+                                new_page.insert_text(
+                                    fitz.Point(line_x, current_y),
+                                    line['text'],
+                                    fontname=pymupdf_font,
+                                    fontsize=font_size,
+                                    color=(0, 0, 0),
+                                )
+                            except Exception as e:
+                                print(f"[WARN] Failed to insert text: {e}", file=sys.stderr)
+
+                            current_y += line_height
+
+                        # Store block metrics
+                        page_metrics['blocks'].append({
+                            'bbox_px': px_bbox,
+                            'bbox_pdf': pdf_bbox,
+                            'visual_font_size': font_size,
+                            'text': block['text'],
+                            'line_count': len(block['lines']),
+                        })
+
+                else:
+                    # Full conversion mode - no original image preserved
+                    # Just insert text (background will be white)
+                    for block in blocks:
+                        px_bbox = block['bbox']
+                        pdf_bbox = (
+                            px_bbox[0] / zoom,
+                            px_bbox[1] / zoom,
+                            px_bbox[2] / zoom,
+                            px_bbox[3] / zoom,
+                        )
+
+                        if block['lines']:
+                            first_line = block['lines'][0]
+                            line_height_px = first_line['bbox'][3] - first_line['bbox'][1]
+                            font_size = line_height_px / zoom / 1.2
+                        else:
+                            font_size = calculate_visual_font_size(px_bbox, dpi)
+
+                        current_y = pdf_bbox[1] + font_size
+                        line_height = font_size * 1.2
+
+                        for line in block['lines']:
+                            line_x = line['bbox'][0] / zoom
+
+                            try:
+                                new_page.insert_text(
+                                    fitz.Point(line_x, current_y),
+                                    line['text'],
+                                    fontname=pymupdf_font,
+                                    fontsize=font_size,
+                                    color=(0, 0, 0),
+                                )
+                            except Exception as e:
+                                print(f"[WARN] Failed to insert text: {e}", file=sys.stderr)
+
+                            current_y += line_height
+
+                        page_metrics['blocks'].append({
+                            'bbox_px': px_bbox,
+                            'bbox_pdf': pdf_bbox,
+                            'visual_font_size': font_size,
+                            'text': block['text'],
+                            'line_count': len(block['lines']),
+                        })
+
+                all_metrics['pages'].append(page_metrics)
+
+            finally:
+                # Clean up temp file
+                Path(tmp_path).unlink(missing_ok=True)
+
+        # Embed metrics in PDF metadata if requested
+        if embed_metrics:
+            metrics_json = json.dumps(all_metrics)
+            out_doc.set_metadata({
+                'keywords': f'tlacuilo_ocr_metrics:{metrics_json}'
+            })
+
+        # Save the output PDF
+        out_doc.save(output_path, garbage=4, deflate=True)
+        out_doc.close()
+        doc.close()
+
+        return {
+            "success": True,
+            "output_path": output_path,
+            "mode": "editable",
+            "pages_processed": len(all_metrics['pages']),
+            "total_blocks": sum(len(p['blocks']) for p in all_metrics['pages']),
+            "metrics_embedded": embed_metrics,
+        }
+
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] Editable OCR failed: {traceback.format_exc()}", file=sys.stderr)
+        return {
+            "success": False,
+            "error": str(e),
+        }
+
+
+def get_embedded_metrics(input_path: str) -> dict:
+    """
+    Extract embedded OCR metrics from a PDF.
+
+    Returns the metrics if present, or indicates they're not available.
+    """
+    if not HAS_PYMUPDF:
+        return {
+            "success": False,
+            "error": "PyMuPDF is required",
+        }
+
+    try:
+        doc = fitz.open(input_path)
+        metadata = doc.metadata
+        doc.close()
+
+        keywords = metadata.get('keywords', '')
+
+        if keywords.startswith('tlacuilo_ocr_metrics:'):
+            metrics_json = keywords[len('tlacuilo_ocr_metrics:'):]
+            metrics = json.loads(metrics_json)
+            return {
+                "success": True,
+                "has_metrics": True,
+                "metrics": metrics,
+            }
+
+        return {
+            "success": True,
+            "has_metrics": False,
+            "message": "No Tlacuilo OCR metrics found in this PDF",
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+        }
+
+
 def main():
     parser = argparse.ArgumentParser(description="PDF OCR operations")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -241,8 +680,8 @@ def main():
     analyze_parser = subparsers.add_parser("analyze", help="Analyze PDF for OCR needs")
     analyze_parser.add_argument("--input", required=True, help="Input PDF path")
 
-    # OCR command
-    ocr_parser = subparsers.add_parser("ocr", help="Run OCR on PDF")
+    # OCR command (searchable - invisible text layer)
+    ocr_parser = subparsers.add_parser("ocr", help="Run OCR on PDF (searchable mode)")
     ocr_parser.add_argument("--input", required=True, help="Input PDF path")
     ocr_parser.add_argument("--output", required=True, help="Output PDF path")
     ocr_parser.add_argument("--language", default="eng", help="OCR language(s)")
@@ -254,6 +693,20 @@ def main():
     ocr_parser.add_argument("--force-ocr", action="store_true", help="Force OCR")
     ocr_parser.add_argument("--redo-ocr", action="store_true", help="Redo existing OCR")
     ocr_parser.add_argument("--optimize", type=int, default=1, help="Optimization level 0-3")
+
+    # OCR Editable command (editable - real text objects with visual metrics)
+    editable_parser = subparsers.add_parser("ocr-editable", help="Run editable OCR on PDF")
+    editable_parser.add_argument("--input", required=True, help="Input PDF path")
+    editable_parser.add_argument("--output", required=True, help="Output PDF path")
+    editable_parser.add_argument("--language", default="eng", help="OCR language(s)")
+    editable_parser.add_argument("--dpi", type=int, default=300, help="DPI for rendering (default: 300)")
+    editable_parser.add_argument("--font-family", default="auto", help="Font family (auto, serif, sans-serif)")
+    editable_parser.add_argument("--preserve-images", action="store_true", default=True, help="Preserve original images")
+    editable_parser.add_argument("--embed-metrics", action="store_true", default=True, help="Embed OCR metrics in PDF")
+
+    # Get embedded metrics command
+    metrics_parser = subparsers.add_parser("get-metrics", help="Get embedded OCR metrics from PDF")
+    metrics_parser.add_argument("--input", required=True, help="Input PDF path")
 
     args = parser.parse_args()
 
@@ -275,6 +728,18 @@ def main():
             redo_ocr=args.redo_ocr,
             optimize=args.optimize,
         )
+    elif args.command == "ocr-editable":
+        result = run_editable_ocr(
+            input_path=args.input,
+            output_path=args.output,
+            language=args.language,
+            dpi=args.dpi,
+            font_family=args.font_family,
+            preserve_images=args.preserve_images,
+            embed_metrics=args.embed_metrics,
+        )
+    elif args.command == "get-metrics":
+        result = get_embedded_metrics(args.input)
     else:
         result = {"error": f"Unknown command: {args.command}"}
 

@@ -39,7 +39,7 @@ pub struct OcrResult {
     pub error: Option<String>,
 }
 
-/// OCR options
+/// OCR options (searchable mode - invisible text layer)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OcrOptions {
     /// OCR language(s), e.g., "eng", "eng+spa"
@@ -71,8 +71,62 @@ pub struct OcrOptions {
     pub optimize: i32,
 }
 
+/// Editable OCR options (real text objects with visual metrics)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EditableOcrOptions {
+    /// OCR language(s), e.g., "eng", "eng+spa"
+    #[serde(default = "default_language")]
+    pub language: String,
+    /// DPI for rendering pages (higher = more accurate font sizes)
+    #[serde(default = "default_dpi")]
+    pub dpi: i32,
+    /// Font family to use ("auto", "times", "helvetica", "courier", "serif", "sans-serif")
+    #[serde(default = "default_font_family")]
+    pub font_family: String,
+    /// Preserve images/logos in original positions
+    #[serde(default = "default_true")]
+    pub preserve_images: bool,
+    /// Embed visual metrics in PDF metadata for future editing
+    #[serde(default = "default_true")]
+    pub embed_metrics: bool,
+}
+
+/// Editable OCR result
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EditableOcrResult {
+    pub success: bool,
+    pub output_path: Option<String>,
+    pub mode: Option<String>,
+    pub pages_processed: Option<u32>,
+    pub total_blocks: Option<u32>,
+    pub metrics_embedded: Option<bool>,
+    pub error: Option<String>,
+}
+
+/// Embedded OCR metrics from PDF
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OcrMetricsResult {
+    pub success: bool,
+    pub has_metrics: Option<bool>,
+    pub metrics: Option<serde_json::Value>,
+    pub message: Option<String>,
+    pub error: Option<String>,
+}
+
 fn default_language() -> String {
     "eng".to_string()
+}
+
+fn default_dpi() -> i32 {
+    300
+}
+
+fn default_font_family() -> String {
+    "auto".to_string()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_optimize() -> i32 {
@@ -238,6 +292,88 @@ pub fn run_ocr(
     let stdout = String::from_utf8_lossy(&output_result.stdout);
     serde_json::from_str(&stdout)
         .map_err(|e| format!("Failed to parse OCR result: {}", e))
+}
+
+/// Run editable OCR on a PDF (creates real text objects with visual metrics)
+pub fn run_editable_ocr(
+    app: &AppHandle,
+    input: &str,
+    output: &str,
+    options: EditableOcrOptions,
+) -> Result<EditableOcrResult, String> {
+    let script = resolve_ocr_script(app)
+        .ok_or_else(|| "OCR script not found (backend/pdf_ocr.py)".to_string())?;
+
+    let python = resolve_python_bin();
+
+    let mut cmd = Command::new(&python);
+    cmd.arg(&script)
+        .arg("ocr-editable")
+        .arg("--input")
+        .arg(input)
+        .arg("--output")
+        .arg(output)
+        .arg("--language")
+        .arg(&options.language)
+        .arg("--dpi")
+        .arg(options.dpi.to_string())
+        .arg("--font-family")
+        .arg(&options.font_family);
+
+    if options.preserve_images {
+        cmd.arg("--preserve-images");
+    }
+    if options.embed_metrics {
+        cmd.arg("--embed-metrics");
+    }
+
+    eprintln!("[run_editable_ocr] Running: {:?}", cmd);
+
+    let output_result = cmd
+        .output()
+        .map_err(|e| format!("Failed to run editable OCR: {}", e))?;
+
+    // Log stderr for debugging
+    let stderr = String::from_utf8_lossy(&output_result.stderr);
+    if !stderr.is_empty() {
+        eprintln!("[run_editable_ocr] stderr: {}", stderr);
+    }
+
+    if !output_result.status.success() {
+        return Err(format!("Editable OCR failed: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output_result.stdout);
+    serde_json::from_str(&stdout)
+        .map_err(|e| format!("Failed to parse editable OCR result: {} (stdout: {})", e, stdout))
+}
+
+/// Get embedded OCR metrics from a PDF
+pub fn get_ocr_metrics(
+    app: &AppHandle,
+    input: &str,
+) -> Result<OcrMetricsResult, String> {
+    let script = resolve_ocr_script(app)
+        .ok_or_else(|| "OCR script not found (backend/pdf_ocr.py)".to_string())?;
+
+    let python = resolve_python_bin();
+
+    let output = Command::new(&python)
+        .arg(&script)
+        .arg("get-metrics")
+        .arg("--input")
+        .arg(input)
+        .output()
+        .map_err(|e| format!("Failed to get OCR metrics: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Get metrics failed: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(&stdout)
+        .map_err(|e| format!("Failed to parse metrics result: {}", e))
 }
 
 #[cfg(test)]
