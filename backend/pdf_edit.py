@@ -443,10 +443,36 @@ def apply_edits(
                 # Parse CSS font-family to PyMuPDF font name
                 font_name = parse_css_font_family(css_font)
 
-                # Scale font size to compensate for PyMuPDF built-in font metrics
-                # being slightly smaller than typical document fonts
+                # Calculate font size from bounding box for better accuracy
+                # This is especially important for OCR'd documents where the
+                # invisible text layer has different metrics than the visual text
                 original_font_size = font_size
-                font_size = font_size * 1.08
+                rect_height = y1 - y0
+
+                # Count actual text lines
+                lines = [l for l in text.split('\n') if l.strip()] if text else []
+                num_lines = max(1, len(lines))
+
+                # Calculate font size from bounding box
+                # Standard line height is ~1.2x font size
+                # So: rect_height = num_lines * font_size * 1.2
+                # Therefore: font_size = rect_height / (num_lines * 1.2)
+                calculated_font_size = rect_height / (num_lines * 1.2)
+
+                # Detect if this is an OCR font (GlyphLessFont, etc.)
+                is_ocr_font = 'glyphless' in css_font.lower() or 'ocr' in css_font.lower()
+
+                # For OCR fonts, always use calculated size as it's more accurate
+                # For regular fonts, use the larger of reported vs calculated
+                if is_ocr_font:
+                    font_size = calculated_font_size
+                    print(f"[DEBUG replace_text] OCR font detected, using calculated size: {font_size:.2f}pt (was {original_font_size:.2f}pt)", file=sys.stderr)
+                else:
+                    # Apply 1.08x scale for non-OCR fonts
+                    scaled_font_size = original_font_size * 1.08
+                    # Use whichever is larger to ensure text fits
+                    font_size = max(scaled_font_size, calculated_font_size * 0.95)
+                    print(f"[DEBUG replace_text] Using font size: {font_size:.2f}pt (scaled={scaled_font_size:.2f}, calc={calculated_font_size:.2f})", file=sys.stderr)
 
                 # Extend redaction rect downward to cover descenders (letters like p, g, j, q)
                 # Descenders typically extend ~25% of font size below baseline
@@ -455,31 +481,29 @@ def apply_edits(
                 page.add_redact_annot(redact_rect, fill=(1, 1, 1))  # White fill
                 page.apply_redactions()
 
-                print(f"[DEBUG replace_text] text='{text[:50] if text else ''}' font={font_name} size={font_size}", file=sys.stderr)
-                print(f"[DEBUG replace_text] rect=({x0}, {y0}, {x1}, {y1}) color={color}", file=sys.stderr)
+                print(f"[DEBUG replace_text] text='{text[:50] if text else ''}' font={font_name} size={font_size:.2f}pt", file=sys.stderr)
+                print(f"[DEBUG replace_text] rect=({x0:.1f}, {y0:.1f}, {x1:.1f}, {y1:.1f}) lines={num_lines} rect_h={rect_height:.1f}", file=sys.stderr)
 
                 if text:  # Only insert if there's text
                     # Use insert_text for each line - more reliable than insert_textbox
-                    # Position at top-left, adjusted for font baseline
-                    lines = text.split('\n')
-                    line_height = font_size * 1.2  # Standard line height
+                    # Calculate line height based on final font size
+                    line_height = font_size * 1.2
                     current_y = y0 + font_size  # Start below baseline
 
                     for line in lines:
-                        if line.strip():  # Skip empty lines but advance position
-                            point = fitz.Point(x0, current_y)
-                            try:
-                                page.insert_text(
-                                    point,
-                                    line,
-                                    fontname=font_name,
-                                    fontsize=font_size,
-                                    color=color,
-                                    rotate=int(rotation) if rotation else 0,
-                                )
-                                print(f"[DEBUG replace_text] Inserted line at y={current_y}: '{line[:30]}...'", file=sys.stderr)
-                            except Exception as e:
-                                print(f"[ERROR replace_text] Failed to insert text: {e}", file=sys.stderr)
+                        point = fitz.Point(x0, current_y)
+                        try:
+                            page.insert_text(
+                                point,
+                                line,
+                                fontname=font_name,
+                                fontsize=font_size,
+                                color=color,
+                                rotate=int(rotation) if rotation else 0,
+                            )
+                            print(f"[DEBUG replace_text] Inserted line at y={current_y:.1f}: '{line[:30]}...'", file=sys.stderr)
+                        except Exception as e:
+                            print(f"[ERROR replace_text] Failed to insert text: {e}", file=sys.stderr)
                         current_y += line_height
                 else:
                     print(f"[DEBUG replace_text] Skipping empty text", file=sys.stderr)
@@ -712,8 +736,20 @@ def render_page_preview(
                 # Parse CSS font-family to PyMuPDF font name
                 font_name = parse_css_font_family(css_font)
 
-                # Scale font size to compensate for PyMuPDF built-in font metrics
-                font_size = font_size * 1.08
+                # Calculate font size from bounding box (same logic as apply_edits)
+                original_font_size = font_size
+                rect_height = y1 - y0
+                lines = [l for l in text.split('\n') if l.strip()] if text else []
+                num_lines = max(1, len(lines))
+                calculated_font_size = rect_height / (num_lines * 1.2)
+
+                # Detect OCR font and use calculated size
+                is_ocr_font = 'glyphless' in css_font.lower() or 'ocr' in css_font.lower()
+                if is_ocr_font:
+                    font_size = calculated_font_size
+                else:
+                    scaled_font_size = original_font_size * 1.08
+                    font_size = max(scaled_font_size, calculated_font_size * 0.95)
 
                 # Extend redaction rect for descenders (letters like p, g, j, q)
                 descender_extension = font_size * 0.3
@@ -721,23 +757,21 @@ def render_page_preview(
                 page.add_redact_annot(redact_rect, fill=(1, 1, 1))
                 page.apply_redactions()
 
-                # Use insert_text for each line - more reliable than insert_textbox
+                # Use insert_text for each line
                 if text:
-                    lines = text.split('\n')
                     line_height = font_size * 1.2
                     current_y = y0 + font_size
 
                     for line in lines:
-                        if line.strip():
-                            point = fitz.Point(x0, current_y)
-                            page.insert_text(
-                                point,
-                                line,
-                                fontname=font_name,
-                                fontsize=font_size,
-                                color=color,
-                                rotate=int(rotation) if rotation else 0,
-                            )
+                        point = fitz.Point(x0, current_y)
+                        page.insert_text(
+                            point,
+                            line,
+                            fontname=font_name,
+                            fontsize=font_size,
+                            color=color,
+                            rotate=int(rotation) if rotation else 0,
+                        )
                         current_y += line_height
 
             elif op_type == "draw_shape":

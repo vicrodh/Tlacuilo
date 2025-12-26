@@ -88,6 +88,42 @@
   // Must match the scale factor in backend/pdf_edit.py
   const FONT_SIZE_SCALE = 1.08;
 
+  /**
+   * Calculate the correct font size for display.
+   * For OCR fonts (GlyphLessFont), we calculate from bounding box height
+   * because the OCR text layer has different metrics than the visual text.
+   */
+  function calculateDisplayFontSize(
+    reportedFontSize: number,
+    rectHeight: number, // normalized (0-1)
+    text: string,
+    fontFamily: string
+  ): number {
+    // Calculate actual height in PDF points
+    const rectHeightPts = rectHeight * (pdfPageHeight || 792);
+
+    // Count actual text lines
+    const lines = text.split('\n').filter(l => l.trim());
+    const numLines = Math.max(1, lines.length);
+
+    // Calculate font size from bounding box
+    // rect_height = num_lines * font_size * 1.2 (line height factor)
+    const calculatedSize = rectHeightPts / (numLines * 1.2);
+
+    // Detect OCR fonts
+    const isOcrFont = fontFamily.toLowerCase().includes('glyphless') ||
+                      fontFamily.toLowerCase().includes('ocr');
+
+    if (isOcrFont) {
+      // For OCR fonts, always use calculated size
+      return calculatedSize;
+    } else {
+      // For regular fonts, use the larger of scaled vs calculated
+      const scaledSize = reportedFontSize * FONT_SIZE_SCALE;
+      return Math.max(scaledSize, calculatedSize * 0.95);
+    }
+  }
+
   let overlayElement: HTMLDivElement;
 
   // Drawing state
@@ -898,9 +934,15 @@
       {#if op.type === 'insert_text' || op.type === 'replace_text'}
         {@const textOp = op as InsertTextOp}
         {@const isReplaceOp = op.type === 'replace_text'}
+        {@const calculatedFontSize = calculateDisplayFontSize(
+          textOp.style.fontSize,
+          op.rect.height,
+          textOp.text || editingTextContent,
+          textOp.style.fontFamily
+        )}
         <!-- Text box - always show textarea when actively editing -->
         {#if editingTextId === op.id}
-          {@const scaledFontSize = textOp.style.fontSize * FONT_SIZE_SCALE * pdfToPixelScale}
+          {@const scaledFontSize = calculatedFontSize * pdfToPixelScale}
           <div class="relative">
             <textarea
               class="w-full p-2 outline-none resize-y"
@@ -944,7 +986,7 @@
             </button>
           </div>
         {:else if showVisuals}
-          {@const scaledFontSize = textOp.style.fontSize * FONT_SIZE_SCALE * pdfToPixelScale}
+          {@const scaledFontSize = calculatedFontSize * pdfToPixelScale}
           {@const rotationDeg = textOp.style.rotation || 0}
           <div
             class="w-full h-full p-1 overflow-hidden cursor-text whitespace-pre-wrap"
