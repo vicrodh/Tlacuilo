@@ -369,6 +369,12 @@ def apply_edits(
         page_widths = edits.get("pageWidths", {})
         page_heights = edits.get("pageHeights", {})
 
+        print(f"[DEBUG apply_edits] Received {len(ops)} ops")
+        for i, op in enumerate(ops):
+            print(f"[DEBUG apply_edits] Op {i}: type={op.get('type')}, page={op.get('page')}, text='{op.get('text', '')[:30]}...'")
+            print(f"[DEBUG apply_edits] Op {i}: rect={op.get('rect')}")
+            print(f"[DEBUG apply_edits] Op {i}: style={op.get('style')}")
+
         if not ops:
             result["success"] = True
             result["message"] = "No operations to apply"
@@ -449,23 +455,35 @@ def apply_edits(
                 page.add_redact_annot(redact_rect, fill=(1, 1, 1))  # White fill
                 page.apply_redactions()
 
-                # Expand text rect to accommodate the scaled font size
-                # The rect height might be too small after font scaling
-                height_scale = font_size / original_font_size if original_font_size > 0 else 1.0
-                expanded_y1 = y0 + (y1 - y0) * height_scale
+                print(f"[DEBUG replace_text] text='{text[:50] if text else ''}' font={font_name} size={font_size}")
+                print(f"[DEBUG replace_text] rect=({x0}, {y0}, {x1}, {y1}) color={color}")
 
-                # Use insert_textbox for multi-line text to properly fit within the area
-                # This handles line wrapping and vertical alignment
-                text_rect = fitz.Rect(x0, y0, x1, expanded_y1)
-                page.insert_textbox(
-                    text_rect,
-                    text,
-                    fontname=font_name,
-                    fontsize=font_size,
-                    color=color,
-                    rotate=int(rotation) if rotation else 0,
-                    align=0,  # 0 = left, 1 = center, 2 = right
-                )
+                if text:  # Only insert if there's text
+                    # Use insert_text for each line - more reliable than insert_textbox
+                    # Position at top-left, adjusted for font baseline
+                    lines = text.split('\n')
+                    line_height = font_size * 1.2  # Standard line height
+                    current_y = y0 + font_size  # Start below baseline
+
+                    for line in lines:
+                        if line.strip():  # Skip empty lines but advance position
+                            point = fitz.Point(x0, current_y)
+                            try:
+                                page.insert_text(
+                                    point,
+                                    line,
+                                    fontname=font_name,
+                                    fontsize=font_size,
+                                    color=color,
+                                    rotate=int(rotation) if rotation else 0,
+                                )
+                                print(f"[DEBUG replace_text] Inserted line at y={current_y}: '{line[:30]}...'")
+                            except Exception as e:
+                                print(f"[ERROR replace_text] Failed to insert text: {e}")
+                        current_y += line_height
+                else:
+                    print(f"[DEBUG replace_text] Skipping empty text")
+
                 applied_count += 1
 
             elif op_type == "draw_shape":
@@ -695,7 +713,6 @@ def render_page_preview(
                 font_name = parse_css_font_family(css_font)
 
                 # Scale font size to compensate for PyMuPDF built-in font metrics
-                original_font_size = font_size
                 font_size = font_size * 1.08
 
                 # Extend redaction rect for descenders (letters like p, g, j, q)
@@ -704,22 +721,24 @@ def render_page_preview(
                 page.add_redact_annot(redact_rect, fill=(1, 1, 1))
                 page.apply_redactions()
 
-                # Expand text rect to accommodate the scaled font size
-                height_scale = font_size / original_font_size if original_font_size > 0 else 1.0
-                expanded_y1 = y0 + (y1 - y0) * height_scale
-
-                # Use insert_textbox for multi-line text
+                # Use insert_text for each line - more reliable than insert_textbox
                 if text:
-                    text_rect = fitz.Rect(x0, y0, x1, expanded_y1)
-                    page.insert_textbox(
-                        text_rect,
-                        text,
-                        fontname=font_name,
-                        fontsize=font_size,
-                        color=color,
-                        rotate=int(rotation) if rotation else 0,
-                        align=0,
-                    )
+                    lines = text.split('\n')
+                    line_height = font_size * 1.2
+                    current_y = y0 + font_size
+
+                    for line in lines:
+                        if line.strip():
+                            point = fitz.Point(x0, current_y)
+                            page.insert_text(
+                                point,
+                                line,
+                                fontname=font_name,
+                                fontsize=font_size,
+                                color=color,
+                                rotate=int(rotation) if rotation else 0,
+                            )
+                        current_y += line_height
 
             elif op_type == "draw_shape":
                 shape_type = op.get("shape", "rect")
