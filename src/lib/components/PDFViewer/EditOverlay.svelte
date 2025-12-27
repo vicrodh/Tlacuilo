@@ -989,7 +989,7 @@
           {@const scaledFontSize = calculatedFontSize * pdfToPixelScale}
           {@const rotationDeg = textOp.style.rotation || 0}
           <div
-            class="w-full h-full p-1 overflow-hidden cursor-text whitespace-pre-wrap"
+            class="w-full cursor-text whitespace-pre-wrap"
             style="
               font-family: {textOp.style.fontFamily};
               font-size: {scaledFontSize}px;
@@ -1000,7 +1000,9 @@
               text-decoration: none;
               background-color: white;
               border: {textOp.text ? '1px solid rgba(136, 192, 208, 0.3)' : '1px dashed var(--nord8)'};
-              line-height: 1.4;
+              line-height: 1.2;
+              padding: 2px 4px;
+              min-height: {px.height}px;
               transform: rotate({rotationDeg}deg);
               transform-origin: top left;
               box-shadow: 0 1px 3px rgba(0,0,0,0.1);
