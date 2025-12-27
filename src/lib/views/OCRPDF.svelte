@@ -229,14 +229,16 @@
 
     if (!outputPath) return;
 
-    // Set processing state and wait for UI to update before starting
+    // Set processing state IMMEDIATELY after user confirms save location
     isProcessing = true;
     result = null;
 
     // Force Svelte to render the splash before starting the blocking operation
     await tick();
-    // Additional frame delay to ensure the DOM is painted
-    await new Promise(resolve => requestAnimationFrame(resolve));
+    // Double frame delay to GUARANTEE the DOM is painted
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    // Small additional delay for slower systems
+    await new Promise(resolve => setTimeout(resolve, 50));
 
     if (ocrMode === 'editable') {
       log('Running Editable OCR (creating real text objects)...', 'info', MODULE);
