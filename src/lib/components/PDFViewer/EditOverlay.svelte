@@ -612,6 +612,8 @@
   }
 
   // Handle click on a span in word mode - detect which word was clicked
+  // Strategy: Replace ENTIRE SPAN content but only let user edit the clicked word
+  // This ensures accurate positioning using the span's rect (which is precise)
   function handleSpanClickForWord(e: MouseEvent, block: TextBlockInfo, line: TextLineInfo, span: SpanInfo) {
     if (!interactive) return;
     if (store.activeTool !== 'select' && store.activeTool !== 'text' && store.activeTool !== null) return;
@@ -628,22 +630,21 @@
     const { word: wordText, wordIndex } = detected;
     if (!wordText.trim()) return;
 
-    // Calculate approximate word rect for the editor
-    const wordRect = calculateWordRect(span, wordText, wordIndex);
+    const spanText = span.text || '';
 
-    // Store this word's position
+    // Use SPAN rect (accurate) instead of calculated word rect
+    // This ensures proper positioning since span rects come from PyMuPDF
     const originalLines: OriginalLineInfo[] = [{
-      text: wordText,
-      rect: wordRect,
+      text: spanText,
+      rect: span.rect,
     }];
 
-    // Add small horizontal buffer for editing comfort
-    const pxBuffer = 5 / pageWidth;
+    // Editor rect is the span rect
     const editorRect: NormalizedRect = {
-      x: wordRect.x,
-      y: wordRect.y,
-      width: wordRect.width + pxBuffer,
-      height: wordRect.height,
+      x: span.rect.x,
+      y: span.rect.y,
+      width: span.rect.width,
+      height: span.rect.height,
     };
 
     const style = {
@@ -656,30 +657,48 @@
       rotation: line.rotation || block.rotation || 0,
     };
 
-    console.log('[EditOverlay] Word click (from span):', {
-      spanText: span.text?.substring(0, 30),
-      detectedWord: wordText,
+    // Find the word's position within the span text for selection
+    const wordStartInSpan = spanText.indexOf(wordText);
+    const wordEndInSpan = wordStartInSpan + wordText.length;
+
+    console.log('[EditOverlay] Word click (span-based):', {
+      spanText: spanText.substring(0, 40),
+      clickedWord: wordText,
       wordIndex,
-      wordRect,
+      wordStartInSpan,
+      wordEndInSpan,
+      usingSpanRect: true,
     });
 
+    // Create operation with FULL SPAN text - user will edit just the word they clicked
+    // But the entire span will be replaced to maintain proper positioning
     const op = store.addOp<ReplaceTextOp>({
       type: 'replace_text',
       page,
       rect: editorRect,
-      originalText: wordText,
+      originalText: spanText,
       originalLines,
-      text: wordText,
+      text: spanText,  // Start with full span text
       style,
     });
 
     textUndoHistory = [];
     textRedoHistory = [];
-    pushTextUndo(wordText);
+    pushTextUndo(spanText);
     editingTextId = op.id;
-    editingTextContent = wordText;
+    editingTextContent = spanText;
     lastInputTime = Date.now();
     store.selectOp(op.id);
+
+    // After a brief delay, select the clicked word in the textarea
+    // This allows the user to immediately start typing to replace it
+    setTimeout(() => {
+      const textarea = document.querySelector(`textarea[data-edit-id="${op.id}"]`) as HTMLTextAreaElement;
+      if (textarea && wordStartInSpan >= 0) {
+        textarea.focus();
+        textarea.setSelectionRange(wordStartInSpan, wordEndInSpan);
+      }
+    }, 50);
   }
 
   // Fetch blocks when page, path, or refreshKey changes
@@ -1303,6 +1322,7 @@
           {@const isLineEditMode = editReplaceOp?.originalLines?.length === 1}
           <div class="relative">
             <textarea
+              data-edit-id={op.id}
               class="outline-none resize-none"
               style="
                 box-sizing: content-box;
