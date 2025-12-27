@@ -570,10 +570,13 @@
       height: line.rect.height,
     };
 
-    // Use the block's font info for styling
+    // Use the LINE's span font size - each line can have different sizes than the block's dominant
+    // The first span's size is usually representative of the line's main text
+    const lineFontSize = line.spans?.[0]?.size || block.dominantSize || store.activeTextStyle.fontSize;
+
     const style = {
       fontFamily: mapFontFamily(block.dominantFont, block.isSerif, block.isMono),
-      fontSize: block.dominantSize || store.activeTextStyle.fontSize,
+      fontSize: lineFontSize,
       color: block.dominantColor || store.activeTextStyle.color,
       bold: hasBlockBold(block),
       italic: hasBlockItalic(block),

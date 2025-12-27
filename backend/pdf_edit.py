@@ -446,7 +446,8 @@ def apply_edits(
                 font_name = parse_css_font_family(css_font)
                 new_lines = [l for l in text.split('\n') if l.strip()] if text else []
 
-                # Calculate rects - separate for image cover vs text redaction
+                # Calculate rects - SHRINK from both TOP and BOTTOM to avoid adjacent lines
+                # OCR bounding boxes often overlap with neighboring lines
                 is_single_line_edit = len(original_lines) == 1
                 if is_single_line_edit and original_lines:
                     orig_rect = original_lines[0].get("rect", {})
@@ -454,16 +455,23 @@ def apply_edits(
                     orig_y0 = orig_rect.get("y", 0) * page_height
                     orig_w = orig_rect.get("width", 0) * page_width
                     orig_h = orig_rect.get("height", 0) * page_height
-                    # Full rect for white cover (image layer)
-                    cover_rect = fitz.Rect(orig_x0, orig_y0, orig_x0 + orig_w, orig_y0 + orig_h)
-                    # Smaller rect for text redaction - shrink 20% from bottom to avoid adjacent lines
-                    # OCR bounding boxes often extend into neighboring line areas
-                    shrink_factor = 0.80
-                    redact_rect = fitz.Rect(orig_x0, orig_y0, orig_x0 + orig_w, orig_y0 + orig_h * shrink_factor)
+
+                    # Shrink vertically from BOTH top and bottom to stay in the safe middle
+                    # 10% from top (avoid overlapping previous line's descenders)
+                    # 25% from bottom (avoid overlapping next line's ascenders)
+                    top_shrink = orig_h * 0.10
+                    bottom_shrink = orig_h * 0.25
+                    safe_y0 = orig_y0 + top_shrink
+                    safe_y1 = orig_y0 + orig_h - bottom_shrink
+
+                    # Use the SAME shrunk rect for both cover and redaction
+                    cover_rect = fitz.Rect(orig_x0, safe_y0, orig_x0 + orig_w, safe_y1)
+                    redact_rect = cover_rect  # Same conservative rect for both
+                    print(f"[DEBUG] Single-line: orig_h={orig_h:.1f}, shrunk from y={orig_y0:.1f}-{orig_y0+orig_h:.1f} to {safe_y0:.1f}-{safe_y1:.1f}", file=sys.stderr)
                 else:
                     descender_extension = font_size * 0.3
                     cover_rect = fitz.Rect(x0, y0, x1, y1 + descender_extension)
-                    redact_rect = fitz.Rect(x0, y0, x1, y1 + descender_extension)
+                    redact_rect = cover_rect
 
                 # Store for batched processing
                 if page_num not in replace_ops_by_page:
