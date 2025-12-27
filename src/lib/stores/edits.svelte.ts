@@ -43,9 +43,16 @@ export interface InsertTextOp extends BaseOp {
   style: TextStyle;
 }
 
+// Original line info for precise positioning during Apply
+export interface OriginalLineInfo {
+  text: string;
+  rect: NormalizedRect;  // Original line position (normalized)
+}
+
 export interface ReplaceTextOp extends BaseOp {
   type: 'replace_text';  // Implemented as: redact original + insert new
   originalText?: string;
+  originalLines?: OriginalLineInfo[];  // Store original line positions
   text: string;
   style: TextStyle;
 }

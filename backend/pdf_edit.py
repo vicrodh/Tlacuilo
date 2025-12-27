@@ -432,6 +432,7 @@ def apply_edits(
             elif op_type == "replace_text":
                 text = op.get("text", "")
                 style = op.get("style", {})
+                original_lines = op.get("originalLines", [])  # Line positions from frontend
                 css_font = style.get("fontFamily", "helv")
                 font_size = style.get("fontSize", 12)
                 color_str = style.get("color", "#000000")
@@ -443,68 +444,73 @@ def apply_edits(
                 # Parse CSS font-family to PyMuPDF font name
                 font_name = parse_css_font_family(css_font)
 
-                # Calculate font size from bounding box for better accuracy
-                # This is especially important for OCR'd documents where the
-                # invisible text layer has different metrics than the visual text
-                original_font_size = font_size
-                rect_height = y1 - y0
+                # Split text into lines
+                new_lines = [l for l in text.split('\n') if l.strip()] if text else []
 
-                # Count actual text lines
-                lines = [l for l in text.split('\n') if l.strip()] if text else []
-                num_lines = max(1, len(lines))
-
-                # Calculate font size from bounding box
-                # Standard line height is ~1.2x font size
-                # So: rect_height = num_lines * font_size * 1.2
-                # Therefore: font_size = rect_height / (num_lines * 1.2)
-                calculated_font_size = rect_height / (num_lines * 1.2)
-
-                # Detect if this is an OCR font (GlyphLessFont, etc.)
-                is_ocr_font = 'glyphless' in css_font.lower() or 'ocr' in css_font.lower()
-
-                # For OCR fonts, always use calculated size as it's more accurate
-                # For regular fonts, use the larger of reported vs calculated
-                if is_ocr_font:
-                    font_size = calculated_font_size
-                    print(f"[DEBUG replace_text] OCR font detected, using calculated size: {font_size:.2f}pt (was {original_font_size:.2f}pt)", file=sys.stderr)
-                else:
-                    # Apply 1.08x scale for non-OCR fonts
-                    scaled_font_size = original_font_size * 1.08
-                    # Use whichever is larger to ensure text fits
-                    font_size = max(scaled_font_size, calculated_font_size * 0.95)
-                    print(f"[DEBUG replace_text] Using font size: {font_size:.2f}pt (scaled={scaled_font_size:.2f}, calc={calculated_font_size:.2f})", file=sys.stderr)
-
-                # Extend redaction rect downward to cover descenders (letters like p, g, j, q)
-                # Descenders typically extend ~25% of font size below baseline
+                # Extend redaction rect downward to cover descenders
                 descender_extension = font_size * 0.3
                 redact_rect = fitz.Rect(x0, y0, x1, y1 + descender_extension)
                 page.add_redact_annot(redact_rect, fill=(1, 1, 1))  # White fill
                 page.apply_redactions()
 
-                print(f"[DEBUG replace_text] text='{text[:50] if text else ''}' font={font_name} size={font_size:.2f}pt", file=sys.stderr)
-                print(f"[DEBUG replace_text] rect=({x0:.1f}, {y0:.1f}, {x1:.1f}, {y1:.1f}) lines={num_lines} rect_h={rect_height:.1f}", file=sys.stderr)
+                print(f"[DEBUG replace_text] text='{text[:50] if text else ''}' font={font_name}", file=sys.stderr)
+                print(f"[DEBUG replace_text] original_lines={len(original_lines)}, new_lines={len(new_lines)}", file=sys.stderr)
 
                 if text:  # Only insert if there's text
-                    # Use insert_text for each line - more reliable than insert_textbox
-                    # Calculate line height based on final font size
-                    line_height = font_size * 1.2
-                    current_y = y0 + font_size  # Start below baseline
+                    # Use original line positions if available and line count matches
+                    if original_lines and len(original_lines) == len(new_lines):
+                        # Use original positions for each line
+                        print(f"[DEBUG replace_text] Using original line positions", file=sys.stderr)
+                        for i, (new_text, orig_line) in enumerate(zip(new_lines, original_lines)):
+                            orig_rect = orig_line.get("rect", {})
+                            line_x0 = orig_rect.get("x", 0) * page_width
+                            line_y0 = orig_rect.get("y", 0) * page_height
+                            line_height = orig_rect.get("height", 0.02) * page_height
 
-                    for line in lines:
-                        point = fitz.Point(x0, current_y)
-                        try:
-                            page.insert_text(
-                                point,
-                                line,
-                                fontname=font_name,
-                                fontsize=font_size,
-                                color=color,
-                                rotate=int(rotation) if rotation else 0,
-                            )
-                            print(f"[DEBUG replace_text] Inserted line at y={current_y:.1f}: '{line[:30]}...'", file=sys.stderr)
-                        except Exception as e:
-                            print(f"[ERROR replace_text] Failed to insert text: {e}", file=sys.stderr)
-                        current_y += line_height
+                            # Calculate font size from original line height
+                            line_font_size = line_height * 0.85  # 85% of line height
+                            line_font_size = max(6, min(72, line_font_size))
+
+                            # Position at baseline (80% down the line)
+                            text_y = line_y0 + (line_height * 0.80)
+
+                            try:
+                                page.insert_text(
+                                    fitz.Point(line_x0, text_y),
+                                    new_text,
+                                    fontname=font_name,
+                                    fontsize=line_font_size,
+                                    color=color,
+                                    rotate=int(rotation) if rotation else 0,
+                                )
+                                print(f"[DEBUG replace_text] Line {i}: y={text_y:.1f} size={line_font_size:.1f}pt '{new_text[:30]}...'", file=sys.stderr)
+                            except Exception as e:
+                                print(f"[ERROR replace_text] Failed to insert line {i}: {e}", file=sys.stderr)
+                    else:
+                        # Fallback: calculate positions from block rect
+                        print(f"[DEBUG replace_text] Using calculated positions (line count changed)", file=sys.stderr)
+                        rect_height = y1 - y0
+                        num_lines = max(1, len(new_lines))
+                        calculated_font_size = rect_height / (num_lines * 1.2)
+                        calc_font_size = max(6, min(72, calculated_font_size))
+
+                        line_height = calc_font_size * 1.2
+                        current_y = y0 + calc_font_size
+
+                        for line in new_lines:
+                            try:
+                                page.insert_text(
+                                    fitz.Point(x0, current_y),
+                                    line,
+                                    fontname=font_name,
+                                    fontsize=calc_font_size,
+                                    color=color,
+                                    rotate=int(rotation) if rotation else 0,
+                                )
+                                print(f"[DEBUG replace_text] Inserted at y={current_y:.1f}: '{line[:30]}...'", file=sys.stderr)
+                            except Exception as e:
+                                print(f"[ERROR replace_text] Failed to insert text: {e}", file=sys.stderr)
+                            current_y += line_height
                 else:
                     print(f"[DEBUG replace_text] Skipping empty text", file=sys.stderr)
 

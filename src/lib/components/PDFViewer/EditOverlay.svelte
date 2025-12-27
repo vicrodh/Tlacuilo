@@ -21,6 +21,7 @@
     InsertImageOp,
     DrawShapeOp,
     ReplaceTextOp,
+    OriginalLineInfo,
   } from '$lib/stores/edits.svelte';
 
   // Types for text blocks with font info from Tauri
@@ -462,6 +463,12 @@
     // Create a ReplaceTextOp for this block
     const text = getBlockText(block);
 
+    // Extract original line positions for precise Apply
+    const originalLines: OriginalLineInfo[] = block.lines.map(line => ({
+      text: line.spans ? line.spans.map(s => s.text).join('') : line.text,
+      rect: line.rect,
+    }));
+
     // Use the block's font info if available, otherwise fall back to toolbar defaults
     // Pass isSerif/isMono flags for accurate font type detection
     const style = {
@@ -482,6 +489,7 @@
       isMono: block.isMono,
       rotation: block.rotation,
       mappedStyle: style,
+      originalLines: originalLines.length,
     });
 
     const op = store.addOp<ReplaceTextOp>({
@@ -489,6 +497,7 @@
       page,
       rect: { ...block.rect },
       originalText: text,
+      originalLines,  // Store original line positions
       text: text, // Start with original text
       style,
     });
