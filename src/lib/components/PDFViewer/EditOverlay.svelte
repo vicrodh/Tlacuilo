@@ -1115,10 +1115,12 @@
         )}
         <!-- Find original block for line-height calculation -->
         {@const matchingBlock = textBlocks.find(b => rectsOverlap(op.rect, b.rect) > 0.5)}
-        {@const lineHeightRatio = calculateLineHeight(matchingBlock, numLines)}
+        {@const lineHeightRatio = calculateLineHeight(matchingBlock ?? null, numLines)}
         <!-- Text box - always show textarea when actively editing -->
         {#if editingTextId === op.id}
           {@const scaledFontSize = calculatedFontSize * pdfToPixelScale}
+          {@const editReplaceOp = op.type === 'replace_text' ? (op as ReplaceTextOp) : null}
+          {@const isLineEditMode = editReplaceOp?.originalLines?.length === 1}
           <div class="relative">
             <textarea
               class="outline-none resize-none"
@@ -1138,6 +1140,8 @@
                 border-radius: 1px;
                 padding: {paddingV}px {paddingH}px;
                 line-height: {lineHeightRatio};
+                white-space: {isLineEditMode ? 'nowrap' : 'pre-wrap'};
+                overflow-x: {isLineEditMode ? 'auto' : 'hidden'};
               "
               bind:value={editingTextContent}
               onkeydown={(e) => handleTextKeydown(e)}
@@ -1166,9 +1170,13 @@
         {:else if showVisuals}
           {@const scaledFontSize = calculatedFontSize * pdfToPixelScale}
           {@const rotationDeg = textOp.style.rotation || 0}
+          {@const replaceOp = op.type === 'replace_text' ? (op as ReplaceTextOp) : null}
+          {@const isLineEdit = replaceOp?.originalLines?.length === 1}
           <div
-            class="w-full cursor-text whitespace-pre-wrap"
+            class="cursor-text"
             style="
+              box-sizing: content-box;
+              width: {px.width}px;
               font-family: {textOp.style.fontFamily};
               font-size: {scaledFontSize}px;
               color: {textOp.style.color};
@@ -1179,10 +1187,12 @@
               background-color: white;
               border: {textOp.text ? '1px solid rgba(136, 192, 208, 0.2)' : '1px dashed rgba(136, 192, 208, 0.4)'};
               line-height: {lineHeightRatio};
-              padding: 0 1px;
+              padding: {paddingV}px {paddingH}px;
               min-height: {px.height}px;
               transform: rotate({rotationDeg}deg);
               transform-origin: top left;
+              white-space: {isLineEdit ? 'nowrap' : 'pre-wrap'};
+              overflow: hidden;
             "
             ondblclick={() => startEditingText(op)}
           >
