@@ -383,6 +383,14 @@ def apply_edits(
         doc = fitz.open(input_path)
         applied_count = 0
 
+        # Two-pass approach for replace_text operations:
+        # Pass 1: Collect all redactions and text insertions by page
+        # Pass 2: Apply all redactions once per page, then insert all text
+        # This prevents apply_redactions() from being called multiple times which corrupts the page
+
+        # Collect replace_text operations by page for batched processing
+        replace_ops_by_page: dict = {}  # page_num -> list of op data
+
         for op in ops:
             op_type = op.get("type")
             page_num = op.get("page", 0)
@@ -409,15 +417,11 @@ def apply_edits(
                 css_font = style.get("fontFamily", "helv")
                 font_size = style.get("fontSize", 12)
                 color_str = style.get("color", "#000000")
-                rotation = style.get("rotation", 0)  # Text rotation in degrees
+                rotation = style.get("rotation", 0)
 
-                # Parse hex color to RGB tuple
                 color = parse_hex_color(color_str)
-
-                # Parse CSS font-family to PyMuPDF font name
                 font_name = parse_css_font_family(css_font)
 
-                # Insert at top-left of rect, adjusted for baseline
                 point = fitz.Point(x0, y0 + font_size)
                 page.insert_text(
                     point,
@@ -430,130 +434,48 @@ def apply_edits(
                 applied_count += 1
 
             elif op_type == "replace_text":
+                # Collect for batched processing
                 text = op.get("text", "")
                 style = op.get("style", {})
-                original_lines = op.get("originalLines", [])  # Line positions from frontend
+                original_lines = op.get("originalLines", [])
                 css_font = style.get("fontFamily", "helv")
                 font_size = style.get("fontSize", 12)
                 color_str = style.get("color", "#000000")
-                rotation = style.get("rotation", 0)  # Text rotation in degrees
+                rotation = style.get("rotation", 0)
                 color = parse_hex_color(color_str)
-                is_bold = style.get("bold", False)
-                is_italic = style.get("italic", False)
-
-                # Parse CSS font-family to PyMuPDF font name
                 font_name = parse_css_font_family(css_font)
-
-                # Split text into lines
                 new_lines = [l for l in text.split('\n') if l.strip()] if text else []
 
-                # For single-line edits (line mode), use original line rect for redaction
-                # The editor rect is extended horizontally for editing comfort, but
-                # redaction should only cover the original text area
+                # Calculate redact_rect
                 is_single_line_edit = len(original_lines) == 1
-                print(f"[DEBUG replace_text] is_single_line_edit={is_single_line_edit}, original_lines count={len(original_lines)}", file=sys.stderr)
-                print(f"[DEBUG replace_text] op rect (editor): x0={x0:.2f}, y0={y0:.2f}, x1={x1:.2f}, y1={y1:.2f}", file=sys.stderr)
-
                 if is_single_line_edit and original_lines:
-                    # Use the original line's rect (not the extended editor rect)
                     orig_rect = original_lines[0].get("rect", {})
-                    print(f"[DEBUG replace_text] Using orig_rect from originalLines[0]: {orig_rect}", file=sys.stderr)
                     orig_x0 = orig_rect.get("x", 0) * page_width
                     orig_y0 = orig_rect.get("y", 0) * page_height
                     orig_w = orig_rect.get("width", 0) * page_width
                     orig_h = orig_rect.get("height", 0) * page_height
                     redact_rect = fitz.Rect(orig_x0, orig_y0, orig_x0 + orig_w, orig_y0 + orig_h)
-                    print(f"[DEBUG replace_text] redact_rect (from originalLines): {redact_rect}", file=sys.stderr)
                 else:
-                    # Block-level edit: extend to cover descenders
                     descender_extension = font_size * 0.3
                     redact_rect = fitz.Rect(x0, y0, x1, y1 + descender_extension)
-                    print(f"[DEBUG replace_text] redact_rect (from op rect + descender): {redact_rect}", file=sys.stderr)
 
-                # Step 1: Draw white rectangle to cover any background image
-                # (OCR'd PDFs have image layer that redaction doesn't cover)
-                shape = page.new_shape()
-                shape.draw_rect(redact_rect)
-                shape.finish(fill=(1, 1, 1), color=(1, 1, 1), width=0)  # White fill, no border
-                shape.commit()
+                # Store for batched processing
+                if page_num not in replace_ops_by_page:
+                    replace_ops_by_page[page_num] = []
 
-                # Step 2: Redact text layer
-                page.add_redact_annot(redact_rect, fill=(1, 1, 1))  # White fill
-                page.apply_redactions()
-
-                print(f"[DEBUG replace_text] text='{text[:50] if text else ''}' font={font_name}", file=sys.stderr)
-                print(f"[DEBUG replace_text] original_lines={len(original_lines)}, new_lines={len(new_lines)}", file=sys.stderr)
-                print(f"[DEBUG replace_text] page_width={page_width}, page_height={page_height}", file=sys.stderr)
-
-                # Debug: print all originalLines data
-                for idx, ol in enumerate(original_lines):
-                    ol_rect = ol.get("rect", {})
-                    print(f"[DEBUG replace_text] originalLine[{idx}]: text='{ol.get('text', '')[:30]}...' rect={ol_rect}", file=sys.stderr)
-
-                if text:  # Only insert if there's text
-                    # Use original line positions if available and line count matches
-                    if original_lines and len(original_lines) == len(new_lines):
-                        # Use original positions for each line
-                        print(f"[DEBUG replace_text] Using original line positions", file=sys.stderr)
-                        for i, (new_text, orig_line) in enumerate(zip(new_lines, original_lines)):
-                            orig_rect = orig_line.get("rect", {})
-                            line_x0 = orig_rect.get("x", 0) * page_width
-                            line_y0 = orig_rect.get("y", 0) * page_height
-                            line_height = orig_rect.get("height", 0.02) * page_height
-
-                            # Use OCR's original font size (from style) - don't recalculate
-                            # The style.fontSize comes from dominantSize detected by OCR
-                            line_font_size = font_size  # Use the OCR-detected size directly
-                            line_font_size = max(6, min(72, line_font_size))
-
-                            # Position at baseline (approximately 75% down the line for typical fonts)
-                            # Baseline position = top + (ascender ratio * line height)
-                            text_y = line_y0 + (line_height * 0.75)
-
-                            print(f"[DEBUG replace_text] Line {i}: x0={line_x0:.2f} y0={line_y0:.2f} h={line_height:.2f} text_y={text_y:.2f} size={line_font_size:.1f}pt", file=sys.stderr)
-                            print(f"[DEBUG replace_text] Line {i}: inserting '{new_text[:40]}...'", file=sys.stderr)
-
-                            try:
-                                page.insert_text(
-                                    fitz.Point(line_x0, text_y),
-                                    new_text,
-                                    fontname=font_name,
-                                    fontsize=line_font_size,
-                                    color=color,
-                                    rotate=int(rotation) if rotation else 0,
-                                )
-                                print(f"[DEBUG replace_text] Line {i}: SUCCESS", file=sys.stderr)
-                            except Exception as e:
-                                print(f"[ERROR replace_text] Failed to insert line {i}: {e}", file=sys.stderr)
-                    else:
-                        # Fallback: calculate positions from block rect
-                        print(f"[DEBUG replace_text] Using calculated positions (line count changed)", file=sys.stderr)
-                        rect_height = y1 - y0
-                        num_lines = max(1, len(new_lines))
-                        calculated_font_size = rect_height / (num_lines * 1.2)
-                        calc_font_size = max(6, min(72, calculated_font_size))
-
-                        line_height = calc_font_size * 1.2
-                        current_y = y0 + calc_font_size
-
-                        for line in new_lines:
-                            try:
-                                page.insert_text(
-                                    fitz.Point(x0, current_y),
-                                    line,
-                                    fontname=font_name,
-                                    fontsize=calc_font_size,
-                                    color=color,
-                                    rotate=int(rotation) if rotation else 0,
-                                )
-                                print(f"[DEBUG replace_text] Inserted at y={current_y:.1f}: '{line[:30]}...'", file=sys.stderr)
-                            except Exception as e:
-                                print(f"[ERROR replace_text] Failed to insert text: {e}", file=sys.stderr)
-                            current_y += line_height
-                else:
-                    print(f"[DEBUG replace_text] Skipping empty text", file=sys.stderr)
-
-                applied_count += 1
+                replace_ops_by_page[page_num].append({
+                    "redact_rect": redact_rect,
+                    "text": text,
+                    "new_lines": new_lines,
+                    "original_lines": original_lines,
+                    "font_name": font_name,
+                    "font_size": font_size,
+                    "color": color,
+                    "rotation": rotation,
+                    "page_width": page_width,
+                    "page_height": page_height,
+                    "x0": x0, "y0": y0, "x1": x1, "y1": y1,
+                })
 
             elif op_type == "draw_shape":
                 shape_type = op.get("shape", "rect")
@@ -580,6 +502,97 @@ def apply_edits(
                     width=stroke_width,
                 )
                 shape.commit()
+                applied_count += 1
+
+        # PASS 2: Process all replace_text operations by page (batched)
+        # This ensures apply_redactions() is only called once per page
+        for page_num, ops_list in replace_ops_by_page.items():
+            page = doc[page_num]
+            print(f"[DEBUG BATCH] Processing {len(ops_list)} replace_text ops on page {page_num}", file=sys.stderr)
+
+            # Step 1: Draw all white rectangles first (for OCR'd PDFs)
+            for op_data in ops_list:
+                shape = page.new_shape()
+                shape.draw_rect(op_data["redact_rect"])
+                shape.finish(fill=(1, 1, 1), color=(1, 1, 1), width=0)
+                shape.commit()
+                print(f"[DEBUG BATCH] Drew white rect: {op_data['redact_rect']}", file=sys.stderr)
+
+            # Step 2: Add all redaction annotations
+            for op_data in ops_list:
+                page.add_redact_annot(op_data["redact_rect"], fill=(1, 1, 1))
+                print(f"[DEBUG BATCH] Added redact annot: {op_data['redact_rect']}", file=sys.stderr)
+
+            # Step 3: Apply all redactions ONCE
+            page.apply_redactions()
+            print(f"[DEBUG BATCH] Applied all redactions for page {page_num}", file=sys.stderr)
+
+            # Step 4: Insert all new text
+            for op_data in ops_list:
+                text = op_data["text"]
+                new_lines = op_data["new_lines"]
+                original_lines = op_data["original_lines"]
+                font_name = op_data["font_name"]
+                font_size = op_data["font_size"]
+                color = op_data["color"]
+                rotation = op_data["rotation"]
+                page_width = op_data["page_width"]
+                page_height = op_data["page_height"]
+                x0, y0, x1, y1 = op_data["x0"], op_data["y0"], op_data["x1"], op_data["y1"]
+
+                if not text:
+                    print(f"[DEBUG BATCH] Skipping empty text", file=sys.stderr)
+                    continue
+
+                # Use original line positions if available and line count matches
+                if original_lines and len(original_lines) == len(new_lines):
+                    print(f"[DEBUG BATCH] Using original line positions for {len(new_lines)} lines", file=sys.stderr)
+                    for i, (new_text, orig_line) in enumerate(zip(new_lines, original_lines)):
+                        orig_rect = orig_line.get("rect", {})
+                        line_x0 = orig_rect.get("x", 0) * page_width
+                        line_y0 = orig_rect.get("y", 0) * page_height
+                        line_height = orig_rect.get("height", 0.02) * page_height
+
+                        line_font_size = max(6, min(72, font_size))
+                        text_y = line_y0 + (line_height * 0.75)
+
+                        print(f"[DEBUG BATCH] Line {i}: x={line_x0:.2f} y={text_y:.2f} size={line_font_size:.1f}pt '{new_text[:30]}...'", file=sys.stderr)
+
+                        try:
+                            page.insert_text(
+                                fitz.Point(line_x0, text_y),
+                                new_text,
+                                fontname=font_name,
+                                fontsize=line_font_size,
+                                color=color,
+                                rotate=int(rotation) if rotation else 0,
+                            )
+                        except Exception as e:
+                            print(f"[ERROR BATCH] Failed to insert line {i}: {e}", file=sys.stderr)
+                else:
+                    # Fallback: calculate positions from op rect
+                    print(f"[DEBUG BATCH] Using calculated positions (line count mismatch: orig={len(original_lines)}, new={len(new_lines)})", file=sys.stderr)
+                    rect_height = y1 - y0
+                    num_lines = max(1, len(new_lines))
+                    calc_font_size = max(6, min(72, rect_height / (num_lines * 1.2)))
+                    line_height = calc_font_size * 1.2
+                    current_y = y0 + calc_font_size
+
+                    for line in new_lines:
+                        try:
+                            page.insert_text(
+                                fitz.Point(x0, current_y),
+                                line,
+                                fontname=font_name,
+                                fontsize=calc_font_size,
+                                color=color,
+                                rotate=int(rotation) if rotation else 0,
+                            )
+                            print(f"[DEBUG BATCH] Fallback insert at y={current_y:.1f}: '{line[:30]}...'", file=sys.stderr)
+                        except Exception as e:
+                            print(f"[ERROR BATCH] Failed to insert: {e}", file=sys.stderr)
+                        current_y += line_height
+
                 applied_count += 1
 
         doc.save(output_path, garbage=4, deflate=True)
