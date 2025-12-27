@@ -708,64 +708,93 @@
     span: SpanInfo;  // Parent span for style info
   }
 
-  // Character width weights for proportional fonts
-  // Based on typical character widths in common fonts
-  function getCharWeight(char: string): number {
-    // Narrow characters (approx 0.5x average width)
-    if ('iIlj1!|.,;:\'"'.includes(char)) return 0.5;
-    // Semi-narrow (approx 0.7x)
-    if ('ftrrJ()[]{}/-'.includes(char)) return 0.7;
-    // Wide characters (approx 1.3x)
-    if ('mwMWABCDGHKNOQRUVXYZ@#$%&'.includes(char)) return 1.3;
-    // Extra wide (approx 1.5x)
-    if ('W'.includes(char)) return 1.5;
-    // Default width
+  // Character width weights vary by font type
+  // Monospace: all chars equal width
+  // Serif (Times): more variation between narrow/wide chars
+  // Sans-serif (Arial): moderate variation
+  type FontType = 'mono' | 'serif' | 'sans';
+
+  function getCharWeight(char: string, fontType: FontType): number {
+    // Monospace fonts: all characters have equal width
+    if (fontType === 'mono') return 1.0;
+
+    // Serif fonts (Times, Georgia) - more extreme width variation
+    if (fontType === 'serif') {
+      if (char === ' ') return 0.35;
+      if ('iIl1!|.,;:\'"'.includes(char)) return 0.35;
+      if ('jtfr()[]{}/-'.includes(char)) return 0.5;
+      if ('mwMW'.includes(char)) return 1.5;
+      if ('ABCDGHKNOQRUVXYZ@#$%&'.includes(char)) return 1.25;
+      return 1.0;
+    }
+
+    // Sans-serif fonts (Arial, Helvetica) - moderate variation
+    if (char === ' ') return 0.4;
+    if ('iIl1!|.,;:\'"'.includes(char)) return 0.45;
+    if ('jtfr()[]{}/-'.includes(char)) return 0.6;
+    if ('mwMW'.includes(char)) return 1.35;
+    if ('ABCDGHKNOQRUVXYZ@#$%&'.includes(char)) return 1.15;
     return 1.0;
   }
 
-  // Calculate weighted width of a string
-  function getWeightedWidth(text: string): number {
+  // Detect font type from span info
+  function detectFontType(span: SpanInfo): FontType {
+    if (span.mono) return 'mono';
+    if (span.serif) return 'serif';
+    // Check font name for clues
+    const fontLower = (span.font || '').toLowerCase();
+    if (fontLower.includes('mono') || fontLower.includes('courier') || fontLower.includes('consola')) {
+      return 'mono';
+    }
+    if (fontLower.includes('times') || fontLower.includes('georgia') || fontLower.includes('serif')) {
+      return 'serif';
+    }
+    return 'sans';  // Default to sans-serif
+  }
+
+  // Calculate weighted width of a string (including spaces)
+  function getWeightedWidth(text: string, fontType: FontType): number {
     let total = 0;
     for (const char of text) {
-      total += getCharWeight(char);
+      total += getCharWeight(char, fontType);
     }
     return total;
   }
 
   // Split a span into individual words with calculated rects
-  // Uses weighted character widths for better proportional font handling
+  // Uses weighted character widths based on font type
   function splitSpanIntoWords(span: SpanInfo): WordInfo[] {
     const text = span.text || '';
     if (!text.trim()) return [];
 
     const words: WordInfo[] = [];
     const spanRect = span.rect;
+    const fontType = detectFontType(span);
 
-    // Calculate total weighted width of the span text
-    const totalWeight = getWeightedWidth(text);
+    // Calculate total weighted width of the ENTIRE span text (including spaces)
+    const totalWeight = getWeightedWidth(text, fontType);
     if (totalWeight === 0) return [];
 
     // Width per unit weight
     const widthPerWeight = spanRect.width / totalWeight;
 
-    // Match words and their positions (including leading whitespace for position calculation)
-    const regex = /(\s*)(\S+)/g;
+    // Find each word and calculate its position based on character indices
+    const wordRegex = /\S+/g;
     let match;
-    let currentX = spanRect.x;
 
-    while ((match = regex.exec(text)) !== null) {
-      const leadingSpace = match[1];
-      const word = match[2];
+    while ((match = wordRegex.exec(text)) !== null) {
+      const word = match[0];
+      const startIdx = match.index;
 
-      // Skip past leading whitespace (spaces are approx 0.5x width)
-      currentX += leadingSpace.length * 0.5 * widthPerWeight;
+      // Calculate x position: weighted width of all chars BEFORE this word
+      const prefixWeight = getWeightedWidth(text.substring(0, startIdx), fontType);
+      const wordWeight = getWeightedWidth(word, fontType);
 
-      // Calculate word width using weighted characters
-      const wordWeight = getWeightedWidth(word);
+      const wordX = spanRect.x + (prefixWeight * widthPerWeight);
       const wordWidth = wordWeight * widthPerWeight;
 
       const wordRect: NormalizedRect = {
-        x: currentX,
+        x: wordX,
         y: spanRect.y,
         width: wordWidth,
         height: spanRect.height,
@@ -776,9 +805,6 @@
         rect: wordRect,
         span,
       });
-
-      // Move past this word
-      currentX += wordWidth;
     }
 
     return words;
