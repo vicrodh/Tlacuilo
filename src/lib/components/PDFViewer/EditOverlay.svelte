@@ -516,6 +516,14 @@
       rotation: block.rotation || 0, // Text rotation from scanned documents
     };
 
+    // Add small buffer to block width for font rendering differences
+    const editorRect: NormalizedRect = {
+      x: block.rect.x,
+      y: block.rect.y,
+      width: block.rect.width * 1.05,  // 5% buffer
+      height: block.rect.height,
+    };
+
     console.log('[EditOverlay] Block font info:', {
       dominantFont: block.dominantFont,
       dominantSize: block.dominantSize,
@@ -530,7 +538,7 @@
     const op = store.addOp<ReplaceTextOp>({
       type: 'replace_text',
       page,
-      rect: { ...block.rect },
+      rect: editorRect,
       originalText: text,
       originalLines,  // Store original line positions
       text: text, // Start with original text
@@ -561,6 +569,24 @@
       rect: line.rect,
     }];
 
+    // Calculate editor width: OCR bbox is often too tight, extend to block's right edge
+    // This ensures the editor is wide enough for the text content
+    const blockRightEdge = block.rect.x + block.rect.width;
+    const lineRightEdge = line.rect.x + line.rect.width;
+    // Use the max of: line width, distance to block's right edge, or line width + 10% buffer
+    const extendedWidth = Math.max(
+      line.rect.width * 1.1,  // 10% buffer for font rendering differences
+      blockRightEdge - line.rect.x  // Extend to block's right edge
+    );
+
+    // Editor rect: keep line's position but use extended width
+    const editorRect: NormalizedRect = {
+      x: line.rect.x,
+      y: line.rect.y,
+      width: extendedWidth,
+      height: line.rect.height,
+    };
+
     // Use the block's font info for styling
     const style = {
       fontFamily: mapFontFamily(block.dominantFont, block.isSerif, block.isMono),
@@ -576,14 +602,15 @@
       lineIndex,
       lineText: lineText.substring(0, 50),
       lineRect: line.rect,
+      editorRect,
     });
 
     const op = store.addOp<ReplaceTextOp>({
       type: 'replace_text',
       page,
-      rect: { ...line.rect },  // Use line rect, not block rect
+      rect: editorRect,  // Use extended rect for editing
       originalText: lineText,
-      originalLines,
+      originalLines,  // Keep original line position for Apply
       text: lineText,
       style,
     });
