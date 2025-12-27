@@ -21,7 +21,7 @@
     Save,
   } from 'lucide-svelte';
   import { ask } from '@tauri-apps/plugin-dialog';
-  import type { EditsStore, EditTool, TextStyle } from '$lib/stores/edits.svelte';
+  import type { EditsStore, EditTool, TextStyle, EditGranularity } from '$lib/stores/edits.svelte';
 
   interface Props {
     store: EditsStore;
@@ -238,6 +238,29 @@
         </div>
       </div>
     {/if}
+  </div>
+
+  <!-- Separator -->
+  <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
+
+  <!-- Edit Granularity Toggle (Block / Line) -->
+  <div class="flex items-center rounded overflow-hidden" style="background-color: var(--nord3);">
+    <button
+      onclick={() => store.setEditGranularity('block')}
+      class="px-2 py-1 text-xs font-medium transition-colors"
+      style="background-color: {store.editGranularity === 'block' ? 'var(--nord10)' : 'transparent'}; color: {store.editGranularity === 'block' ? 'var(--nord6)' : 'var(--nord4)'};"
+      title="Edit entire text blocks (paragraphs)"
+    >
+      Block
+    </button>
+    <button
+      onclick={() => store.setEditGranularity('line')}
+      class="px-2 py-1 text-xs font-medium transition-colors"
+      style="background-color: {store.editGranularity === 'line' ? 'var(--nord10)' : 'transparent'}; color: {store.editGranularity === 'line' ? 'var(--nord6)' : 'var(--nord4)'};"
+      title="Edit individual lines"
+    >
+      Line
+    </button>
   </div>
 
   <!-- Separator -->

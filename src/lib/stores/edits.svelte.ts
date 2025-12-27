@@ -115,10 +115,14 @@ export type EditTool =
   | 'line'
   | null;
 
+// Granularity for text editing: block (paragraph), line, or word
+export type EditGranularity = 'block' | 'line' | 'word';
+
 export interface EditsStore {
   // State
   ops: EditorOp[];
   activeTool: EditTool;
+  editGranularity: EditGranularity;
   selectedId: string | null;
   isDirty: boolean;
   isApplying: boolean;
@@ -138,6 +142,7 @@ export interface EditsStore {
 
   // Actions
   setActiveTool(tool: EditTool): void;
+  setEditGranularity(granularity: EditGranularity): void;
   selectOp(id: string | null): void;
 
   addOp<T extends EditorOp>(op: Omit<T, 'id' | 'createdAt'>): T;
@@ -172,6 +177,7 @@ const EDITS_KEY = Symbol('edits');
 export function createEditsStore(): EditsStore {
   let ops = $state<EditorOp[]>([]);
   let activeTool = $state<EditTool>(null);
+  let editGranularity = $state<EditGranularity>('block');  // Default to block-level editing
   let selectedId = $state<string | null>(null);
   let isDirty = $state(false);
   let isApplying = $state(false);
@@ -208,6 +214,7 @@ export function createEditsStore(): EditsStore {
   return {
     get ops() { return ops; },
     get activeTool() { return activeTool; },
+    get editGranularity() { return editGranularity; },
     get selectedId() { return selectedId; },
     get isDirty() { return isDirty; },
     get isApplying() { return isApplying; },
@@ -234,6 +241,10 @@ export function createEditsStore(): EditsStore {
       if (tool !== 'select') {
         selectedId = null;
       }
+    },
+
+    setEditGranularity(granularity: EditGranularity): void {
+      editGranularity = granularity;
     },
 
     selectOp(id: string | null): void {

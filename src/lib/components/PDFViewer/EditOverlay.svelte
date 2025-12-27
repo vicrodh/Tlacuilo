@@ -441,6 +441,17 @@
     });
   }
 
+  // Check if a specific line is being edited
+  function isLineBeingEdited(block: TextBlockInfo, lineIndex: number): boolean {
+    const line = block.lines[lineIndex];
+    if (!line?.rect) return false;
+    return pageOps.some(op => {
+      if (op.type !== 'replace_text') return false;
+      const overlap = rectsOverlap(op.rect, line.rect);
+      return overlap > 0.5;
+    });
+  }
+
   // Calculate overlap ratio between two rects
   function rectsOverlap(a: NormalizedRect, b: NormalizedRect): number {
     const x0 = Math.max(a.x, b.x);
@@ -508,6 +519,57 @@
     pushTextUndo(text);
     editingTextId = op.id;
     editingTextContent = text;
+    lastInputTime = Date.now();
+    store.selectOp(op.id);
+  }
+
+  // Handle click on a single line (line-level editing)
+  function handleLineClick(block: TextBlockInfo, line: TextLineInfo, lineIndex: number) {
+    if (!interactive) return;
+    if (store.activeTool !== 'select' && store.activeTool !== 'text' && store.activeTool !== null) return;
+
+    // Get line text
+    const lineText = line.spans ? line.spans.map(s => s.text).join('') : (line.text || '');
+
+    // Store just this line's position
+    const originalLines: OriginalLineInfo[] = [{
+      text: lineText,
+      rect: line.rect,
+    }];
+
+    // Use the block's font info for styling
+    const style = {
+      fontFamily: mapFontFamily(block.dominantFont, block.isSerif, block.isMono),
+      fontSize: block.dominantSize || store.activeTextStyle.fontSize,
+      color: block.dominantColor || store.activeTextStyle.color,
+      bold: hasBlockBold(block),
+      italic: hasBlockItalic(block),
+      align: store.activeTextStyle.align,
+      rotation: line.rotation || block.rotation || 0,
+    };
+
+    console.log('[EditOverlay] Line click:', {
+      lineIndex,
+      lineText: lineText.substring(0, 50),
+      lineRect: line.rect,
+    });
+
+    const op = store.addOp<ReplaceTextOp>({
+      type: 'replace_text',
+      page,
+      rect: { ...line.rect },  // Use line rect, not block rect
+      originalText: lineText,
+      originalLines,
+      text: lineText,
+      style,
+    });
+
+    // Initialize undo history and start editing
+    textUndoHistory = [];
+    textRedoHistory = [];
+    pushTextUndo(lineText);
+    editingTextId = op.id;
+    editingTextContent = lineText;
     lastInputTime = Date.now();
     store.selectOp(op.id);
   }
@@ -877,42 +939,77 @@
   role="application"
   aria-label="Edit overlay"
 >
-  <!-- Render existing PDF text blocks (clickable to edit) -->
+  <!-- Render existing PDF text blocks/lines (clickable to edit) -->
   {#if showTextBlocks && interactive && (store.activeTool === 'select' || store.activeTool === 'text' || store.activeTool === null)}
-    {#each textBlocks as block}
-      {#if !isBlockBeingEdited(block)}
-        {@const px = toPixels(block.rect)}
-        <button
-          type="button"
-          class="absolute transition-all duration-150 cursor-pointer group"
-          style="
-            left: {px.x}px;
-            top: {px.y}px;
-            width: {px.width}px;
-            height: {px.height}px;
-          "
-          onclick={() => handleTextBlockClick(block)}
-          title="Click to edit this text"
-        >
-          <!-- Subtle highlight on hover -->
-          <div
-            class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+    {#if store.editGranularity === 'line'}
+      <!-- LINE MODE: Render individual lines -->
+      {#each textBlocks as block}
+        {#each block.lines as line, lineIndex}
+          {@const lineRect = line.rect}
+          {@const px = toPixels(lineRect)}
+          {@const lineText = line.spans ? line.spans.map(s => s.text).join('') : (line.text || '')}
+          {#if !isLineBeingEdited(block, lineIndex)}
+            <button
+              type="button"
+              class="absolute transition-all duration-150 cursor-pointer group"
+              style="
+                left: {px.x}px;
+                top: {px.y}px;
+                width: {px.width}px;
+                height: {px.height}px;
+              "
+              onclick={() => handleLineClick(block, line, lineIndex)}
+              title="Click to edit this line"
+            >
+              <!-- Subtle highlight on hover -->
+              <div
+                class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                style="
+                  background-color: rgba(163, 190, 140, 0.2);
+                  border: 1px dashed var(--nord14);
+                "
+              ></div>
+            </button>
+          {/if}
+        {/each}
+      {/each}
+    {:else}
+      <!-- BLOCK MODE: Render entire blocks (default) -->
+      {#each textBlocks as block}
+        {#if !isBlockBeingEdited(block)}
+          {@const px = toPixels(block.rect)}
+          <button
+            type="button"
+            class="absolute transition-all duration-150 cursor-pointer group"
             style="
-              background-color: rgba(136, 192, 208, 0.15);
-              border: 1px dashed var(--nord8);
+              left: {px.x}px;
+              top: {px.y}px;
+              width: {px.width}px;
+              height: {px.height}px;
             "
-          ></div>
-          <!-- Edit indicator on hover -->
-          <div
-            class="absolute -top-5 left-0 opacity-0 group-hover:opacity-100 transition-opacity text-xs px-1 py-0.5 rounded flex items-center gap-1"
-            style="background-color: var(--nord10); color: var(--nord6);"
+            onclick={() => handleTextBlockClick(block)}
+            title="Click to edit this text"
           >
-            <Type size={10} />
-            <span>Edit</span>
-          </div>
-        </button>
-      {/if}
-    {/each}
+            <!-- Subtle highlight on hover -->
+            <div
+              class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              style="
+                background-color: rgba(136, 192, 208, 0.15);
+                border: 1px dashed var(--nord8);
+              "
+            ></div>
+            <!-- Edit indicator on hover -->
+            <div
+              class="absolute -top-5 left-0 opacity-0 group-hover:opacity-100 transition-opacity text-xs px-1 py-0.5 rounded flex items-center gap-1"
+              style="background-color: var(--nord10); color: var(--nord6);"
+            >
+              <Type size={10} />
+              <span>Edit</span>
+            </div>
+          </button>
+        {/if}
+      {/each}
+    {/if}
   {/if}
 
   <!-- Render existing operations -->
