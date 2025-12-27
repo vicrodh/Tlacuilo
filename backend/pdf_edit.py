@@ -447,9 +447,16 @@ def apply_edits(
                 # Split text into lines
                 new_lines = [l for l in text.split('\n') if l.strip()] if text else []
 
-                # Extend redaction rect downward to cover descenders
-                descender_extension = font_size * 0.3
-                redact_rect = fitz.Rect(x0, y0, x1, y1 + descender_extension)
+                # For single-line edits (line mode), OCR bbox already includes descenders
+                # Only extend for block-level edits where we calculate the rect ourselves
+                is_single_line_edit = len(original_lines) == 1
+                if is_single_line_edit:
+                    # No extension needed - line bbox from OCR is accurate
+                    redact_rect = fitz.Rect(x0, y0, x1, y1)
+                else:
+                    # Block-level edit: extend to cover descenders
+                    descender_extension = font_size * 0.3
+                    redact_rect = fitz.Rect(x0, y0, x1, y1 + descender_extension)
 
                 # Step 1: Draw white rectangle to cover any background image
                 # (OCR'd PDFs have image layer that redaction doesn't cover)
