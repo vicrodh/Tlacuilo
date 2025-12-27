@@ -441,6 +441,44 @@ def rect_overlaps_any(rect, rect_list, threshold=0.7) -> bool:
     return False
 
 
+def detect_line_alignment(line_bbox, page_width: float, margin_threshold: float = 0.1) -> str:
+    """
+    Detect text alignment based on position relative to page margins.
+
+    Args:
+        line_bbox: fitz.Rect of the line in PDF coordinates
+        page_width: total page width in PDF points
+        margin_threshold: percentage of page width to consider as "near margin" (default 10%)
+
+    Returns:
+        "left", "center", or "right"
+    """
+    # Calculate margins (distance from edges)
+    left_margin = line_bbox.x0
+    right_margin = page_width - line_bbox.x1
+
+    # Threshold in points
+    threshold_pts = page_width * margin_threshold
+
+    # Check if near left margin (within threshold of typical margin ~50-72pt or threshold)
+    near_left = left_margin < max(threshold_pts, 80)
+    # Check if near right margin
+    near_right = right_margin < max(threshold_pts, 80)
+
+    # Determine alignment
+    if near_right and not near_left:
+        # Text ends at right margin but doesn't start at left = right-aligned
+        return "right"
+    elif abs(left_margin - right_margin) < threshold_pts:
+        # Equal margins on both sides = centered
+        # But only if not near both edges (which would be full-width)
+        if not (near_left and near_right):
+            return "center"
+
+    # Default: left-aligned
+    return "left"
+
+
 def run_editable_ocr(
     input_path: str,
     output_path: str,
@@ -639,9 +677,32 @@ def run_editable_ocr(
 
                         line_text = line['text']
 
-                        # Position text at baseline (approximately 75% down for standard fonts)
-                        text_x = line_pdf_bbox.x0
+                        # Detect text alignment based on position on page
+                        alignment = detect_line_alignment(line_pdf_bbox, page_rect.width)
+
+                        # Measure text width for alignment calculations
+                        try:
+                            text_length = fitz.get_text_length(
+                                line_text,
+                                fontname=pymupdf_font,
+                                fontsize=block_font_size,
+                            )
+                        except Exception:
+                            text_length = len(line_text) * block_font_size * 0.5  # rough estimate
+
+                        # Position text based on alignment
                         text_y = line_pdf_bbox.y0 + (line_pdf_bbox.height * 0.75)
+
+                        if alignment == "right":
+                            # Right-align: text ends at right edge of original bbox
+                            text_x = line_pdf_bbox.x1 - text_length
+                        elif alignment == "center":
+                            # Center: text centered within original bbox
+                            center_x = (line_pdf_bbox.x0 + line_pdf_bbox.x1) / 2
+                            text_x = center_x - (text_length / 2)
+                        else:
+                            # Left-align (default): start at left edge
+                            text_x = line_pdf_bbox.x0
 
                         try:
                             new_page.insert_text(
