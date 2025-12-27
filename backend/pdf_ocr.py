@@ -358,6 +358,86 @@ def calculate_visual_font_size(bbox: tuple, dpi: int = 300) -> float:
     return round(points, 2)
 
 
+def get_image_regions(page, zoom: float) -> list:
+    """
+    Detect image/graphic regions in a PDF page.
+    Returns list of rects in PDF coordinates that should NOT be touched.
+    """
+    image_rects = []
+
+    # Get images on the page
+    for img in page.get_images(full=True):
+        try:
+            xref = img[0]
+            # Get the image's position on the page
+            img_rects = page.get_image_rects(xref)
+            for rect in img_rects:
+                # Add some padding around images
+                padded = rect + (-5, -5, 5, 5)
+                image_rects.append(padded)
+        except Exception:
+            pass
+
+    # Get drawings (vector graphics, logos)
+    try:
+        drawings = page.get_drawings()
+        for d in drawings:
+            if d.get('rect'):
+                rect = fitz.Rect(d['rect'])
+                # Only consider significant drawings (not thin lines)
+                if rect.width > 20 and rect.height > 20:
+                    image_rects.append(rect)
+    except Exception:
+        pass
+
+    return image_rects
+
+
+def is_garbage_text(text: str) -> bool:
+    """
+    Check if OCR text looks like garbage/misread.
+    Returns True if the text should be skipped.
+    """
+    if not text or len(text.strip()) < 2:
+        return True
+
+    # Count special/garbage characters
+    garbage_chars = set('\\|}{[]@#$%^&*<>~`')
+    text_clean = text.strip()
+
+    garbage_count = sum(1 for c in text_clean if c in garbage_chars)
+    letter_count = sum(1 for c in text_clean if c.isalpha())
+
+    # If more than 30% garbage characters, skip
+    if len(text_clean) > 0 and garbage_count / len(text_clean) > 0.3:
+        return True
+
+    # If very few letters compared to total, skip
+    if len(text_clean) > 3 and letter_count < len(text_clean) * 0.4:
+        return True
+
+    return False
+
+
+def rect_overlaps_any(rect, rect_list, threshold=0.3) -> bool:
+    """
+    Check if a rectangle significantly overlaps with any rect in the list.
+    """
+    for other in rect_list:
+        intersection = rect & other  # intersection
+        if intersection.is_empty:
+            continue
+
+        # Calculate overlap ratio
+        rect_area = rect.width * rect.height
+        if rect_area > 0:
+            overlap_ratio = (intersection.width * intersection.height) / rect_area
+            if overlap_ratio > threshold:
+                return True
+
+    return False
+
+
 def run_editable_ocr(
     input_path: str,
     output_path: str,
@@ -370,11 +450,11 @@ def run_editable_ocr(
     """
     Run OCR and create editable text objects.
 
-    Unlike searchable OCR (OCRmyPDF), this mode:
-    - Creates real text objects (not invisible layer)
-    - Calculates visual font sizes from bounding boxes
-    - Preserves images/logos in their original positions
-    - Embeds metrics in PDF for future editing sessions
+    This mode creates a PDF with:
+    - Original images/logos preserved (detected and skipped)
+    - Text replaced with editable text objects
+    - Accurate font sizes from OCR bounding boxes
+    - Embedded metrics for future editing
 
     Args:
         input_path: Path to input PDF
@@ -410,7 +490,7 @@ def run_editable_ocr(
 
         # Metrics to embed in PDF
         all_metrics = {
-            "version": 1,
+            "version": 2,  # Version 2 with improved algorithm
             "dpi": dpi,
             "language": language,
             "font_family": font_family,
@@ -419,7 +499,7 @@ def run_editable_ocr(
 
         # Map font family selection to PyMuPDF font name
         font_map = {
-            "auto": "tiro",  # Default to serif (most common in documents)
+            "auto": "tiro",
             "times": "tiro",
             "helvetica": "helv",
             "arial": "helv",
@@ -431,19 +511,26 @@ def run_editable_ocr(
         }
         pymupdf_font = font_map.get(font_family.lower(), "tiro")
 
-        print(f"[INFO] Starting editable OCR: {len(doc)} pages, DPI={dpi}, lang={language}", file=sys.stderr)
+        print(f"[INFO] Starting editable OCR v2: {len(doc)} pages, DPI={dpi}, lang={language}", file=sys.stderr)
 
         for page_num in range(len(doc)):
             page = doc[page_num]
             page_rect = page.rect
+            zoom = dpi / 72.0
 
             print(f"[INFO] Processing page {page_num + 1}/{len(doc)}...", file=sys.stderr)
+
+            # Detect image/graphic regions to preserve
+            image_regions = get_image_regions(page, zoom) if preserve_images else []
+            print(f"[INFO]   Found {len(image_regions)} image/graphic regions to preserve", file=sys.stderr)
 
             # Create new page with same dimensions
             new_page = out_doc.new_page(width=page_rect.width, height=page_rect.height)
 
+            # Always draw original page as background first
+            new_page.show_pdf_page(page_rect, doc, page_num)
+
             # Render page to image for OCR
-            zoom = dpi / 72.0
             mat = fitz.Matrix(zoom, zoom)
             pix = page.get_pixmap(matrix=mat)
 
@@ -463,16 +550,12 @@ def run_editable_ocr(
 
                 if result.returncode != 0:
                     print(f"[WARN] Tesseract failed on page {page_num + 1}: {result.stderr}", file=sys.stderr)
-                    # Copy original page if OCR fails
-                    new_page.show_pdf_page(page_rect, doc, page_num)
                     continue
 
                 hocr_content = result.stdout
-
-                # Parse hOCR to get text blocks with bounding boxes
                 blocks = parse_hocr(hocr_content)
 
-                print(f"[INFO] Page {page_num + 1}: Found {len(blocks)} text blocks", file=sys.stderr)
+                print(f"[INFO]   Found {len(blocks)} text blocks from OCR", file=sys.stderr)
 
                 # Page metrics
                 page_metrics = {
@@ -480,122 +563,97 @@ def run_editable_ocr(
                     "width": page_rect.width,
                     "height": page_rect.height,
                     "blocks": [],
+                    "skipped_blocks": 0,
                 }
 
-                if preserve_images:
-                    # First, draw the original page as background
-                    # This preserves images and graphics
-                    new_page.show_pdf_page(page_rect, doc, page_num)
+                blocks_processed = 0
+                blocks_skipped = 0
 
-                    # Then, white out text areas and insert editable text
-                    for block in blocks:
-                        # Convert pixel bbox to PDF points
-                        px_bbox = block['bbox']
-                        pdf_bbox = (
-                            px_bbox[0] / zoom,
-                            px_bbox[1] / zoom,
-                            px_bbox[2] / zoom,
-                            px_bbox[3] / zoom,
+                for block in blocks:
+                    # Convert pixel bbox to PDF points
+                    px_bbox = block['bbox']
+                    pdf_bbox = fitz.Rect(
+                        px_bbox[0] / zoom,
+                        px_bbox[1] / zoom,
+                        px_bbox[2] / zoom,
+                        px_bbox[3] / zoom,
+                    )
+
+                    # Skip blocks that overlap with images
+                    if preserve_images and rect_overlaps_any(pdf_bbox, image_regions):
+                        print(f"[INFO]   Skipping block overlapping image: '{block['text'][:30]}...'", file=sys.stderr)
+                        blocks_skipped += 1
+                        continue
+
+                    # Skip garbage text
+                    if is_garbage_text(block['text']):
+                        print(f"[INFO]   Skipping garbage text: '{block['text'][:30]}...'", file=sys.stderr)
+                        blocks_skipped += 1
+                        continue
+
+                    # Skip very small blocks (likely noise)
+                    if pdf_bbox.width < 10 or pdf_bbox.height < 5:
+                        blocks_skipped += 1
+                        continue
+
+                    # Calculate appropriate whitening rect
+                    white_rect = pdf_bbox + (-1, -1, 1, 1)
+
+                    # White out the original text area
+                    shape = new_page.new_shape()
+                    shape.draw_rect(white_rect)
+                    shape.finish(color=None, fill=(1, 1, 1))
+                    shape.commit()
+
+                    # Process each line with its own positioning
+                    for line in block['lines']:
+                        line_px_bbox = line['bbox']
+                        line_pdf_bbox = fitz.Rect(
+                            line_px_bbox[0] / zoom,
+                            line_px_bbox[1] / zoom,
+                            line_px_bbox[2] / zoom,
+                            line_px_bbox[3] / zoom,
                         )
-                        rect = fitz.Rect(pdf_bbox)
-
-                        # Expand rect slightly to cover edges
-                        rect = rect + (-2, -2, 2, 2)
-
-                        # White out the original text area
-                        shape = new_page.new_shape()
-                        shape.draw_rect(rect)
-                        shape.finish(color=None, fill=(1, 1, 1))  # White fill
-                        shape.commit()
 
                         # Calculate font size from line height
-                        if block['lines']:
-                            first_line = block['lines'][0]
-                            line_height_px = first_line['bbox'][3] - first_line['bbox'][1]
-                            font_size = line_height_px / zoom / 1.2  # Divide by line height factor
-                        else:
-                            font_size = calculate_visual_font_size(px_bbox, dpi)
+                        line_height_px = line_px_bbox[3] - line_px_bbox[1]
+                        font_size = (line_height_px / zoom) * 0.85  # 85% of line height for font
 
-                        # Insert text line by line
-                        current_y = pdf_bbox[1] + font_size
-                        line_height = font_size * 1.2
+                        # Clamp font size to reasonable range
+                        font_size = max(6, min(72, font_size))
 
-                        for line in block['lines']:
-                            # Get line x position
-                            line_x = line['bbox'][0] / zoom
+                        # Position text at baseline (approximately 80% down the line height)
+                        text_x = line_pdf_bbox.x0
+                        text_y = line_pdf_bbox.y0 + (line_pdf_bbox.height * 0.8)
 
-                            try:
-                                new_page.insert_text(
-                                    fitz.Point(line_x, current_y),
-                                    line['text'],
-                                    fontname=pymupdf_font,
-                                    fontsize=font_size,
-                                    color=(0, 0, 0),
-                                )
-                            except Exception as e:
-                                print(f"[WARN] Failed to insert text: {e}", file=sys.stderr)
+                        line_text = line['text']
 
-                            current_y += line_height
+                        try:
+                            new_page.insert_text(
+                                fitz.Point(text_x, text_y),
+                                line_text,
+                                fontname=pymupdf_font,
+                                fontsize=font_size,
+                                color=(0, 0, 0),
+                            )
+                        except Exception as e:
+                            print(f"[WARN] Failed to insert text '{line_text[:20]}...': {e}", file=sys.stderr)
 
-                        # Store block metrics
-                        page_metrics['blocks'].append({
-                            'bbox_px': px_bbox,
-                            'bbox_pdf': pdf_bbox,
-                            'visual_font_size': font_size,
-                            'text': block['text'],
-                            'line_count': len(block['lines']),
-                        })
+                    blocks_processed += 1
 
-                else:
-                    # Full conversion mode - no original image preserved
-                    # Just insert text (background will be white)
-                    for block in blocks:
-                        px_bbox = block['bbox']
-                        pdf_bbox = (
-                            px_bbox[0] / zoom,
-                            px_bbox[1] / zoom,
-                            px_bbox[2] / zoom,
-                            px_bbox[3] / zoom,
-                        )
+                    # Store block metrics
+                    page_metrics['blocks'].append({
+                        'bbox_pdf': (pdf_bbox.x0, pdf_bbox.y0, pdf_bbox.x1, pdf_bbox.y1),
+                        'text': block['text'],
+                        'line_count': len(block['lines']),
+                    })
 
-                        if block['lines']:
-                            first_line = block['lines'][0]
-                            line_height_px = first_line['bbox'][3] - first_line['bbox'][1]
-                            font_size = line_height_px / zoom / 1.2
-                        else:
-                            font_size = calculate_visual_font_size(px_bbox, dpi)
-
-                        current_y = pdf_bbox[1] + font_size
-                        line_height = font_size * 1.2
-
-                        for line in block['lines']:
-                            line_x = line['bbox'][0] / zoom
-
-                            try:
-                                new_page.insert_text(
-                                    fitz.Point(line_x, current_y),
-                                    line['text'],
-                                    fontname=pymupdf_font,
-                                    fontsize=font_size,
-                                    color=(0, 0, 0),
-                                )
-                            except Exception as e:
-                                print(f"[WARN] Failed to insert text: {e}", file=sys.stderr)
-
-                            current_y += line_height
-
-                        page_metrics['blocks'].append({
-                            'bbox_px': px_bbox,
-                            'bbox_pdf': pdf_bbox,
-                            'visual_font_size': font_size,
-                            'text': block['text'],
-                            'line_count': len(block['lines']),
-                        })
-
+                page_metrics['skipped_blocks'] = blocks_skipped
                 all_metrics['pages'].append(page_metrics)
 
+                print(f"[INFO]   Processed {blocks_processed} blocks, skipped {blocks_skipped}", file=sys.stderr)
+
             finally:
-                # Clean up temp file
                 Path(tmp_path).unlink(missing_ok=True)
 
         # Embed metrics in PDF metadata if requested
