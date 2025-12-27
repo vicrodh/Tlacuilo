@@ -360,75 +360,78 @@ def calculate_visual_font_size(bbox: tuple, dpi: int = 300) -> float:
 
 def get_image_regions(page, zoom: float) -> list:
     """
-    Detect image/graphic regions in a PDF page.
+    Detect ONLY actual image regions (logos, photos) in a PDF page.
     Returns list of rects in PDF coordinates that should NOT be touched.
+
+    CONSERVATIVE: Only detect embedded images, not vector graphics
+    (vector graphics detection was causing entire pages to be skipped)
     """
     image_rects = []
+    page_rect = page.rect
+    page_area = page_rect.width * page_rect.height
 
-    # Get images on the page
+    # Get embedded images on the page (photos, logos, etc.)
     for img in page.get_images(full=True):
         try:
             xref = img[0]
-            # Get the image's position on the page
             img_rects = page.get_image_rects(xref)
             for rect in img_rects:
-                # Add some padding around images
-                padded = rect + (-5, -5, 5, 5)
-                image_rects.append(padded)
+                # Skip if the image covers most of the page (it's the background)
+                img_area = rect.width * rect.height
+                if img_area > page_area * 0.5:
+                    print(f"[INFO]   Skipping full-page background image", file=sys.stderr)
+                    continue
+
+                # Only consider images that are logo-sized (not tiny icons or huge backgrounds)
+                # Typical logo: 50-300pt wide, 30-200pt tall
+                if rect.width > 30 and rect.height > 30 and rect.width < 400 and rect.height < 300:
+                    padded = rect + (-3, -3, 3, 3)
+                    image_rects.append(padded)
+                    print(f"[INFO]   Detected image region: {rect.width:.0f}x{rect.height:.0f}pt", file=sys.stderr)
         except Exception:
             pass
 
-    # Get drawings (vector graphics, logos)
-    try:
-        drawings = page.get_drawings()
-        for d in drawings:
-            if d.get('rect'):
-                rect = fitz.Rect(d['rect'])
-                # Only consider significant drawings (not thin lines)
-                if rect.width > 20 and rect.height > 20:
-                    image_rects.append(rect)
-    except Exception:
-        pass
+    # NOTE: Removed get_drawings() - it was detecting ALL vector elements
+    # including text paths, causing entire pages to be skipped
 
     return image_rects
 
 
 def is_garbage_text(text: str) -> bool:
     """
-    Check if OCR text looks like garbage/misread.
-    Returns True if the text should be skipped.
+    Check if OCR text is clearly garbage (very high ratio of special chars).
+    CONSERVATIVE: Only skip obvious garbage, not edge cases.
     """
-    if not text or len(text.strip()) < 2:
+    if not text or len(text.strip()) == 0:
         return True
 
-    # Count special/garbage characters
-    garbage_chars = set('\\|}{[]@#$%^&*<>~`')
     text_clean = text.strip()
 
-    garbage_count = sum(1 for c in text_clean if c in garbage_chars)
-    letter_count = sum(1 for c in text_clean if c.isalpha())
-
-    # If more than 30% garbage characters, skip
-    if len(text_clean) > 0 and garbage_count / len(text_clean) > 0.3:
+    # Only skip if it's a single weird character
+    if len(text_clean) == 1 and not text_clean.isalnum():
         return True
 
-    # If very few letters compared to total, skip
-    if len(text_clean) > 3 and letter_count < len(text_clean) * 0.4:
+    # Count truly garbage characters (not normal punctuation)
+    garbage_chars = set('\\|}{[]@#$%^&*<>~`')
+    garbage_count = sum(1 for c in text_clean if c in garbage_chars)
+
+    # Only skip if MORE THAN 50% garbage (very lenient)
+    if len(text_clean) > 0 and garbage_count / len(text_clean) > 0.5:
         return True
 
     return False
 
 
-def rect_overlaps_any(rect, rect_list, threshold=0.3) -> bool:
+def rect_overlaps_any(rect, rect_list, threshold=0.7) -> bool:
     """
-    Check if a rectangle significantly overlaps with any rect in the list.
+    Check if a rectangle SIGNIFICANTLY overlaps with any rect in the list.
+    threshold=0.7 means 70% of the rect must be inside an image to be skipped.
     """
     for other in rect_list:
-        intersection = rect & other  # intersection
+        intersection = rect & other
         if intersection.is_empty:
             continue
 
-        # Calculate overlap ratio
         rect_area = rect.width * rect.height
         if rect_area > 0:
             overlap_ratio = (intersection.width * intersection.height) / rect_area
