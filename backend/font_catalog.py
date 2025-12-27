@@ -125,7 +125,10 @@ def render_sample(font_path: str, text: str, font_index: int | None) -> Image.Im
             font = None
             break
 
-        bbox = draw.textbbox((0, 0), text, font=font)
+        try:
+            bbox = draw.textbbox((0, 0), text, font=font)
+        except Exception:
+            return None
         text_w = bbox[2] - bbox[0]
         text_h = bbox[3] - bbox[1]
         if text_w <= DEFAULT_SIZE[0] - 8 and text_h <= DEFAULT_SIZE[1] - 8:
@@ -142,7 +145,10 @@ def render_sample(font_path: str, text: str, font_index: int | None) -> Image.Im
     x = (DEFAULT_SIZE[0] - text_w) / 2 - bbox[0]
     y = (DEFAULT_SIZE[1] - text_h) / 2 - bbox[1]
 
-    draw.text((x, y), text, font=font, fill=0)
+    try:
+        draw.text((x, y), text, font=font, fill=0)
+    except Exception:
+        return None
     return preprocess_image(img.convert("RGB"), DEFAULT_SIZE[1])
 
 
