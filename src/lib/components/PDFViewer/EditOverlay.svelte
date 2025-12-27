@@ -86,9 +86,9 @@
   // PDF uses points (1/72 inch), rendered at specific DPI
   const pdfToPixelScale = $derived(pdfPageWidth ? pageWidth / pdfPageWidth : 150 / 72);
 
-  // Font size scale factor to match PyMuPDF built-in font metrics
-  // Must match the scale factor in backend/pdf_edit.py
-  const FONT_SIZE_SCALE = 1.08;
+  // Font size scale factor - set to 1.0 for accurate preview
+  // Backend now uses OCR font size directly without scaling
+  const FONT_SIZE_SCALE = 1.0;
 
   /**
    * Calculate the correct font size for display.
