@@ -9,9 +9,7 @@
   } from 'lucide-svelte';
   import { listen } from '@tauri-apps/api/event';
   import { open } from '@tauri-apps/plugin-dialog';
-  import { writeFile } from '@tauri-apps/plugin-fs';
   import { invoke } from '@tauri-apps/api/core';
-  import { appCacheDir, join } from '@tauri-apps/api/path';
   import { onMount, onDestroy } from 'svelte';
   import { log, logSuccess, logError, registerFile, unregisterModule } from '$lib/stores/status.svelte';
   import OcrProgressSplash from '$lib/components/OcrProgressSplash.svelte';
@@ -91,6 +89,8 @@
   let topk = $state(5);
   let unlistenDrop: (() => void) | null = null;
   let helperText = $state('Run Check, then Index, then Match to see results.');
+  let isAutoChecking = $state(false);
+  let isAutoIndexing = $state(false);
 
   const filePattern = /\.(png|jpe?g|bmp|tiff|pdf)$/i;
 
@@ -101,6 +101,8 @@
         await loadFile(files[0]);
       }
     });
+
+    await autoCheckAndIndex();
   });
 
   onDestroy(() => {
@@ -157,10 +159,10 @@
     isChecking = false;
   }
 
-  async function handleIndex() {
+  async function handleIndex(force = false) {
     isIndexing = true;
     try {
-      indexResult = await invoke<FontDetectIndex>('font_detect_index', { force: false });
+      indexResult = await invoke<FontDetectIndex>('font_detect_index', { force });
       if (indexResult.ok) {
         const suffix = indexResult.cached ? ' (cached)' : '';
         logSuccess(`Index complete: ${indexResult.indexed_fonts} fonts${suffix}`, MODULE);
@@ -234,26 +236,38 @@
       throw new Error('PDF render returned no image data');
     }
 
-    const fileNameSafe = fileName.replace(/[^a-z0-9._-]/gi, '_');
-    const cacheBase = await appCacheDir();
-    const outputPath = await join(
-      cacheBase,
-      `font-detect-quicktool-page1-${Date.now()}-${fileNameSafe}.png`
-    );
-    const bytes = base64ToBytes(rendered.data);
-    await writeFile(outputPath, bytes);
+    const outputPath = await invoke<string>('font_detect_write_cache_image', {
+      data: rendered.data,
+      nameHint: fileName.replace(/[^a-z0-9._-]/gi, '_'),
+    });
 
     renderedImagePath = outputPath;
     return outputPath;
   }
 
-  function base64ToBytes(data: string): Uint8Array {
-    const binary = atob(data);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) {
-      bytes[i] = binary.charCodeAt(i);
+  async function autoCheckAndIndex() {
+    isAutoChecking = true;
+    helperText = 'Checking font engines...';
+    try {
+      checkResult = await invoke<FontDetectCheck>('font_detect_check');
+      if (checkResult.indexed_fonts === 0) {
+        isAutoIndexing = true;
+        helperText = 'Indexing fonts for first use...';
+        indexResult = await invoke<FontDetectIndex>('font_detect_index', { force: false });
+        if (indexResult.ok) {
+          logSuccess(`Index complete: ${indexResult.indexed_fonts} fonts`, MODULE);
+        }
+      }
+    } catch (err) {
+      console.error('Auto check/index failed:', err);
+      logError(`Auto setup failed: ${err}`, MODULE);
+    } finally {
+      isAutoChecking = false;
+      isAutoIndexing = false;
+      helperText = inputKind === 'pdf'
+        ? 'Run Match to identify fonts. PDF will be rendered to an image automatically.'
+        : 'Run Match to identify fonts.';
     }
-    return bytes;
   }
 </script>
 
@@ -344,11 +358,11 @@
             <button
               class="flex items-center justify-center gap-2 px-3 py-2 rounded-lg transition-colors"
               style="background-color: var(--nord10); color: var(--nord0);"
-              onclick={handleIndex}
+              onclick={() => handleIndex(true)}
               disabled={isIndexing}
             >
               <Upload size={16} />
-              <span>{isIndexing ? 'Indexing...' : 'Index'}</span>
+              <span>{isIndexing ? 'Indexing...' : 'Rebuild'}</span>
             </button>
           </div>
         </div>

@@ -204,6 +204,47 @@ async fn font_detect_match(
     .map_err(|e| format!("Font detect match task failed: {:?}", e))?
 }
 
+/// Save a rendered page image to the app cache for font detection
+#[tauri::command]
+fn font_detect_write_cache_image(
+    app: AppHandle,
+    data: String,
+    name_hint: Option<String>,
+) -> Result<String, String> {
+    use base64::Engine;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .unwrap_or_else(|_| std::env::temp_dir());
+    std::fs::create_dir_all(&cache_dir)
+        .map_err(|e| format!("Failed to create cache directory: {}", e))?;
+
+    let hint = name_hint.unwrap_or_else(|| "page".to_string());
+    let safe_hint: String = hint
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' { c } else { '_' })
+        .collect();
+
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| format!("Failed to get timestamp: {}", e))?
+        .as_millis();
+
+    let filename = format!("font-detect-{}-{}.png", ts, safe_hint);
+    let output_path = cache_dir.join(filename);
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data.as_bytes())
+        .map_err(|e| format!("Failed to decode image data: {}", e))?;
+
+    std::fs::write(&output_path, bytes)
+        .map_err(|e| format!("Failed to write image: {}", e))?;
+
+    Ok(output_path.to_string_lossy().to_string())
+}
+
 // ============================================================================
 // Annotation Embedding Commands (PythonBridge)
 // ============================================================================
@@ -2289,6 +2330,7 @@ pub fn run() {
       font_detect_check,
       font_detect_index,
       font_detect_match,
+      font_detect_write_cache_image,
       // PDF operations (PythonBridge)
       merge_pdfs,
       merge_pages,
