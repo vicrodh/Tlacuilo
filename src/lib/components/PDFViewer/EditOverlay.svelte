@@ -611,27 +611,30 @@
     store.selectOp(op.id);
   }
 
-  // Handle click on a single word/span (word-level editing)
-  function handleWordClick(block: TextBlockInfo, line: TextLineInfo, span: SpanInfo) {
+  // Handle click on a single word (word-level editing)
+  // Note: WordInfo is defined after toNormalized, so we use inline type here
+  function handleWordClick(block: TextBlockInfo, line: TextLineInfo, word: { text: string; rect: NormalizedRect; span: SpanInfo }) {
     if (!interactive) return;
     if (store.activeTool !== 'select' && store.activeTool !== 'text' && store.activeTool !== null) return;
 
-    const wordText = span.text || '';
-    if (!wordText.trim()) return; // Skip empty spans
+    const wordText = word.text || '';
+    if (!wordText.trim()) return; // Skip empty words
+
+    const span = word.span;
 
     // Store this word's position (using same structure as lines for backend compatibility)
     const originalLines: OriginalLineInfo[] = [{
       text: wordText,
-      rect: span.rect,
+      rect: word.rect,
     }];
 
     // Add small horizontal buffer for editing comfort
     const pxBuffer = 5 / pageWidth;
     const editorRect: NormalizedRect = {
-      x: span.rect.x,
-      y: span.rect.y,
-      width: span.rect.width + pxBuffer,
-      height: span.rect.height,
+      x: word.rect.x,
+      y: word.rect.y,
+      width: word.rect.width + pxBuffer,
+      height: word.rect.height,
     };
 
     const style = {
@@ -646,7 +649,7 @@
 
     console.log('[EditOverlay] Word click:', {
       wordText: wordText.substring(0, 30),
-      spanRect: span.rect,
+      wordRect: word.rect,
       editorRect,
     });
 
@@ -696,6 +699,66 @@
       width: width / (pageWidth * scale),
       height: height / (pageHeight * scale),
     };
+  }
+
+  // Word info for word-level editing
+  interface WordInfo {
+    text: string;
+    rect: NormalizedRect;
+    span: SpanInfo;  // Parent span for style info
+  }
+
+  // Split a span into individual words with calculated rects
+  // Words are split by whitespace, and their rects are proportionally calculated
+  function splitSpanIntoWords(span: SpanInfo): WordInfo[] {
+    const text = span.text || '';
+    if (!text.trim()) return [];
+
+    const words: WordInfo[] = [];
+    const spanRect = span.rect;
+
+    // Match words and their positions (including leading whitespace for position calculation)
+    const regex = /(\s*)(\S+)/g;
+    let match;
+    let currentX = spanRect.x;
+    const charWidth = spanRect.width / text.length;  // Average char width
+
+    while ((match = regex.exec(text)) !== null) {
+      const leadingSpace = match[1];
+      const word = match[2];
+
+      // Skip past leading whitespace
+      currentX += leadingSpace.length * charWidth;
+
+      // Calculate word rect
+      const wordWidth = word.length * charWidth;
+      const wordRect: NormalizedRect = {
+        x: currentX,
+        y: spanRect.y,
+        width: wordWidth,
+        height: spanRect.height,
+      };
+
+      words.push({
+        text: word,
+        rect: wordRect,
+        span,
+      });
+
+      // Move past this word
+      currentX += wordWidth;
+    }
+
+    return words;
+  }
+
+  // Get all words from a line (split all spans into words)
+  function getLineWords(line: TextLineInfo): WordInfo[] {
+    const words: WordInfo[] = [];
+    for (const span of line.spans || []) {
+      words.push(...splitSpanIntoWords(span));
+    }
+    return words;
   }
 
   // Get mouse position relative to overlay
@@ -1037,13 +1100,12 @@
   <!-- Render existing PDF text blocks/lines/words (clickable to edit) -->
   {#if showTextBlocks && !hideBlockHighlights && interactive && (store.activeTool === 'select' || store.activeTool === 'text' || store.activeTool === null)}
     {#if store.editGranularity === 'word'}
-      <!-- WORD MODE: Render individual spans (words) -->
+      <!-- WORD MODE: Render individual words (split from spans) -->
       {#each textBlocks as block}
         {#each block.lines as line}
-          {#each line.spans || [] as span}
-            {@const px = toPixels(span.rect)}
-            {@const spanText = span.text || ''}
-            {#if spanText.trim() && !isBlockBeingEdited(block)}
+          {#each getLineWords(line) as word}
+            {@const px = toPixels(word.rect)}
+            {#if word.text.trim() && !isBlockBeingEdited(block)}
               <button
                 type="button"
                 class="absolute transition-all duration-150 cursor-pointer group"
@@ -1053,8 +1115,8 @@
                   width: {px.width}px;
                   height: {px.height}px;
                 "
-                onclick={() => handleWordClick(block, line, span)}
-                title="Click to edit: {spanText.substring(0, 20)}"
+                onclick={() => handleWordClick(block, line, word)}
+                title="Click to edit: {word.text}"
               >
                 <div
                   class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
