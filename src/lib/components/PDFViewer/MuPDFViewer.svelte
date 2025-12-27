@@ -830,11 +830,19 @@
           rect: op.rect,
         };
 
-        if (op.type === 'insert_text' || op.type === 'replace_text') {
+        if (op.type === 'insert_text') {
           return {
             ...baseOp,
             text: op.text,
             style: op.style,
+          };
+        } else if (op.type === 'replace_text') {
+          return {
+            ...baseOp,
+            text: op.text,
+            style: op.style,
+            originalText: op.originalText,
+            originalLines: op.originalLines,
           };
         } else if (op.type === 'draw_shape') {
           return {
@@ -923,8 +931,16 @@
           rect: op.rect,
         };
 
-        if (op.type === 'insert_text' || op.type === 'replace_text') {
+        if (op.type === 'insert_text') {
           return { ...baseOp, text: op.text, style: op.style };
+        } else if (op.type === 'replace_text') {
+          return {
+            ...baseOp,
+            text: op.text,
+            style: op.style,
+            originalText: op.originalText,
+            originalLines: op.originalLines,
+          };
         } else if (op.type === 'draw_shape') {
           return {
             ...baseOp,

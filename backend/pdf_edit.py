@@ -469,8 +469,9 @@ def apply_edits(
                     redact_rect = cover_rect  # Same conservative rect for both
                     print(f"[DEBUG] Single-line: orig_h={orig_h:.1f}, shrunk from y={orig_y0:.1f}-{orig_y0+orig_h:.1f} to {safe_y0:.1f}-{safe_y1:.1f}", file=sys.stderr)
                 else:
-                    descender_extension = font_size * 0.3
-                    cover_rect = fitz.Rect(x0, y0, x1, y1 + descender_extension)
+                    # Fallback: use op rect directly (no downward extension).
+                    # Downward extensions can overlap the next line in OCR PDFs.
+                    cover_rect = fitz.Rect(x0, y0, x1, y1)
                     redact_rect = cover_rect
 
                 # Store for batched processing
@@ -590,7 +591,12 @@ def apply_edits(
                     print(f"[DEBUG BATCH] Using calculated positions (line count mismatch: orig={len(original_lines)}, new={len(new_lines)})", file=sys.stderr)
                     rect_height = y1 - y0
                     num_lines = max(1, len(new_lines))
-                    calc_font_size = max(6, min(72, rect_height / (num_lines * 1.2)))
+                    try:
+                        font = fitz.Font(font_name)
+                        font_height_factor = float(font.ascender - font.descender) or 1.2
+                    except Exception:
+                        font_height_factor = 1.2
+                    calc_font_size = max(6, min(72, rect_height / (num_lines * font_height_factor)))
                     line_height = calc_font_size * 1.2
                     current_y = y0 + calc_font_size
 
