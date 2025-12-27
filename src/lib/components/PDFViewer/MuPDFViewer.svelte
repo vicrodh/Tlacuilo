@@ -1649,9 +1649,15 @@
 
     const isMod = e.ctrlKey || e.metaKey;
 
-    // Undo: Ctrl+Z
+    // Undo: Ctrl+Z (for edits in edit mode, annotations otherwise)
     if (isMod && e.key === 'z' && !e.shiftKey) {
       e.preventDefault();
+      // In edit mode, undo edits first
+      if (showEditTools && editsStore.canUndo()) {
+        editsStore.undo();
+        return;
+      }
+      // Otherwise undo annotations
       if (annotationsStore.canUndo()) {
         annotationsStore.undo();
         annotationsDirty = true;
@@ -1659,9 +1665,15 @@
       return;
     }
 
-    // Redo: Ctrl+Y or Ctrl+Shift+Z
+    // Redo: Ctrl+Y or Ctrl+Shift+Z (for edits in edit mode, annotations otherwise)
     if (isMod && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
       e.preventDefault();
+      // In edit mode, redo edits first
+      if (showEditTools && editsStore.canRedo()) {
+        editsStore.redo();
+        return;
+      }
+      // Otherwise redo annotations
       if (annotationsStore.canRedo()) {
         annotationsStore.redo();
         annotationsDirty = true;
