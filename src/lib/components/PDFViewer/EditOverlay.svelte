@@ -86,45 +86,20 @@
   // PDF uses points (1/72 inch), rendered at specific DPI
   const pdfToPixelScale = $derived(pdfPageWidth ? pageWidth / pdfPageWidth : 150 / 72);
 
-  // Font size scale factor - set to 1.0 for accurate preview
-  // Backend now uses OCR font size directly without scaling
-  const FONT_SIZE_SCALE = 1.0;
-
   /**
    * Calculate the correct font size for display.
-   * For OCR fonts (GlyphLessFont), we calculate from bounding box height
-   * because the OCR text layer has different metrics than the visual text.
+   * Simply use the OCR-reported font size directly for accurate preview.
+   * The backend uses the same size, so this ensures WYSIWYG.
    */
   function calculateDisplayFontSize(
     reportedFontSize: number,
-    rectHeight: number, // normalized (0-1)
-    text: string,
-    fontFamily: string
+    _rectHeight: number, // unused - kept for API compatibility
+    _text: string,       // unused
+    _fontFamily: string  // unused
   ): number {
-    // Calculate actual height in PDF points
-    const rectHeightPts = rectHeight * (pdfPageHeight || 792);
-
-    // Count actual text lines
-    const lines = text.split('\n').filter(l => l.trim());
-    const numLines = Math.max(1, lines.length);
-
-    // Calculate font size from bounding box
-    // For single line: font size ≈ rect height (with small padding factor)
-    // For multi-line: distribute evenly
-    const calculatedSize = rectHeightPts / (numLines * 1.15);
-
-    // Detect OCR fonts
-    const isOcrFont = fontFamily.toLowerCase().includes('glyphless') ||
-                      fontFamily.toLowerCase().includes('ocr');
-
-    if (isOcrFont) {
-      // For OCR fonts, always use calculated size
-      return calculatedSize;
-    } else {
-      // For regular fonts, use the larger of scaled vs calculated
-      const scaledSize = reportedFontSize * FONT_SIZE_SCALE;
-      return Math.max(scaledSize, calculatedSize * 0.95);
-    }
+    // Use OCR's reported font size directly - no calculations or scaling
+    // This matches what the backend will use for text insertion
+    return reportedFontSize;
   }
 
   /**
@@ -1185,6 +1160,7 @@
               text-align: {textOp.style.align || 'left'};
               text-decoration: none;
               background-color: white;
+              border: 1px solid rgba(136, 192, 208, 0.5);
               line-height: {lineHeightRatio};
               padding: 0;
               margin: 0;

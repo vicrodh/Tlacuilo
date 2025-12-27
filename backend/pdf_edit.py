@@ -446,7 +446,7 @@ def apply_edits(
                 font_name = parse_css_font_family(css_font)
                 new_lines = [l for l in text.split('\n') if l.strip()] if text else []
 
-                # Calculate redact_rect
+                # Calculate rects - separate for image cover vs text redaction
                 is_single_line_edit = len(original_lines) == 1
                 if is_single_line_edit and original_lines:
                     orig_rect = original_lines[0].get("rect", {})
@@ -454,9 +454,15 @@ def apply_edits(
                     orig_y0 = orig_rect.get("y", 0) * page_height
                     orig_w = orig_rect.get("width", 0) * page_width
                     orig_h = orig_rect.get("height", 0) * page_height
-                    redact_rect = fitz.Rect(orig_x0, orig_y0, orig_x0 + orig_w, orig_y0 + orig_h)
+                    # Full rect for white cover (image layer)
+                    cover_rect = fitz.Rect(orig_x0, orig_y0, orig_x0 + orig_w, orig_y0 + orig_h)
+                    # Smaller rect for text redaction - shrink 20% from bottom to avoid adjacent lines
+                    # OCR bounding boxes often extend into neighboring line areas
+                    shrink_factor = 0.80
+                    redact_rect = fitz.Rect(orig_x0, orig_y0, orig_x0 + orig_w, orig_y0 + orig_h * shrink_factor)
                 else:
                     descender_extension = font_size * 0.3
+                    cover_rect = fitz.Rect(x0, y0, x1, y1 + descender_extension)
                     redact_rect = fitz.Rect(x0, y0, x1, y1 + descender_extension)
 
                 # Store for batched processing
@@ -464,7 +470,8 @@ def apply_edits(
                     replace_ops_by_page[page_num] = []
 
                 replace_ops_by_page[page_num].append({
-                    "redact_rect": redact_rect,
+                    "cover_rect": cover_rect,  # For white rectangle (image layer)
+                    "redact_rect": redact_rect,  # For text redaction (smaller to avoid adjacent)
                     "text": text,
                     "new_lines": new_lines,
                     "original_lines": original_lines,
@@ -511,12 +518,13 @@ def apply_edits(
             print(f"[DEBUG BATCH] Processing {len(ops_list)} replace_text ops on page {page_num}", file=sys.stderr)
 
             # Step 1: Draw all white rectangles first (for OCR'd PDFs)
+            # Use cover_rect (full size) to completely cover original scanned text
             for op_data in ops_list:
                 shape = page.new_shape()
-                shape.draw_rect(op_data["redact_rect"])
+                shape.draw_rect(op_data["cover_rect"])
                 shape.finish(fill=(1, 1, 1), color=(1, 1, 1), width=0)
                 shape.commit()
-                print(f"[DEBUG BATCH] Drew white rect: {op_data['redact_rect']}", file=sys.stderr)
+                print(f"[DEBUG BATCH] Drew white rect (cover): {op_data['cover_rect']}", file=sys.stderr)
 
             # Step 2: Add all redaction annotations
             for op_data in ops_list:
