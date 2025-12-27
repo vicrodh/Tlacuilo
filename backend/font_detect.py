@@ -121,6 +121,22 @@ def load_catalog(cache_dir: Path | None = None) -> dict | None:
     return None
 
 
+def catalog_status(cache_dir: Path) -> dict:
+    cached = cache_dir / CATALOG_FILENAME
+    if cached.exists():
+        return {"available": True, "source": "cache", "path": str(cached)}
+
+    path = catalog_path()
+    if path.exists():
+        return {"available": True, "source": "bundled", "path": str(path)}
+
+    archive = catalog_archive_path()
+    if archive.exists():
+        return {"available": True, "source": "bundled-gzip", "path": str(archive)}
+
+    return {"available": False, "source": None, "path": None}
+
+
 def compute_font_list_hash(fonts: list[dict]) -> str:
     entries = []
     for font in fonts:
@@ -763,6 +779,7 @@ def handle_check(args: argparse.Namespace) -> None:
     baseline_ok, baseline_reason = baseline_available()
     ml_ok, ml_reason = ml_available(cache_dir)
     manifest = load_manifest(cache_dir)
+    catalog = catalog_status(cache_dir)
 
     payload = {
         "ok": True,
@@ -777,6 +794,7 @@ def handle_check(args: argparse.Namespace) -> None:
                 "reason": ml_reason,
             },
         },
+        "catalog": catalog,
         "indexed_fonts": len(manifest.get("fonts", [])) if manifest else 0,
     }
     json_print(payload)

@@ -28,6 +28,11 @@
       baseline_render_compare: EngineAvailability;
       ml_embeddings: EngineAvailability;
     };
+    catalog: {
+      available: boolean;
+      source?: string | null;
+      path?: string | null;
+    };
     indexed_fonts: number;
   }
 
@@ -381,6 +386,11 @@
               </div>
               {#if checkResult.engines.ml_embeddings.reason}
                 <p class="text-xs opacity-50 mt-2">ML reason: {checkResult.engines.ml_embeddings.reason}</p>
+              {/if}
+              {#if checkResult.catalog}
+                <p class="text-xs opacity-50 mt-2">
+                  Catalog: {checkResult.catalog.available ? checkResult.catalog.source : 'not found'}
+                </p>
               {/if}
             {/if}
             {#if indexResult}

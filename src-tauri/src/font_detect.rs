@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EngineAvailability {
@@ -18,10 +18,18 @@ pub struct FontDetectEngines {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct CatalogStatus {
+    pub available: bool,
+    pub source: Option<String>,
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FontDetectCheckResult {
     pub ok: bool,
     pub cache_dir: String,
     pub engines: FontDetectEngines,
+    pub catalog: CatalogStatus,
     pub indexed_fonts: i32,
 }
 
