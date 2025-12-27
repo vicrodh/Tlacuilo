@@ -193,15 +193,17 @@
   }
 
   // Watch for edit changes and schedule preview updates
+  // TEMPORARILY DISABLED: Preview rendering causes unresponsiveness when clicking Done
+  // TODO: Investigate and fix preview rendering performance
   $effect(() => {
-    if (showEditTools && editsStore.ops.length > 0) {
-      // Track ops to detect changes
-      const opsSnapshot = JSON.stringify(editsStore.ops);
-      schedulePreviewUpdate();
-    } else if (!showEditTools) {
+    if (!showEditTools) {
       // Clear all previews when exiting edit mode
       previewImages = new Map();
     }
+    // Preview generation disabled for now - was causing app hang
+    // if (showEditTools && editsStore.ops.length > 0) {
+    //   schedulePreviewUpdate();
+    // }
   });
 
   // Toggle annotation mode (disables edit mode)
