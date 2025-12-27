@@ -204,6 +204,17 @@
     }
   });
 
+  // Force preview update when preview mode is enabled
+  $effect(() => {
+    if (hideEditIndicators && showEditTools && editsStore.ops.length > 0) {
+      // Immediately request previews for all pages with edits
+      const pagesWithEdits = new Set(editsStore.ops.map(op => op.page));
+      pagesWithEdits.forEach(pageNum => {
+        requestPagePreview(pageNum);
+      });
+    }
+  });
+
   // Toggle annotation mode (disables edit mode)
   function toggleAnnotationMode() {
     if (showAnnotationTools) {

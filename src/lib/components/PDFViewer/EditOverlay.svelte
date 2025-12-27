@@ -1043,23 +1043,27 @@
     {@const isActivelyEditing = editingTextId === op.id}
     {@const isTextOp = op.type === 'insert_text' || op.type === 'replace_text'}
     {@const textOpWithContent = isTextOp && (op as InsertTextOp).text}
-    <!-- Always show text ops with content (preview may be stale after editing) -->
-    {@const showVisuals = !hasPreview || isActivelyEditing || textOpWithContent}
-    <!-- Minimal chrome: use actual block size + small padding for border -->
-    {@const editPadding = 4}
-    {@const minEditWidth = px.width + editPadding}
-    {@const minEditHeight = px.height + editPadding}
+    <!-- Show visuals unless in preview mode (hideBlockHighlights) which shows only rendered result -->
+    <!-- When preview mode is ON: hide all edit visuals, show only the background preview image -->
+    {@const showVisuals = !hideBlockHighlights && (!hasPreview || isActivelyEditing || textOpWithContent)}
+    <!-- Border + padding that will expand OUTWARD from content area -->
+    {@const borderWidth = 1}
+    {@const paddingH = 2}  <!-- horizontal padding -->
+    {@const paddingV = 1}  <!-- vertical padding -->
+    <!-- Offset position so content stays in place, chrome expands outward -->
+    {@const offsetX = isActivelyEditing ? (borderWidth + paddingH) : 0}
+    {@const offsetY = isActivelyEditing ? (borderWidth + paddingV) : 0}
 
     <div
       class="absolute"
-      class:ring-2={isSelected && showVisuals}
-      class:ring-[var(--nord8)]={isSelected && showVisuals}
+      class:ring-2={isSelected && showVisuals && !isActivelyEditing}
+      class:ring-[var(--nord8)]={isSelected && showVisuals && !isActivelyEditing}
       class:z-50={isActivelyEditing}
       style="
-        left: {px.x}px;
-        top: {px.y}px;
-        width: {isActivelyEditing ? minEditWidth : px.width}px;
-        min-height: {isActivelyEditing ? minEditHeight : px.height}px;
+        left: {px.x - offsetX}px;
+        top: {px.y - offsetY}px;
+        width: {px.width}px;
+        min-height: {px.height}px;
         height: {isActivelyEditing ? 'auto' : px.height + 'px'};
       "
     >
@@ -1082,8 +1086,11 @@
           {@const scaledFontSize = calculatedFontSize * pdfToPixelScale}
           <div class="relative">
             <textarea
-              class="w-full outline-none resize-none"
+              class="outline-none resize-none"
               style="
+                box-sizing: content-box;
+                width: {px.width}px;
+                min-height: {px.height}px;
                 font-family: {textOp.style.fontFamily};
                 font-size: {scaledFontSize}px;
                 color: {textOp.style.color};
@@ -1091,13 +1098,10 @@
                 font-style: {textOp.style.italic ? 'italic' : 'normal'};
                 text-align: {textOp.style.align || 'left'};
                 text-decoration: none;
-                background-color: rgba(255, 255, 255, 0.95);
-                border: 1px solid var(--nord10);
-                border-radius: 2px;
-                min-height: {px.height}px;
-                min-width: {px.width}px;
-                padding: 1px 2px;
-                box-shadow: 0 0 0 2px rgba(136, 192, 208, 0.3);
+                background-color: rgba(255, 255, 255, 0.97);
+                border: {borderWidth}px solid var(--nord10);
+                border-radius: 1px;
+                padding: {paddingV}px {paddingH}px;
                 line-height: {lineHeightRatio};
               "
               bind:value={editingTextContent}
