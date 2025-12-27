@@ -16,7 +16,7 @@
   import { listen } from '@tauri-apps/api/event';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { log, logSuccess, logError, logWarning, registerFile, unregisterModule } from '$lib/stores/status.svelte';
   import { setPendingOpenFile } from '$lib/stores/status.svelte';
 
@@ -229,8 +229,14 @@
 
     if (!outputPath) return;
 
+    // Set processing state and wait for UI to update before starting
     isProcessing = true;
     result = null;
+
+    // Force Svelte to render the splash before starting the blocking operation
+    await tick();
+    // Additional frame delay to ensure the DOM is painted
+    await new Promise(resolve => requestAnimationFrame(resolve));
 
     if (ocrMode === 'editable') {
       log('Running Editable OCR (creating real text objects)...', 'info', MODULE);

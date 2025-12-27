@@ -608,8 +608,21 @@ def run_editable_ocr(
                     shape.finish(color=None, fill=(1, 1, 1))
                     shape.commit()
 
-                    # Process each line with its own positioning
+                    # First pass: calculate line sizes to detect headings
+                    line_sizes = []
                     for line in block['lines']:
+                        line_height_px = line['bbox'][3] - line['bbox'][1]
+                        line_sizes.append(line_height_px / zoom)
+
+                    # Calculate median body text size (to detect headings)
+                    if line_sizes:
+                        sorted_sizes = sorted(line_sizes)
+                        median_size = sorted_sizes[len(sorted_sizes) // 2]
+                    else:
+                        median_size = 12  # default
+
+                    # Process each line with its own positioning
+                    for idx, line in enumerate(block['lines']):
                         line_px_bbox = line['bbox']
                         line_pdf_bbox = fitz.Rect(
                             line_px_bbox[0] / zoom,
@@ -619,28 +632,55 @@ def run_editable_ocr(
                         )
 
                         # Calculate font size from line height
-                        line_height_px = line_px_bbox[3] - line_px_bbox[1]
-                        font_size = (line_height_px / zoom) * 0.85  # 85% of line height for font
+                        line_height_pt = line_pdf_bbox.height
+
+                        # Detect if this is likely a heading:
+                        # - Significantly larger than median (>20% bigger)
+                        # - Short text (likely a title, not wrapped paragraph)
+                        # - Or first line of block and larger than average
+                        line_text = line['text']
+                        is_likely_heading = (
+                            line_height_pt > median_size * 1.2 or
+                            (idx == 0 and len(line_text) < 80 and line_height_pt > median_size * 1.1)
+                        )
+
+                        # Use different scaling for headings vs body text
+                        if is_likely_heading:
+                            # Headings: use 90% of height, will use bold font
+                            font_size = line_height_pt * 0.90
+                            current_font = pymupdf_font + "bo" if pymupdf_font in ["tiro", "helv", "cour"] else pymupdf_font
+                        else:
+                            # Body text: use 85% of height
+                            font_size = line_height_pt * 0.85
+                            current_font = pymupdf_font
 
                         # Clamp font size to reasonable range
                         font_size = max(6, min(72, font_size))
 
-                        # Position text at baseline (approximately 80% down the line height)
+                        # Position text at baseline (approximately 78% down for better alignment)
                         text_x = line_pdf_bbox.x0
-                        text_y = line_pdf_bbox.y0 + (line_pdf_bbox.height * 0.8)
-
-                        line_text = line['text']
+                        text_y = line_pdf_bbox.y0 + (line_pdf_bbox.height * 0.78)
 
                         try:
                             new_page.insert_text(
                                 fitz.Point(text_x, text_y),
                                 line_text,
-                                fontname=pymupdf_font,
+                                fontname=current_font,
                                 fontsize=font_size,
                                 color=(0, 0, 0),
                             )
                         except Exception as e:
-                            print(f"[WARN] Failed to insert text '{line_text[:20]}...': {e}", file=sys.stderr)
+                            # If bold font fails, fallback to regular
+                            try:
+                                new_page.insert_text(
+                                    fitz.Point(text_x, text_y),
+                                    line_text,
+                                    fontname=pymupdf_font,
+                                    fontsize=font_size,
+                                    color=(0, 0, 0),
+                                )
+                            except Exception as e2:
+                                print(f"[WARN] Failed to insert text '{line_text[:20]}...': {e2}", file=sys.stderr)
 
                     blocks_processed += 1
 
