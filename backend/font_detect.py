@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import base64
+import gzip
 import hashlib
 import io
 import json
@@ -31,6 +32,7 @@ SAMPLES = {
 DEFAULT_SIZE = (256, 64)
 DEBUG_DIR_NAME = "debug"
 CATALOG_FILENAME = "font_catalog.json"
+CATALOG_ARCHIVE = "font_catalog.json.gz"
 
 
 def json_print(payload: dict) -> None:
@@ -67,6 +69,10 @@ def catalog_path() -> Path:
     return get_script_dir() / CATALOG_FILENAME
 
 
+def catalog_archive_path() -> Path:
+    return get_script_dir() / CATALOG_ARCHIVE
+
+
 def load_exclusions() -> dict:
     path = exclusions_path()
     if not path.exists():
@@ -77,14 +83,42 @@ def load_exclusions() -> dict:
         return {"names": []}
 
 
-def load_catalog() -> dict | None:
-    path = catalog_path()
-    if not path.exists():
-        return None
+def load_catalog_from_path(path: Path) -> dict | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def load_catalog_from_gzip(path: Path, dest: Path | None) -> dict | None:
+    try:
+        with gzip.open(path, "rb") as handle:
+            raw = handle.read()
+        if dest:
+            dest.write_bytes(raw)
+        return json.loads(raw.decode("utf-8"))
+    except Exception:
+        return None
+
+
+def load_catalog(cache_dir: Path | None = None) -> dict | None:
+    if cache_dir:
+        cached = cache_dir / CATALOG_FILENAME
+        if cached.exists():
+            return load_catalog_from_path(cached)
+
+    path = catalog_path()
+    if path.exists():
+        return load_catalog_from_path(path)
+
+    archive = catalog_archive_path()
+    if archive.exists():
+        dest = None
+        if cache_dir:
+            dest = cache_dir / CATALOG_FILENAME
+        return load_catalog_from_gzip(archive, dest)
+
+    return None
 
 
 def compute_font_list_hash(fonts: list[dict]) -> str:
@@ -636,7 +670,7 @@ def baseline_match(cache_dir: Path, input_path: str, topk: int) -> list[dict]:
         })
 
     results.sort(key=lambda item: item["score"], reverse=True)
-    catalog = load_catalog()
+    catalog = load_catalog(cache_dir)
     if catalog:
         for font in catalog.get("fonts", []):
             templates_map = font.get("templates", {})
