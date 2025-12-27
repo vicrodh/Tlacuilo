@@ -1156,17 +1156,17 @@
   <!-- Render existing PDF text blocks/lines/words (clickable to edit) -->
   {#if showTextBlocks && !hideBlockHighlights && interactive && (store.activeTool === 'select' || store.activeTool === 'text' || store.activeTool === null)}
     {#if store.editGranularity === 'word'}
-      <!-- WORD MODE: Show spans as clickable, detect word on click position -->
+      <!-- WORD MODE: Invisible clickable spans, detect word on click position -->
+      <!-- No hover highlight to avoid confusion with Line mode -->
       {#each textBlocks as block}
         {#each block.lines as line}
           {#each line.spans || [] as span}
             {@const px = toPixels(span.rect)}
             {@const spanText = span.text || ''}
-            {@const wordCount = (spanText.match(/\S+/g) || []).length}
             {#if spanText.trim() && !isBlockBeingEdited(block)}
               <button
                 type="button"
-                class="absolute transition-all duration-150 cursor-pointer group"
+                class="absolute cursor-text"
                 style="
                   left: {px.x}px;
                   top: {px.y}px;
@@ -1174,16 +1174,8 @@
                   height: {px.height}px;
                 "
                 onclick={(e) => handleSpanClickForWord(e, block, line, span)}
-                title="Click to edit word ({wordCount} word{wordCount !== 1 ? 's' : ''} in span)"
-              >
-                <div
-                  class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                  style="
-                    background-color: rgba(180, 142, 173, 0.2);
-                    border: 1px dashed var(--nord15);
-                  "
-                ></div>
-              </button>
+                title="Click on a word to edit"
+              ></button>
             {/if}
           {/each}
         {/each}
