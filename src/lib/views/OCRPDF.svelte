@@ -330,29 +330,30 @@
 <div class="flex-1 flex overflow-hidden relative">
   <!-- Processing Modal Overlay -->
   {#if isProcessing}
-    <div class="absolute inset-0 z-50 flex items-center justify-center" style="background-color: rgba(46, 52, 64, 0.9);">
-      <div class="flex flex-col items-center gap-6 p-8 rounded-2xl max-w-md text-center" style="background-color: var(--nord1);">
-        <div class="w-20 h-20 rounded-full flex items-center justify-center" style="background-color: var(--nord2);">
-          <div class="w-12 h-12 border-4 border-[var(--nord10)] border-t-transparent rounded-full animate-spin"></div>
+    <div class="fixed inset-0 z-[9999] flex items-center justify-center" style="background-color: rgba(46, 52, 64, 0.95);">
+      <div class="flex flex-col items-center gap-6 p-10 rounded-2xl max-w-lg text-center shadow-2xl" style="background-color: var(--nord1); border: 2px solid var(--nord10);">
+        <div class="w-24 h-24 rounded-full flex items-center justify-center" style="background-color: var(--nord2);">
+          <div class="w-16 h-16 border-4 border-[var(--nord10)] border-t-transparent rounded-full animate-spin"></div>
         </div>
         <div>
-          <h3 class="text-xl font-medium mb-2" style="color: var(--nord6);">
+          <h3 class="text-2xl font-semibold mb-3" style="color: var(--nord10);">
             {ocrMode === 'editable' ? 'Creating Editable PDF' : 'Running OCR'}
           </h3>
-          <p class="text-sm opacity-60">
+          <p class="text-base opacity-70">
             {ocrMode === 'editable'
               ? 'Extracting text and calculating font sizes...'
               : 'Adding searchable text layer...'}
           </p>
         </div>
-        <div class="w-full">
-          <div class="h-2 rounded-full overflow-hidden" style="background-color: var(--nord3);">
+        <div class="w-full mt-2">
+          <div class="h-3 rounded-full overflow-hidden" style="background-color: var(--nord3);">
             <div
               class="h-full rounded-full"
               style="background-color: var(--nord10); animation: progress-indeterminate 1.5s ease-in-out infinite;"
             ></div>
           </div>
-          <p class="text-xs opacity-40 mt-3">This may take several minutes for large documents</p>
+          <p class="text-sm opacity-50 mt-4">This may take several minutes for large documents</p>
+          <p class="text-xs opacity-30 mt-1">Do not close this window</p>
         </div>
       </div>
     </div>
