@@ -588,15 +588,18 @@ def run_editable_ocr(
             image_regions = get_image_regions(page, zoom) if preserve_images else []
             print(f"[INFO]   Found {len(image_regions)} image/graphic regions to preserve", file=sys.stderr)
 
+            # Render page to image for OCR (high DPI for accuracy)
+            mat = fitz.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat)
+
             # Create new page with same dimensions
             new_page = out_doc.new_page(width=page_rect.width, height=page_rect.height)
 
-            # Always draw original page as background first
-            new_page.show_pdf_page(page_rect, doc, page_num)
-
-            # Render page to image for OCR
-            mat = fitz.Matrix(zoom, zoom)
-            pix = page.get_pixmap(matrix=mat)
+            # Insert the RENDERED IMAGE as background (not show_pdf_page!)
+            # This ensures no text duplication from original PDF text layers
+            # We use the same pixmap we'll send to Tesseract
+            img_rect = fitz.Rect(0, 0, page_rect.width, page_rect.height)
+            new_page.insert_image(img_rect, pixmap=pix)
 
             # Save to temp file for Tesseract
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
