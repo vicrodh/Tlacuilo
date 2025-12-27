@@ -611,30 +611,39 @@
     store.selectOp(op.id);
   }
 
-  // Handle click on a single word (word-level editing)
-  // Note: WordInfo is defined after toNormalized, so we use inline type here
-  function handleWordClick(block: TextBlockInfo, line: TextLineInfo, word: { text: string; rect: NormalizedRect; span: SpanInfo }) {
+  // Handle click on a span in word mode - detect which word was clicked
+  function handleSpanClickForWord(e: MouseEvent, block: TextBlockInfo, line: TextLineInfo, span: SpanInfo) {
     if (!interactive) return;
     if (store.activeTool !== 'select' && store.activeTool !== 'text' && store.activeTool !== null) return;
 
-    const wordText = word.text || '';
-    if (!wordText.trim()) return; // Skip empty words
+    // Get click position in normalized coordinates
+    const rect = overlayElement.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickXNormalized = clickX / (pageWidth * scale);
 
-    const span = word.span;
+    // Detect which word was clicked
+    const detected = detectClickedWord(span, clickXNormalized);
+    if (!detected) return;
 
-    // Store this word's position (using same structure as lines for backend compatibility)
+    const { word: wordText, wordIndex } = detected;
+    if (!wordText.trim()) return;
+
+    // Calculate approximate word rect for the editor
+    const wordRect = calculateWordRect(span, wordText, wordIndex);
+
+    // Store this word's position
     const originalLines: OriginalLineInfo[] = [{
       text: wordText,
-      rect: word.rect,
+      rect: wordRect,
     }];
 
     // Add small horizontal buffer for editing comfort
     const pxBuffer = 5 / pageWidth;
     const editorRect: NormalizedRect = {
-      x: word.rect.x,
-      y: word.rect.y,
-      width: word.rect.width + pxBuffer,
-      height: word.rect.height,
+      x: wordRect.x,
+      y: wordRect.y,
+      width: wordRect.width + pxBuffer,
+      height: wordRect.height,
     };
 
     const style = {
@@ -647,10 +656,11 @@
       rotation: line.rotation || block.rotation || 0,
     };
 
-    console.log('[EditOverlay] Word click:', {
-      wordText: wordText.substring(0, 30),
-      wordRect: word.rect,
-      editorRect,
+    console.log('[EditOverlay] Word click (from span):', {
+      spanText: span.text?.substring(0, 30),
+      detectedWord: wordText,
+      wordIndex,
+      wordRect,
     });
 
     const op = store.addOp<ReplaceTextOp>({
@@ -708,106 +718,94 @@
     span: SpanInfo;  // Parent span for style info
   }
 
-  // Character width weights vary by font type
-  // Monospace: all chars equal width
-  // Serif (Times): more variation between narrow/wide chars
-  // Sans-serif (Arial): moderate variation
-  type FontType = 'mono' | 'serif' | 'sans';
-
-  function getCharWeight(char: string, fontType: FontType): number {
-    // Monospace fonts: all characters have equal width
-    if (fontType === 'mono') return 1.0;
-
-    // Serif fonts (Times, Georgia) - more extreme width variation
-    if (fontType === 'serif') {
-      if (char === ' ') return 0.35;
-      if ('iIl1!|.,;:\'"'.includes(char)) return 0.35;
-      if ('jtfr()[]{}/-'.includes(char)) return 0.5;
-      if ('mwMW'.includes(char)) return 1.5;
-      if ('ABCDGHKNOQRUVXYZ@#$%&'.includes(char)) return 1.25;
-      return 1.0;
-    }
-
-    // Sans-serif fonts (Arial, Helvetica) - moderate variation
-    if (char === ' ') return 0.4;
-    if ('iIl1!|.,;:\'"'.includes(char)) return 0.45;
-    if ('jtfr()[]{}/-'.includes(char)) return 0.6;
-    if ('mwMW'.includes(char)) return 1.35;
-    if ('ABCDGHKNOQRUVXYZ@#$%&'.includes(char)) return 1.15;
-    return 1.0;
+  // For word mode, we show the SPAN as clickable but detect word on click
+  // This avoids the impossible task of calculating word positions without font metrics
+  interface SpanWithWords {
+    span: SpanInfo;
+    words: string[];
   }
 
-  // Detect font type from span info
-  function detectFontType(span: SpanInfo): FontType {
-    if (span.mono) return 'mono';
-    if (span.serif) return 'serif';
-    // Check font name for clues
-    const fontLower = (span.font || '').toLowerCase();
-    if (fontLower.includes('mono') || fontLower.includes('courier') || fontLower.includes('consola')) {
-      return 'mono';
-    }
-    if (fontLower.includes('times') || fontLower.includes('georgia') || fontLower.includes('serif')) {
-      return 'serif';
-    }
-    return 'sans';  // Default to sans-serif
-  }
-
-  // Calculate weighted width of a string (including spaces)
-  function getWeightedWidth(text: string, fontType: FontType): number {
-    let total = 0;
-    for (const char of text) {
-      total += getCharWeight(char, fontType);
-    }
-    return total;
-  }
-
-  // Split a span into individual words with calculated rects
-  // Uses weighted character widths based on font type
-  function splitSpanIntoWords(span: SpanInfo): WordInfo[] {
-    const text = span.text || '';
-    if (!text.trim()) return [];
-
-    const words: WordInfo[] = [];
-    const spanRect = span.rect;
-    const fontType = detectFontType(span);
-
-    // Calculate total weighted width of the ENTIRE span text (including spaces)
-    const totalWeight = getWeightedWidth(text, fontType);
-    if (totalWeight === 0) return [];
-
-    // Width per unit weight
-    const widthPerWeight = spanRect.width / totalWeight;
-
-    // Find each word and calculate its position based on character indices
-    const wordRegex = /\S+/g;
-    let match;
-
-    while ((match = wordRegex.exec(text)) !== null) {
-      const word = match[0];
-      const startIdx = match.index;
-
-      // Calculate x position: weighted width of all chars BEFORE this word
-      const prefixWeight = getWeightedWidth(text.substring(0, startIdx), fontType);
-      const wordWeight = getWeightedWidth(word, fontType);
-
-      const wordX = spanRect.x + (prefixWeight * widthPerWeight);
-      const wordWidth = wordWeight * widthPerWeight;
-
-      const wordRect: NormalizedRect = {
-        x: wordX,
-        y: spanRect.y,
-        width: wordWidth,
-        height: spanRect.height,
-      };
-
-      words.push({
-        text: word,
-        rect: wordRect,
+  // Get spans with their word lists for word mode
+  function getSpansWithWords(line: TextLineInfo): SpanWithWords[] {
+    return (line.spans || [])
+      .filter(span => (span.text || '').trim())
+      .map(span => ({
         span,
-      });
+        words: (span.text || '').match(/\S+/g) || [],
+      }));
+  }
+
+  // Detect which word was clicked based on click position within span
+  function detectClickedWord(span: SpanInfo, clickXNormalized: number): { word: string; wordIndex: number } | null {
+    const text = span.text || '';
+    const words = text.match(/\S+/g);
+    if (!words || words.length === 0) return null;
+
+    // If only one word, return it
+    if (words.length === 1) {
+      return { word: words[0], wordIndex: 0 };
     }
 
-    return words;
+    // Calculate relative position within span (0 to 1)
+    const relativeX = (clickXNormalized - span.rect.x) / span.rect.width;
+
+    // Estimate which word based on character position
+    const charPosition = Math.floor(relativeX * text.length);
+
+    // Find which word contains this character position
+    let currentPos = 0;
+    for (let i = 0; i < words.length; i++) {
+      const wordStart = text.indexOf(words[i], currentPos);
+      const wordEnd = wordStart + words[i].length;
+
+      if (charPosition >= wordStart && charPosition < wordEnd) {
+        return { word: words[i], wordIndex: i };
+      }
+
+      // Also check if we're in the space before the next word
+      if (i < words.length - 1) {
+        const nextWordStart = text.indexOf(words[i + 1], wordEnd);
+        if (charPosition >= wordEnd && charPosition < nextWordStart) {
+          // Click is in space - associate with nearest word
+          const midSpace = (wordEnd + nextWordStart) / 2;
+          if (charPosition < midSpace) {
+            return { word: words[i], wordIndex: i };
+          } else {
+            return { word: words[i + 1], wordIndex: i + 1 };
+          }
+        }
+      }
+
+      currentPos = wordEnd;
+    }
+
+    // Fallback: return last word
+    return { word: words[words.length - 1], wordIndex: words.length - 1 };
+  }
+
+  // Calculate word rect for editing (approximate, for the editor overlay)
+  function calculateWordRect(span: SpanInfo, word: string, wordIndex: number): NormalizedRect {
+    const text = span.text || '';
+    const words = text.match(/\S+/g) || [];
+
+    // Find the word's character position
+    let charPos = 0;
+    for (let i = 0; i < wordIndex && i < words.length; i++) {
+      charPos = text.indexOf(words[i], charPos) + words[i].length;
+    }
+    const wordStart = text.indexOf(word, charPos);
+
+    // Calculate position proportionally
+    const charWidth = span.rect.width / text.length;
+    const wordX = span.rect.x + (wordStart * charWidth);
+    const wordWidth = word.length * charWidth;
+
+    return {
+      x: wordX,
+      y: span.rect.y,
+      width: wordWidth,
+      height: span.rect.height,
+    };
   }
 
   // Get all words from a line (split all spans into words)
@@ -1158,12 +1156,14 @@
   <!-- Render existing PDF text blocks/lines/words (clickable to edit) -->
   {#if showTextBlocks && !hideBlockHighlights && interactive && (store.activeTool === 'select' || store.activeTool === 'text' || store.activeTool === null)}
     {#if store.editGranularity === 'word'}
-      <!-- WORD MODE: Render individual words (split from spans) -->
+      <!-- WORD MODE: Show spans as clickable, detect word on click position -->
       {#each textBlocks as block}
         {#each block.lines as line}
-          {#each getLineWords(line) as word}
-            {@const px = toPixels(word.rect)}
-            {#if word.text.trim() && !isBlockBeingEdited(block)}
+          {#each line.spans || [] as span}
+            {@const px = toPixels(span.rect)}
+            {@const spanText = span.text || ''}
+            {@const wordCount = (spanText.match(/\S+/g) || []).length}
+            {#if spanText.trim() && !isBlockBeingEdited(block)}
               <button
                 type="button"
                 class="absolute transition-all duration-150 cursor-pointer group"
@@ -1173,13 +1173,13 @@
                   width: {px.width}px;
                   height: {px.height}px;
                 "
-                onclick={() => handleWordClick(block, line, word)}
-                title="Click to edit: {word.text}"
+                onclick={(e) => handleSpanClickForWord(e, block, line, span)}
+                title="Click to edit word ({wordCount} word{wordCount !== 1 ? 's' : ''} in span)"
               >
                 <div
                   class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
                   style="
-                    background-color: rgba(180, 142, 173, 0.25);
+                    background-color: rgba(180, 142, 173, 0.2);
                     border: 1px dashed var(--nord15);
                   "
                 ></div>
