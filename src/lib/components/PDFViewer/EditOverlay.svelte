@@ -1175,7 +1175,7 @@
           <div
             class="cursor-text"
             style="
-              box-sizing: content-box;
+              box-sizing: border-box;
               width: {px.width}px;
               font-family: {textOp.style.fontFamily};
               font-size: {scaledFontSize}px;
@@ -1185,9 +1185,9 @@
               text-align: {textOp.style.align || 'left'};
               text-decoration: none;
               background-color: white;
-              border: {textOp.text ? '1px solid rgba(136, 192, 208, 0.2)' : '1px dashed rgba(136, 192, 208, 0.4)'};
               line-height: {lineHeightRatio};
-              padding: {paddingV}px {paddingH}px;
+              padding: 0;
+              margin: 0;
               min-height: {px.height}px;
               transform: rotate({rotationDeg}deg);
               transform-origin: top left;

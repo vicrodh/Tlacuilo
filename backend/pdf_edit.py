@@ -451,18 +451,24 @@ def apply_edits(
                 # The editor rect is extended horizontally for editing comfort, but
                 # redaction should only cover the original text area
                 is_single_line_edit = len(original_lines) == 1
+                print(f"[DEBUG replace_text] is_single_line_edit={is_single_line_edit}, original_lines count={len(original_lines)}", file=sys.stderr)
+                print(f"[DEBUG replace_text] op rect (editor): x0={x0:.2f}, y0={y0:.2f}, x1={x1:.2f}, y1={y1:.2f}", file=sys.stderr)
+
                 if is_single_line_edit and original_lines:
                     # Use the original line's rect (not the extended editor rect)
                     orig_rect = original_lines[0].get("rect", {})
+                    print(f"[DEBUG replace_text] Using orig_rect from originalLines[0]: {orig_rect}", file=sys.stderr)
                     orig_x0 = orig_rect.get("x", 0) * page_width
                     orig_y0 = orig_rect.get("y", 0) * page_height
                     orig_w = orig_rect.get("width", 0) * page_width
                     orig_h = orig_rect.get("height", 0) * page_height
                     redact_rect = fitz.Rect(orig_x0, orig_y0, orig_x0 + orig_w, orig_y0 + orig_h)
+                    print(f"[DEBUG replace_text] redact_rect (from originalLines): {redact_rect}", file=sys.stderr)
                 else:
                     # Block-level edit: extend to cover descenders
                     descender_extension = font_size * 0.3
                     redact_rect = fitz.Rect(x0, y0, x1, y1 + descender_extension)
+                    print(f"[DEBUG replace_text] redact_rect (from op rect + descender): {redact_rect}", file=sys.stderr)
 
                 # Step 1: Draw white rectangle to cover any background image
                 # (OCR'd PDFs have image layer that redaction doesn't cover)
@@ -477,6 +483,12 @@ def apply_edits(
 
                 print(f"[DEBUG replace_text] text='{text[:50] if text else ''}' font={font_name}", file=sys.stderr)
                 print(f"[DEBUG replace_text] original_lines={len(original_lines)}, new_lines={len(new_lines)}", file=sys.stderr)
+                print(f"[DEBUG replace_text] page_width={page_width}, page_height={page_height}", file=sys.stderr)
+
+                # Debug: print all originalLines data
+                for idx, ol in enumerate(original_lines):
+                    ol_rect = ol.get("rect", {})
+                    print(f"[DEBUG replace_text] originalLine[{idx}]: text='{ol.get('text', '')[:30]}...' rect={ol_rect}", file=sys.stderr)
 
                 if text:  # Only insert if there's text
                     # Use original line positions if available and line count matches
@@ -498,6 +510,9 @@ def apply_edits(
                             # Baseline position = top + (ascender ratio * line height)
                             text_y = line_y0 + (line_height * 0.75)
 
+                            print(f"[DEBUG replace_text] Line {i}: x0={line_x0:.2f} y0={line_y0:.2f} h={line_height:.2f} text_y={text_y:.2f} size={line_font_size:.1f}pt", file=sys.stderr)
+                            print(f"[DEBUG replace_text] Line {i}: inserting '{new_text[:40]}...'", file=sys.stderr)
+
                             try:
                                 page.insert_text(
                                     fitz.Point(line_x0, text_y),
@@ -507,7 +522,7 @@ def apply_edits(
                                     color=color,
                                     rotate=int(rotation) if rotation else 0,
                                 )
-                                print(f"[DEBUG replace_text] Line {i}: y={text_y:.1f} size={line_font_size:.1f}pt '{new_text[:30]}...'", file=sys.stderr)
+                                print(f"[DEBUG replace_text] Line {i}: SUCCESS", file=sys.stderr)
                             except Exception as e:
                                 print(f"[ERROR replace_text] Failed to insert line {i}: {e}", file=sys.stderr)
                     else:
