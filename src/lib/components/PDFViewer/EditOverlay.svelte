@@ -37,10 +37,18 @@
     rect: NormalizedRect;
   }
 
+  // Word-level info from PyMuPDF's get_text("words")
+  interface WordInfo {
+    text: string;
+    rect: NormalizedRect;
+    word_no: number;
+  }
+
   interface TextLineInfo {
     text: string;
     rect: NormalizedRect;
     spans: SpanInfo[];
+    words?: WordInfo[]; // Word-level bboxes from OCR
     rotation?: number; // Rotation angle in degrees from line direction
   }
 
@@ -611,9 +619,61 @@
     store.selectOp(op.id);
   }
 
-  // Handle click on a span in word mode - detect which word was clicked
+  // Handle click on a word with exact rect from backend (PyMuPDF)
+  // This uses the accurate word bbox from get_text("words")
+  function handleWordClick(block: TextBlockInfo, line: TextLineInfo, word: WordInfo) {
+    if (!interactive) return;
+    if (store.activeTool !== 'select' && store.activeTool !== 'text' && store.activeTool !== null) return;
+
+    const wordText = word.text;
+    if (!wordText.trim()) return;
+
+    // Use exact word rect from backend
+    const originalLines: OriginalLineInfo[] = [{
+      text: wordText,
+      rect: word.rect,
+    }];
+
+    // Get style from first span in line (fallback to block)
+    const firstSpan = line.spans?.[0];
+
+    const style = {
+      fontFamily: mapFontFamily(firstSpan?.font || block.dominantFont, block.isSerif, block.isMono),
+      fontSize: firstSpan?.size || block.dominantSize || store.activeTextStyle.fontSize,
+      color: firstSpan?.color || block.dominantColor || store.activeTextStyle.color,
+      bold: firstSpan?.bold || hasBlockBold(block),
+      italic: firstSpan?.italic || hasBlockItalic(block),
+      align: store.activeTextStyle.align,
+      rotation: line.rotation || block.rotation || 0,
+    };
+
+    console.log('[EditOverlay] Word click (exact bbox):', {
+      wordText,
+      wordRect: word.rect,
+      wordNo: word.word_no,
+    });
+
+    const op = store.addOp<ReplaceTextOp>({
+      type: 'replace_text',
+      page,
+      rect: word.rect,
+      originalText: wordText,
+      originalLines,
+      text: wordText,
+      style,
+    });
+
+    textUndoHistory = [];
+    textRedoHistory = [];
+    pushTextUndo(wordText);
+    editingTextId = op.id;
+    editingTextContent = wordText;
+    lastInputTime = Date.now();
+    store.selectOp(op.id);
+  }
+
+  // Fallback: Handle click on a span in word mode when words array is not available
   // Strategy: Replace ENTIRE SPAN content but only let user edit the clicked word
-  // This ensures accurate positioning using the span's rect (which is precise)
   function handleSpanClickForWord(e: MouseEvent, block: TextBlockInfo, line: TextLineInfo, span: SpanInfo) {
     if (!interactive) return;
     if (store.activeTool !== 'select' && store.activeTool !== 'text' && store.activeTool !== null) return;
@@ -633,13 +693,11 @@
     const spanText = span.text || '';
 
     // Use SPAN rect (accurate) instead of calculated word rect
-    // This ensures proper positioning since span rects come from PyMuPDF
     const originalLines: OriginalLineInfo[] = [{
       text: spanText,
       rect: span.rect,
     }];
 
-    // Editor rect is the span rect
     const editorRect: NormalizedRect = {
       x: span.rect.x,
       y: span.rect.y,
@@ -657,28 +715,22 @@
       rotation: line.rotation || block.rotation || 0,
     };
 
-    // Find the word's position within the span text for selection
     const wordStartInSpan = spanText.indexOf(wordText);
     const wordEndInSpan = wordStartInSpan + wordText.length;
 
-    console.log('[EditOverlay] Word click (span-based):', {
+    console.log('[EditOverlay] Word click (span fallback):', {
       spanText: spanText.substring(0, 40),
       clickedWord: wordText,
       wordIndex,
-      wordStartInSpan,
-      wordEndInSpan,
-      usingSpanRect: true,
     });
 
-    // Create operation with FULL SPAN text - user will edit just the word they clicked
-    // But the entire span will be replaced to maintain proper positioning
     const op = store.addOp<ReplaceTextOp>({
       type: 'replace_text',
       page,
       rect: editorRect,
       originalText: spanText,
       originalLines,
-      text: spanText,  // Start with full span text
+      text: spanText,
       style,
     });
 
@@ -690,8 +742,6 @@
     lastInputTime = Date.now();
     store.selectOp(op.id);
 
-    // After a brief delay, select the clicked word in the textarea
-    // This allows the user to immediately start typing to replace it
     setTimeout(() => {
       const textarea = document.querySelector(`textarea[data-edit-id="${op.id}"]`) as HTMLTextAreaElement;
       if (textarea && wordStartInSpan >= 0) {
@@ -1175,28 +1225,58 @@
   <!-- Render existing PDF text blocks/lines/words (clickable to edit) -->
   {#if showTextBlocks && !hideBlockHighlights && interactive && (store.activeTool === 'select' || store.activeTool === 'text' || store.activeTool === null)}
     {#if store.editGranularity === 'word'}
-      <!-- WORD MODE: Invisible clickable spans, detect word on click position -->
-      <!-- No hover highlight to avoid confusion with Line mode -->
+      <!-- WORD MODE: Use exact word bboxes from PyMuPDF when available -->
       {#each textBlocks as block}
         {#each block.lines as line}
-          {#each line.spans || [] as span}
-            {@const px = toPixels(span.rect)}
-            {@const spanText = span.text || ''}
-            {#if spanText.trim() && !isBlockBeingEdited(block)}
-              <button
-                type="button"
-                class="absolute cursor-text"
-                style="
-                  left: {px.x}px;
-                  top: {px.y}px;
-                  width: {px.width}px;
-                  height: {px.height}px;
-                "
-                onclick={(e) => handleSpanClickForWord(e, block, line, span)}
-                title="Click on a word to edit"
-              ></button>
-            {/if}
-          {/each}
+          {#if line.words && line.words.length > 0}
+            <!-- Use accurate word rects from backend -->
+            {#each line.words as word}
+              {@const px = toPixels(word.rect)}
+              {#if word.text.trim() && !isBlockBeingEdited(block)}
+                <button
+                  type="button"
+                  class="absolute cursor-text transition-all duration-100 group"
+                  style="
+                    left: {px.x}px;
+                    top: {px.y}px;
+                    width: {px.width}px;
+                    height: {px.height}px;
+                  "
+                  onclick={() => handleWordClick(block, line, word)}
+                  title="Click to edit: {word.text}"
+                >
+                  <!-- Subtle highlight on hover -->
+                  <div
+                    class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    style="
+                      background-color: rgba(180, 142, 173, 0.25);
+                      border: 1px dashed var(--nord15);
+                    "
+                  ></div>
+                </button>
+              {/if}
+            {/each}
+          {:else}
+            <!-- Fallback: detect word by click position on span -->
+            {#each line.spans || [] as span}
+              {@const px = toPixels(span.rect)}
+              {@const spanText = span.text || ''}
+              {#if spanText.trim() && !isBlockBeingEdited(block)}
+                <button
+                  type="button"
+                  class="absolute cursor-text"
+                  style="
+                    left: {px.x}px;
+                    top: {px.y}px;
+                    width: {px.width}px;
+                    height: {px.height}px;
+                  "
+                  onclick={(e) => handleSpanClickForWord(e, block, line, span)}
+                  title="Click on a word to edit"
+                ></button>
+              {/if}
+            {/each}
+          {/if}
         {/each}
       {/each}
     {:else if store.editGranularity === 'line'}

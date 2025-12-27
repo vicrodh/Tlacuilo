@@ -936,8 +936,28 @@ def get_text_blocks_with_fonts(
         # Get text with full details
         text_dict = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
 
+        # Get word-level bboxes: returns list of (x0, y0, x1, y1, "word", block_no, line_no, word_no)
+        words_raw = page.get_text("words")
+        # Organize words by block_no and line_no for quick lookup
+        words_by_block_line = {}
+        for w in words_raw:
+            x0, y0, x1, y1, word_text, block_no, line_no, word_no = w
+            key = (block_no, line_no)
+            if key not in words_by_block_line:
+                words_by_block_line[key] = []
+            words_by_block_line[key].append({
+                "text": word_text,
+                "rect": {
+                    "x": x0 / page_width,
+                    "y": y0 / page_height,
+                    "width": (x1 - x0) / page_width,
+                    "height": (y1 - y0) / page_height,
+                },
+                "word_no": word_no,
+            })
+
         blocks = []
-        for block in text_dict.get("blocks", []):
+        for block_no, block in enumerate(text_dict.get("blocks", [])):
             if block.get("type") != 0:  # Skip image blocks
                 continue
 
@@ -964,12 +984,17 @@ def get_text_blocks_with_fonts(
             mono_count = 0
             total_char_count = 0
 
-            for line in block.get("lines", []):
+            for line_no, line in enumerate(block.get("lines", [])):
                 # Get line direction/rotation (dir is a tuple [cos, sin] of the angle)
                 line_dir = line.get("dir", (1.0, 0.0))  # Default horizontal
                 # Calculate rotation angle in degrees from direction vector
                 rotation_rad = math.atan2(line_dir[1], line_dir[0])
                 rotation_deg = math.degrees(rotation_rad)
+
+                # Get words for this line from pre-extracted word data
+                line_words = words_by_block_line.get((block_no, line_no), [])
+                # Sort words by word_no to ensure correct order
+                line_words = sorted(line_words, key=lambda w: w["word_no"])
 
                 line_data = {
                     "rect": {
@@ -980,6 +1005,7 @@ def get_text_blocks_with_fonts(
                     },
                     "rotation": round(rotation_deg, 2),  # Text rotation angle
                     "spans": [],
+                    "words": line_words,  # Word-level bboxes from OCR
                 }
 
                 for span in line.get("spans", []):
