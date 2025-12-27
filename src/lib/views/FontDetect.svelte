@@ -9,7 +9,7 @@
   } from 'lucide-svelte';
   import { listen } from '@tauri-apps/api/event';
   import { open } from '@tauri-apps/plugin-dialog';
-  import { mkdir, writeFile } from '@tauri-apps/plugin-fs';
+  import { writeFile } from '@tauri-apps/plugin-fs';
   import { invoke } from '@tauri-apps/api/core';
   import { appCacheDir, join } from '@tauri-apps/api/path';
   import { onMount, onDestroy } from 'svelte';
@@ -234,12 +234,12 @@
       throw new Error('PDF render returned no image data');
     }
 
-    const cacheBase = await appCacheDir();
-    const cacheDir = await join(cacheBase, 'font-detect', 'quicktool');
-    await mkdir(cacheDir, { recursive: true });
-
     const fileNameSafe = fileName.replace(/[^a-z0-9._-]/gi, '_');
-    const outputPath = await join(cacheDir, `page1_${Date.now()}_${fileNameSafe}.png`);
+    const cacheBase = await appCacheDir();
+    const outputPath = await join(
+      cacheBase,
+      `font-detect-quicktool-page1-${Date.now()}-${fileNameSafe}.png`
+    );
     const bytes = base64ToBytes(rendered.data);
     await writeFile(outputPath, bytes);
 
@@ -260,7 +260,7 @@
 <OcrProgressSplash visible={splashVisible} message={splashMessage} />
 
 <div class="flex-1 flex overflow-hidden">
-  <div class="flex-1 flex flex-col overflow-hidden p-6">
+  <div class="flex-1 flex flex-col overflow-y-auto p-6">
     {#if !filePath}
       <div
         class="flex-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed cursor-pointer transition-colors hover:border-[var(--nord8)]"
@@ -402,7 +402,7 @@
 
   {#if filePath}
     <!-- TODO: replace with shared viewer sidebar once QuickTool proves out. -->
-    <aside class="w-80 border-l" style="background-color: var(--nord1); border-color: var(--nord3);">
+    <aside class="w-80 border-l overflow-y-auto" style="background-color: var(--nord1); border-color: var(--nord3);">
       <div class="p-4 space-y-4">
         <div>
           <p class="text-xs opacity-60 uppercase">Font Detection</p>
