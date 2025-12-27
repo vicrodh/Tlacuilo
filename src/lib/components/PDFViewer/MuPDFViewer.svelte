@@ -117,6 +117,7 @@
   // Edit mode (mutually exclusive with annotation mode per EDITOR_MODE_PLAN)
   let showEditTools = $state(false);
   let textBlocksRefreshKey = $state(0);  // Increment to force text blocks refresh
+  let hideEditIndicators = $state(false);  // Hide text block highlights when true (Preview mode)
 
   // Live preview for edit mode
   let previewImages = $state<Map<number, string>>(new Map()); // page -> base64 image
@@ -2095,6 +2096,8 @@
           onApply={applyEdits}
           onApplyInPlace={applyEditsInPlace}
           onDiscard={() => { editsStore.clearOps(); showEditTools = false; }}
+          previewMode={hideEditIndicators}
+          onPreviewToggle={() => { hideEditIndicators = !hideEditIndicators; }}
         />
       </div>
     {/if}
@@ -2231,6 +2234,7 @@
                       interactive={true}
                       hasPreview={previewImages.has(pageNum)}
                       refreshKey={textBlocksRefreshKey}
+                      hideBlockHighlights={hideEditIndicators}
                     />
                   {/if}
 

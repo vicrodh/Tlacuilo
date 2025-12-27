@@ -19,6 +19,8 @@
     AlignCenter,
     AlignRight,
     Save,
+    Eye,
+    EyeOff,
   } from 'lucide-svelte';
   import { ask } from '@tauri-apps/plugin-dialog';
   import type { EditsStore, EditTool, TextStyle, EditGranularity } from '$lib/stores/edits.svelte';
@@ -28,9 +30,11 @@
     onApply?: () => void;
     onApplyInPlace?: () => void;  // Save to same file (overwrite)
     onDiscard?: () => void;
+    previewMode?: boolean;  // Hide edit indicators when true
+    onPreviewToggle?: () => void;
   }
 
-  let { store, onApply, onApplyInPlace, onDiscard }: Props = $props();
+  let { store, onApply, onApplyInPlace, onDiscard, previewMode = false, onPreviewToggle }: Props = $props();
 
   let showShapesMenu = $state(false);
   let showTextOptions = $state(false);
@@ -262,6 +266,23 @@
       Line
     </button>
   </div>
+
+  <!-- Preview toggle - hide edit indicators -->
+  {#if onPreviewToggle}
+    <button
+      onclick={onPreviewToggle}
+      class="p-2 rounded transition-colors"
+      class:bg-[var(--nord10)]={previewMode}
+      style="color: {previewMode ? 'var(--nord6)' : 'var(--nord4)'};"
+      title={previewMode ? 'Show edit indicators' : 'Preview (hide edit indicators)'}
+    >
+      {#if previewMode}
+        <EyeOff size={16} />
+      {:else}
+        <Eye size={16} />
+      {/if}
+    </button>
+  {/if}
 
   <!-- Separator -->
   <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>

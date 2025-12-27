@@ -77,9 +77,10 @@
     interactive?: boolean;
     hasPreview?: boolean; // When true, hide operation visuals (preview image shows them)
     refreshKey?: number;  // Increment to force re-fetch text blocks
+    hideBlockHighlights?: boolean;  // Hide clickable text block/line highlights (Preview mode)
   }
 
-  let { store, page, pageWidth, pageHeight, pdfPageWidth, pdfPageHeight, pdfPath, scale = 1, interactive = true, hasPreview = false, refreshKey = 0 }: Props = $props();
+  let { store, page, pageWidth, pageHeight, pdfPageWidth, pdfPageHeight, pdfPath, scale = 1, interactive = true, hasPreview = false, refreshKey = 0, hideBlockHighlights = false }: Props = $props();
 
   // Calculate the scale factor from PDF points to rendered pixels
   // PDF uses points (1/72 inch), rendered at specific DPI
@@ -108,8 +109,9 @@
     const numLines = Math.max(1, lines.length);
 
     // Calculate font size from bounding box
-    // rect_height = num_lines * font_size * 1.2 (line height factor)
-    const calculatedSize = rectHeightPts / (numLines * 1.2);
+    // For single line: font size ≈ rect height (with small padding factor)
+    // For multi-line: distribute evenly
+    const calculatedSize = rectHeightPts / (numLines * 1.15);
 
     // Detect OCR fonts
     const isOcrFont = fontFamily.toLowerCase().includes('glyphless') ||
@@ -123,6 +125,28 @@
       const scaledSize = reportedFontSize * FONT_SIZE_SCALE;
       return Math.max(scaledSize, calculatedSize * 0.95);
     }
+  }
+
+  /**
+   * Calculate line-height ratio from block metrics.
+   * This ensures the textarea matches OCR line spacing.
+   */
+  function calculateLineHeight(block: TextBlockInfo | null, numLines: number): number {
+    if (!block || numLines <= 1) return 1.15; // Single line: tight spacing
+
+    // For multi-line blocks, calculate actual line spacing
+    // block.rect.height contains all lines, so spacing = height / numLines
+    const blockHeightPts = block.rect.height * (pdfPageHeight || 792);
+    const avgLineHeight = blockHeightPts / numLines;
+
+    // Calculate dominant font size
+    const fontSize = block.dominantSize || 12;
+
+    // Line height ratio = line spacing / font size
+    const ratio = avgLineHeight / fontSize;
+
+    // Clamp to reasonable values (1.0 - 2.0)
+    return Math.max(1.0, Math.min(2.0, ratio));
   }
 
   let overlayElement: HTMLDivElement;
@@ -940,7 +964,7 @@
   aria-label="Edit overlay"
 >
   <!-- Render existing PDF text blocks/lines (clickable to edit) -->
-  {#if showTextBlocks && interactive && (store.activeTool === 'select' || store.activeTool === 'text' || store.activeTool === null)}
+  {#if showTextBlocks && !hideBlockHighlights && interactive && (store.activeTool === 'select' || store.activeTool === 'text' || store.activeTool === null)}
     {#if store.editGranularity === 'line'}
       <!-- LINE MODE: Render individual lines -->
       {#each textBlocks as block}
@@ -1021,8 +1045,10 @@
     {@const textOpWithContent = isTextOp && (op as InsertTextOp).text}
     <!-- Always show text ops with content (preview may be stale after editing) -->
     {@const showVisuals = !hasPreview || isActivelyEditing || textOpWithContent}
-    {@const minEditWidth = Math.max(px.width, 300)}
-    {@const minEditHeight = Math.max(px.height, 100)}
+    <!-- Minimal chrome: use actual block size + small padding for border -->
+    {@const editPadding = 4}
+    {@const minEditWidth = px.width + editPadding}
+    {@const minEditHeight = px.height + editPadding}
 
     <div
       class="absolute"
@@ -1040,18 +1066,23 @@
       {#if op.type === 'insert_text' || op.type === 'replace_text'}
         {@const textOp = op as InsertTextOp}
         {@const isReplaceOp = op.type === 'replace_text'}
+        {@const textContent = textOp.text || editingTextContent}
+        {@const numLines = textContent.split('\n').filter((l: string) => l.trim()).length || 1}
         {@const calculatedFontSize = calculateDisplayFontSize(
           textOp.style.fontSize,
           op.rect.height,
-          textOp.text || editingTextContent,
+          textContent,
           textOp.style.fontFamily
         )}
+        <!-- Find original block for line-height calculation -->
+        {@const matchingBlock = textBlocks.find(b => rectsOverlap(op.rect, b.rect) > 0.5)}
+        {@const lineHeightRatio = calculateLineHeight(matchingBlock, numLines)}
         <!-- Text box - always show textarea when actively editing -->
         {#if editingTextId === op.id}
           {@const scaledFontSize = calculatedFontSize * pdfToPixelScale}
           <div class="relative">
             <textarea
-              class="w-full p-2 outline-none resize-y"
+              class="w-full outline-none resize-none"
               style="
                 font-family: {textOp.style.fontFamily};
                 font-size: {scaledFontSize}px;
@@ -1060,12 +1091,14 @@
                 font-style: {textOp.style.italic ? 'italic' : 'normal'};
                 text-align: {textOp.style.align || 'left'};
                 text-decoration: none;
-                background-color: white;
-                border: 2px solid var(--nord10);
-                border-radius: 4px;
-                min-height: {minEditHeight}px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                line-height: 1.4;
+                background-color: rgba(255, 255, 255, 0.95);
+                border: 1px solid var(--nord10);
+                border-radius: 2px;
+                min-height: {px.height}px;
+                min-width: {px.width}px;
+                padding: 1px 2px;
+                box-shadow: 0 0 0 2px rgba(136, 192, 208, 0.3);
+                line-height: {lineHeightRatio};
               "
               bind:value={editingTextContent}
               onkeydown={(e) => handleTextKeydown(e)}
@@ -1073,21 +1106,21 @@
               onmousedown={(e) => e.stopPropagation()}
               onfocus={() => { store.selectOp(op.id); }}
             ></textarea>
-            <!-- Done button - positioned outside bottom-left -->
+            <!-- Done button - small, positioned outside bottom-right -->
             <button
               type="button"
-              class="absolute flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:opacity-90"
+              class="absolute flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded transition-colors hover:opacity-90"
               style="
-                left: 0;
+                right: 0;
                 top: 100%;
-                margin-top: 4px;
+                margin-top: 2px;
                 background-color: var(--nord14);
                 color: var(--nord0);
-                box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+                box-shadow: 0 1px 3px rgba(0,0,0,0.2);
               "
               onmousedown={(e) => handleDoneClick(e, op)}
             >
-              <Check size={12} />
+              <Check size={10} />
               Done
             </button>
           </div>
@@ -1104,14 +1137,13 @@
               font-style: {textOp.style.italic ? 'italic' : 'normal'};
               text-align: {textOp.style.align || 'left'};
               text-decoration: none;
-              background-color: white;
-              border: {textOp.text ? '1px solid rgba(136, 192, 208, 0.3)' : '1px dashed var(--nord8)'};
-              line-height: 1.2;
-              padding: 2px 4px;
+              background-color: rgba(255, 255, 255, 0.9);
+              border: {textOp.text ? '1px solid rgba(136, 192, 208, 0.2)' : '1px dashed rgba(136, 192, 208, 0.4)'};
+              line-height: {lineHeightRatio};
+              padding: 0 1px;
               min-height: {px.height}px;
               transform: rotate({rotationDeg}deg);
               transform-origin: top left;
-              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             "
             ondblclick={() => startEditingText(op)}
           >
