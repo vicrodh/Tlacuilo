@@ -441,6 +441,67 @@ def rect_overlaps_any(rect, rect_list, threshold=0.7) -> bool:
     return False
 
 
+def is_all_caps(text: str) -> bool:
+    """
+    Check if text is ALL CAPS (used for headings/subtitles).
+    ALL CAPS text has no descenders, so bounding boxes are shorter.
+    """
+    # Extract only letters
+    letters = [c for c in text if c.isalpha()]
+    if len(letters) < 3:
+        return False
+
+    # Count uppercase letters
+    upper_count = sum(1 for c in letters if c.isupper())
+
+    # Consider ALL CAPS if 90%+ are uppercase
+    return upper_count / len(letters) >= 0.9
+
+
+def has_descenders(text: str) -> bool:
+    """
+    Check if text contains characters with descenders (g, j, p, q, y).
+    Text without descenders has shorter bounding boxes.
+    """
+    descender_chars = set('gjpqy')
+    return any(c.lower() in descender_chars for c in text)
+
+
+def calculate_baseline_font_size(blocks: list, zoom: float) -> float:
+    """
+    Calculate a reference font size from all text blocks.
+    Uses the median of line heights from multi-line blocks (body text).
+    """
+    line_heights = []
+
+    for block in blocks:
+        # Focus on blocks with multiple lines (more likely body text)
+        if len(block.get('lines', [])) >= 2:
+            for line in block['lines']:
+                bbox = line.get('bbox')
+                if bbox:
+                    height_pt = (bbox[3] - bbox[1]) / zoom
+                    if 8 < height_pt < 30:  # Reasonable text range
+                        line_heights.append(height_pt)
+
+    if not line_heights:
+        # Fallback: use all lines
+        for block in blocks:
+            for line in block.get('lines', []):
+                bbox = line.get('bbox')
+                if bbox:
+                    height_pt = (bbox[3] - bbox[1]) / zoom
+                    if 8 < height_pt < 30:
+                        line_heights.append(height_pt)
+
+    if line_heights:
+        sorted_heights = sorted(line_heights)
+        median = sorted_heights[len(sorted_heights) // 2]
+        return median * 0.85  # Convert to font size
+
+    return 11.0  # Default fallback
+
+
 def run_editable_ocr(
     input_path: str,
     output_path: str,
@@ -560,6 +621,10 @@ def run_editable_ocr(
 
                 print(f"[INFO]   Found {len(blocks)} text blocks from OCR", file=sys.stderr)
 
+                # Calculate baseline font size for this page
+                baseline_font_size = calculate_baseline_font_size(blocks, zoom)
+                print(f"[INFO]   Baseline font size: {baseline_font_size:.1f}pt", file=sys.stderr)
+
                 # Page metrics
                 page_metrics = {
                     "page": page_num,
@@ -618,18 +683,39 @@ def run_editable_ocr(
                             line_px_bbox[3] / zoom,
                         )
 
+                        line_text = line['text']
+
                         # Calculate font size from line height
                         line_height_px = line_px_bbox[3] - line_px_bbox[1]
-                        font_size = (line_height_px / zoom) * 0.85  # 85% of line height for font
+                        line_height_pt = line_height_px / zoom
+                        font_size = line_height_pt * 0.85  # Base: 85% of line height
+
+                        # ALL CAPS correction: text without descenders has shorter bbox
+                        # Apply scaling factor to compensate (descenders add ~20% to line height)
+                        if is_all_caps(line_text) or not has_descenders(line_text):
+                            # Scale up by ~18% to match text with descenders
+                            font_size = font_size * 1.18
+
+                        # Ensure font size is at least the baseline (body text size)
+                        # This prevents subtitles from being smaller than body text
+                        if font_size < baseline_font_size * 0.95:
+                            # If calculated size is smaller than baseline, use baseline
+                            # (subtitles should never be smaller than body text)
+                            font_size = max(font_size, baseline_font_size)
 
                         # Clamp font size to reasonable range
                         font_size = max(6, min(72, font_size))
 
-                        # Position text at baseline (approximately 80% down the line height)
-                        text_x = line_pdf_bbox.x0
-                        text_y = line_pdf_bbox.y0 + (line_pdf_bbox.height * 0.8)
+                        # Position text at baseline
+                        # For ALL CAPS (no descenders), baseline is higher (~85%)
+                        # For normal text with descenders, baseline is lower (~80%)
+                        if is_all_caps(line_text) or not has_descenders(line_text):
+                            baseline_ratio = 0.85
+                        else:
+                            baseline_ratio = 0.80
 
-                        line_text = line['text']
+                        text_x = line_pdf_bbox.x0
+                        text_y = line_pdf_bbox.y0 + (line_pdf_bbox.height * baseline_ratio)
 
                         try:
                             new_page.insert_text(
