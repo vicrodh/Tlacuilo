@@ -456,12 +456,18 @@
   }
 
   // Check if a block is already being edited (has a ReplaceTextOp)
+  // Also checks if any LINE within the block is being edited
   function isBlockBeingEdited(block: TextBlockInfo): boolean {
     return pageOps.some(op => {
       if (op.type !== 'replace_text') return false;
       // Check if the op rect overlaps significantly with the block
-      const overlap = rectsOverlap(op.rect, block.rect);
-      return overlap > 0.5; // 50% overlap threshold
+      const blockOverlap = rectsOverlap(op.rect, block.rect);
+      if (blockOverlap > 0.5) return true;
+      // Also check if any individual line is being edited
+      return block.lines.some(line => {
+        const lineOverlap = rectsOverlap(op.rect, line.rect);
+        return lineOverlap > 0.5;
+      });
     });
   }
 
@@ -573,10 +579,12 @@
     // This ensures the editor is wide enough for the text content
     const blockRightEdge = block.rect.x + block.rect.width;
     const lineRightEdge = line.rect.x + line.rect.width;
-    // Use the max of: line width, distance to block's right edge, or line width + 10% buffer
+    // Use the max of: line width + buffer, distance to block's right edge
+    // Add fixed pixel buffer (3px) converted to normalized coords
+    const pxBuffer = 3 / pageWidth;  // 3 pixels in normalized coords
     const extendedWidth = Math.max(
-      line.rect.width * 1.1,  // 10% buffer for font rendering differences
-      blockRightEdge - line.rect.x  // Extend to block's right edge
+      line.rect.width * 1.1 + pxBuffer,  // 10% buffer + 3px
+      blockRightEdge - line.rect.x + pxBuffer  // Extend to block's right edge + 3px
     );
 
     // Editor rect: keep line's position but use extended width
@@ -1168,7 +1176,7 @@
               font-style: {textOp.style.italic ? 'italic' : 'normal'};
               text-align: {textOp.style.align || 'left'};
               text-decoration: none;
-              background-color: rgba(255, 255, 255, 0.9);
+              background-color: white;
               border: {textOp.text ? '1px solid rgba(136, 192, 208, 0.2)' : '1px dashed rgba(136, 192, 208, 0.4)'};
               line-height: {lineHeightRatio};
               padding: 0 1px;

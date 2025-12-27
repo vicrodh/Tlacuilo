@@ -450,6 +450,15 @@ def apply_edits(
                 # Extend redaction rect downward to cover descenders
                 descender_extension = font_size * 0.3
                 redact_rect = fitz.Rect(x0, y0, x1, y1 + descender_extension)
+
+                # Step 1: Draw white rectangle to cover any background image
+                # (OCR'd PDFs have image layer that redaction doesn't cover)
+                shape = page.new_shape()
+                shape.draw_rect(redact_rect)
+                shape.finish(fill=(1, 1, 1), color=(1, 1, 1), width=0)  # White fill, no border
+                shape.commit()
+
+                # Step 2: Redact text layer
                 page.add_redact_annot(redact_rect, fill=(1, 1, 1))  # White fill
                 page.apply_redactions()
 
