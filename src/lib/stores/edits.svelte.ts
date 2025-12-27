@@ -177,7 +177,7 @@ const EDITS_KEY = Symbol('edits');
 export function createEditsStore(): EditsStore {
   let ops = $state<EditorOp[]>([]);
   let activeTool = $state<EditTool>(null);
-  let editGranularity = $state<EditGranularity>('block');  // Default to block-level editing
+  let editGranularity = $state<EditGranularity>('line');  // Default to line-level editing (most reliable)
   let selectedId = $state<string | null>(null);
   let isDirty = $state(false);
   let isApplying = $state(false);

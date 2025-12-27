@@ -611,6 +611,64 @@
     store.selectOp(op.id);
   }
 
+  // Handle click on a single word/span (word-level editing)
+  function handleWordClick(block: TextBlockInfo, line: TextLineInfo, span: SpanInfo) {
+    if (!interactive) return;
+    if (store.activeTool !== 'select' && store.activeTool !== 'text' && store.activeTool !== null) return;
+
+    const wordText = span.text || '';
+    if (!wordText.trim()) return; // Skip empty spans
+
+    // Store this word's position (using same structure as lines for backend compatibility)
+    const originalLines: OriginalLineInfo[] = [{
+      text: wordText,
+      rect: span.rect,
+    }];
+
+    // Add small horizontal buffer for editing comfort
+    const pxBuffer = 5 / pageWidth;
+    const editorRect: NormalizedRect = {
+      x: span.rect.x,
+      y: span.rect.y,
+      width: span.rect.width + pxBuffer,
+      height: span.rect.height,
+    };
+
+    const style = {
+      fontFamily: mapFontFamily(span.font || block.dominantFont, block.isSerif, block.isMono),
+      fontSize: span.size || block.dominantSize || store.activeTextStyle.fontSize,
+      color: span.color || block.dominantColor || store.activeTextStyle.color,
+      bold: span.bold || hasBlockBold(block),
+      italic: span.italic || hasBlockItalic(block),
+      align: store.activeTextStyle.align,
+      rotation: line.rotation || block.rotation || 0,
+    };
+
+    console.log('[EditOverlay] Word click:', {
+      wordText: wordText.substring(0, 30),
+      spanRect: span.rect,
+      editorRect,
+    });
+
+    const op = store.addOp<ReplaceTextOp>({
+      type: 'replace_text',
+      page,
+      rect: editorRect,
+      originalText: wordText,
+      originalLines,
+      text: wordText,
+      style,
+    });
+
+    textUndoHistory = [];
+    textRedoHistory = [];
+    pushTextUndo(wordText);
+    editingTextId = op.id;
+    editingTextContent = wordText;
+    lastInputTime = Date.now();
+    store.selectOp(op.id);
+  }
+
   // Fetch blocks when page, path, or refreshKey changes
   $effect(() => {
     // Dependencies: pdfPath, page, refreshKey
@@ -976,9 +1034,41 @@
   role="application"
   aria-label="Edit overlay"
 >
-  <!-- Render existing PDF text blocks/lines (clickable to edit) -->
+  <!-- Render existing PDF text blocks/lines/words (clickable to edit) -->
   {#if showTextBlocks && !hideBlockHighlights && interactive && (store.activeTool === 'select' || store.activeTool === 'text' || store.activeTool === null)}
-    {#if store.editGranularity === 'line'}
+    {#if store.editGranularity === 'word'}
+      <!-- WORD MODE: Render individual spans (words) -->
+      {#each textBlocks as block}
+        {#each block.lines as line}
+          {#each line.spans || [] as span}
+            {@const px = toPixels(span.rect)}
+            {@const spanText = span.text || ''}
+            {#if spanText.trim() && !isBlockBeingEdited(block)}
+              <button
+                type="button"
+                class="absolute transition-all duration-150 cursor-pointer group"
+                style="
+                  left: {px.x}px;
+                  top: {px.y}px;
+                  width: {px.width}px;
+                  height: {px.height}px;
+                "
+                onclick={() => handleWordClick(block, line, span)}
+                title="Click to edit: {spanText.substring(0, 20)}"
+              >
+                <div
+                  class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  style="
+                    background-color: rgba(180, 142, 173, 0.25);
+                    border: 1px dashed var(--nord15);
+                  "
+                ></div>
+              </button>
+            {/if}
+          {/each}
+        {/each}
+      {/each}
+    {:else if store.editGranularity === 'line'}
       <!-- LINE MODE: Render individual lines -->
       {#each textBlocks as block}
         {#each block.lines as line, lineIndex}

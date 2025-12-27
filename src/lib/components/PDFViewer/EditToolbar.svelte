@@ -11,7 +11,6 @@
     Trash2,
     Check,
     X,
-    ChevronRight,
     Palette,
     Bold,
     Italic,
@@ -21,6 +20,10 @@
     Save,
     Eye,
     EyeOff,
+    Home,
+    PencilLine,
+    Shapes,
+    LetterText,
   } from 'lucide-svelte';
   import { ask } from '@tauri-apps/plugin-dialog';
   import type { EditsStore, EditTool, TextStyle, EditGranularity } from '$lib/stores/edits.svelte';
@@ -28,19 +31,22 @@
   interface Props {
     store: EditsStore;
     onApply?: () => void;
-    onApplyInPlace?: () => void;  // Save to same file (overwrite)
+    onApplyInPlace?: () => void;
     onDiscard?: () => void;
-    previewMode?: boolean;  // Hide edit indicators when true
+    previewMode?: boolean;
     onPreviewToggle?: () => void;
   }
 
   let { store, onApply, onApplyInPlace, onDiscard, previewMode = false, onPreviewToggle }: Props = $props();
 
-  let showShapesMenu = $state(false);
-  let showTextOptions = $state(false);
-  let showColorPicker = $state(false);
+  // Ribbon tab state
+  type RibbonTab = 'home' | 'format' | 'insert';
+  let activeTab = $state<RibbonTab>('home');
 
-  // Font options - Include serif and sans-serif
+  let showColorPicker = $state(false);
+  let showShapeColorPicker = $state(false);
+
+  // Font options
   const fontFamilies = [
     { value: '"Times New Roman", Times, Georgia, serif', label: 'Times (Serif)' },
     { value: 'Arial, Helvetica, sans-serif', label: 'Arial (Sans)' },
@@ -64,7 +70,7 @@
     store.activeTool === 'line'
   );
 
-  // Colors for picker
+  // Colors for picker (Nord palette)
   const colors = [
     '#000000', '#FFFFFF', '#BF616A', '#D08770', '#EBCB8B',
     '#A3BE8C', '#88C0D0', '#5E81AC', '#B48EAD', '#4C566A',
@@ -72,27 +78,8 @@
 
   function selectTool(tool: EditTool) {
     store.setActiveTool(tool);
-    showShapesMenu = false;
-    showTextOptions = tool === 'text';
     showColorPicker = false;
-  }
-
-  function toggleShapesMenu() {
-    showShapesMenu = !showShapesMenu;
-    showTextOptions = false;
-    showColorPicker = false;
-  }
-
-  function toggleTextOptions() {
-    showTextOptions = !showTextOptions;
-    showShapesMenu = false;
-    showColorPicker = false;
-  }
-
-  function toggleColorPicker() {
-    showColorPicker = !showColorPicker;
-    showShapesMenu = false;
-    showTextOptions = false;
+    showShapeColorPicker = false;
   }
 
   function setTextStyle(style: Partial<TextStyle>) {
@@ -122,344 +109,802 @@
   }
 </script>
 
-<div
-  class="flex items-center gap-1 px-2 py-1.5 rounded-lg"
-  style="background-color: var(--nord2);"
->
-  <!-- Select tool -->
-  <button
-    onclick={() => selectTool('select')}
-    class="p-2 rounded transition-colors"
-    class:bg-[var(--nord8)]={store.activeTool === 'select'}
-    style="color: {store.activeTool === 'select' ? 'var(--nord0)' : 'var(--nord4)'};"
-    title="Select / Move"
-  >
-    <MousePointer size={16} />
-  </button>
-
-  <!-- Separator -->
-  <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
-
-  <!-- Text tool (simple button, no dropdown) -->
-  <button
-    onclick={() => selectTool('text')}
-    class="p-2 rounded transition-colors"
-    class:bg-[var(--nord8)]={store.activeTool === 'text'}
-    style="color: {store.activeTool === 'text' ? 'var(--nord0)' : 'var(--nord4)'};"
-    title="Text"
-  >
-    <Type size={16} />
-  </button>
-
-  <!-- Image tool -->
-  <button
-    onclick={() => selectTool('image')}
-    class="p-2 rounded transition-colors"
-    class:bg-[var(--nord8)]={store.activeTool === 'image'}
-    style="color: {store.activeTool === 'image' ? 'var(--nord0)' : 'var(--nord4)'};"
-    title="Insert Image"
-  >
-    <Image size={16} />
-  </button>
-
-  <!-- Shapes dropdown -->
-  <div class="relative">
+<div class="ribbon-container" style="background-color: var(--nord1);">
+  <!-- Tab Bar -->
+  <div class="tab-bar" style="background-color: var(--nord2); border-bottom: 1px solid var(--nord3);">
     <button
-      onclick={toggleShapesMenu}
-      class="p-2 rounded transition-colors flex items-center gap-0.5"
-      class:bg-[var(--nord8)]={isShapeTool}
-      style="color: {isShapeTool ? 'var(--nord0)' : 'var(--nord4)'};"
-      title="Shapes"
+      onclick={() => activeTab = 'home'}
+      class="tab-button"
+      class:active={activeTab === 'home'}
     >
-      {#if store.activeTool === 'shape-ellipse'}
-        <Circle size={16} />
-      {:else if store.activeTool === 'line'}
-        <Minus size={16} />
-      {:else}
-        <Square size={16} />
-      {/if}
-      <ChevronRight size={12} class="rotate-90 opacity-60" />
+      <Home size={14} />
+      <span>Home</span>
+    </button>
+    <button
+      onclick={() => activeTab = 'format'}
+      class="tab-button"
+      class:active={activeTab === 'format'}
+    >
+      <LetterText size={14} />
+      <span>Format</span>
+    </button>
+    <button
+      onclick={() => activeTab = 'insert'}
+      class="tab-button"
+      class:active={activeTab === 'insert'}
+    >
+      <Shapes size={14} />
+      <span>Insert</span>
     </button>
 
-    {#if showShapesMenu}
-      <div
-        class="absolute top-full left-0 mt-1 rounded-lg shadow-lg py-1 z-50"
-        style="background-color: var(--nord1); border: 1px solid var(--nord3); min-width: 120px;"
-      >
-        {#each shapeTools as shape}
-          <button
-            onclick={() => selectTool(shape.tool)}
-            class="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--nord2)] transition-colors"
-            class:bg-[var(--nord3)]={store.activeTool === shape.tool}
-          >
-            <shape.icon size={14} />
-            <span>{shape.label}</span>
-          </button>
-        {/each}
+    <!-- Right side: Actions (always visible) -->
+    <div class="tab-actions">
+      {#if store.opCount > 0}
+        <span class="edit-badge">
+          {store.opCount} edit{store.opCount !== 1 ? 's' : ''}
+        </span>
+      {/if}
 
-        <!-- Stroke color -->
-        <div class="px-3 py-2 mt-1" style="border-top: 1px solid var(--nord3);">
-          <div class="text-[10px] uppercase opacity-40 mb-1">Stroke</div>
-          <div class="grid grid-cols-5 gap-1">
-            {#each colors as color}
+      <button
+        onclick={handleDiscard}
+        disabled={!store.isDirty && store.opCount === 0}
+        class="action-btn discard"
+        class:disabled={!store.isDirty && store.opCount === 0}
+        title="Discard changes"
+      >
+        <X size={16} />
+      </button>
+
+      {#if onApplyInPlace}
+        <button
+          onclick={onApplyInPlace}
+          disabled={store.opCount === 0}
+          class="action-btn save"
+          class:disabled={store.opCount === 0}
+          title="Save to current file"
+        >
+          <Save size={16} />
+          <span>Save</span>
+        </button>
+      {/if}
+
+      <button
+        onclick={handleApply}
+        disabled={store.opCount === 0}
+        class="action-btn apply"
+        class:disabled={store.opCount === 0}
+        title="Save As... (new file)"
+      >
+        <Check size={16} />
+        <span>Apply</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Ribbon Content -->
+  <div class="ribbon-content">
+    <!-- HOME TAB -->
+    {#if activeTab === 'home'}
+      <!-- Selection Group -->
+      <div class="ribbon-group">
+        <div class="group-tools">
+          <button
+            onclick={() => selectTool('select')}
+            class="tool-btn large"
+            class:active={store.activeTool === 'select'}
+            title="Select / Move"
+          >
+            <MousePointer size={20} />
+            <span>Select</span>
+          </button>
+        </div>
+        <div class="group-label">Selection</div>
+      </div>
+
+      <div class="ribbon-separator"></div>
+
+      <!-- Edit Mode Group -->
+      <div class="ribbon-group">
+        <div class="group-tools">
+          <div class="granularity-toggle">
+            <button
+              onclick={() => store.setEditGranularity('block')}
+              class="granularity-btn"
+              class:active={store.editGranularity === 'block'}
+              title="Edit entire text blocks (paragraphs)"
+            >
+              Block
+            </button>
+            <button
+              onclick={() => store.setEditGranularity('line')}
+              class="granularity-btn"
+              class:active={store.editGranularity === 'line'}
+              title="Edit individual lines (recommended)"
+            >
+              Line
+            </button>
+            <button
+              onclick={() => store.setEditGranularity('word')}
+              class="granularity-btn"
+              class:active={store.editGranularity === 'word'}
+              title="Edit individual words"
+            >
+              Word
+            </button>
+          </div>
+        </div>
+        <div class="group-label">Edit Mode</div>
+      </div>
+
+      <div class="ribbon-separator"></div>
+
+      <!-- Preview Group -->
+      {#if onPreviewToggle}
+        <div class="ribbon-group">
+          <div class="group-tools">
+            <button
+              onclick={onPreviewToggle}
+              class="tool-btn"
+              class:active={previewMode}
+              title={previewMode ? 'Show edit indicators' : 'Preview mode'}
+            >
+              {#if previewMode}
+                <EyeOff size={18} />
+              {:else}
+                <Eye size={18} />
+              {/if}
+              <span>Preview</span>
+            </button>
+          </div>
+          <div class="group-label">View</div>
+        </div>
+
+        <div class="ribbon-separator"></div>
+      {/if}
+
+      <!-- Actions Group -->
+      <div class="ribbon-group">
+        <div class="group-tools horizontal">
+          <button
+            onclick={() => store.undo()}
+            disabled={!store.canUndo()}
+            class="tool-btn small"
+            class:disabled={!store.canUndo()}
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo2 size={16} />
+          </button>
+          <button
+            onclick={() => store.redo()}
+            disabled={!store.canRedo()}
+            class="tool-btn small"
+            class:disabled={!store.canRedo()}
+            title="Redo (Ctrl+Y)"
+          >
+            <Redo2 size={16} />
+          </button>
+          <button
+            onclick={deleteSelected}
+            disabled={!store.selectedId}
+            class="tool-btn small delete"
+            class:disabled={!store.selectedId}
+            title="Delete selected"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+        <div class="group-label">Actions</div>
+      </div>
+    {/if}
+
+    <!-- FORMAT TAB -->
+    {#if activeTab === 'format'}
+      <!-- Font Group -->
+      <div class="ribbon-group wide">
+        <div class="group-tools">
+          <div class="font-controls">
+            <select
+              value={store.activeTextStyle.fontFamily}
+              onchange={(e) => setTextStyle({ fontFamily: (e.target as HTMLSelectElement).value })}
+              class="font-select"
+              title="Font Family"
+            >
+              {#each fontFamilies as font}
+                <option value={font.value}>{font.label}</option>
+              {/each}
+            </select>
+            <select
+              value={store.activeTextStyle.fontSize}
+              onchange={(e) => setTextStyle({ fontSize: parseInt((e.target as HTMLSelectElement).value) })}
+              class="size-select"
+              title="Font Size"
+            >
+              {#each fontSizes as size}
+                <option value={size}>{size}pt</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+        <div class="group-label">Font</div>
+      </div>
+
+      <div class="ribbon-separator"></div>
+
+      <!-- Style Group -->
+      <div class="ribbon-group">
+        <div class="group-tools horizontal">
+          <button
+            onmousedown={(e) => { e.preventDefault(); setTextStyle({ bold: !store.activeTextStyle.bold }); }}
+            class="tool-btn small"
+            class:active={store.activeTextStyle.bold}
+            title="Bold"
+          >
+            <Bold size={16} />
+          </button>
+          <button
+            onmousedown={(e) => { e.preventDefault(); setTextStyle({ italic: !store.activeTextStyle.italic }); }}
+            class="tool-btn small"
+            class:active={store.activeTextStyle.italic}
+            title="Italic"
+          >
+            <Italic size={16} />
+          </button>
+        </div>
+        <div class="group-label">Style</div>
+      </div>
+
+      <div class="ribbon-separator"></div>
+
+      <!-- Color Group -->
+      <div class="ribbon-group">
+        <div class="group-tools">
+          <div class="relative">
+            <button
+              onmousedown={(e) => { e.preventDefault(); showColorPicker = !showColorPicker; }}
+              class="tool-btn color-btn"
+              class:active={showColorPicker}
+              title="Text Color"
+            >
+              <Palette size={18} />
+              <div
+                class="color-indicator"
+                style="background-color: {store.activeTextStyle.color};"
+              ></div>
+            </button>
+            {#if showColorPicker}
+              <div class="color-picker">
+                <div class="color-grid">
+                  {#each colors as color}
+                    <button
+                      onmousedown={(e) => { e.preventDefault(); setTextStyle({ color }); showColorPicker = false; }}
+                      class="color-swatch"
+                      class:selected={store.activeTextStyle.color === color}
+                      style="background-color: {color};"
+                    ></button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          </div>
+        </div>
+        <div class="group-label">Color</div>
+      </div>
+
+      <div class="ribbon-separator"></div>
+
+      <!-- Alignment Group -->
+      <div class="ribbon-group">
+        <div class="group-tools horizontal">
+          <button
+            onmousedown={(e) => { e.preventDefault(); setTextStyle({ align: 'left' }); }}
+            class="tool-btn small"
+            class:active={store.activeTextStyle.align === 'left'}
+            title="Align Left"
+          >
+            <AlignLeft size={16} />
+          </button>
+          <button
+            onmousedown={(e) => { e.preventDefault(); setTextStyle({ align: 'center' }); }}
+            class="tool-btn small"
+            class:active={store.activeTextStyle.align === 'center'}
+            title="Align Center"
+          >
+            <AlignCenter size={16} />
+          </button>
+          <button
+            onmousedown={(e) => { e.preventDefault(); setTextStyle({ align: 'right' }); }}
+            class="tool-btn small"
+            class:active={store.activeTextStyle.align === 'right'}
+            title="Align Right"
+          >
+            <AlignRight size={16} />
+          </button>
+        </div>
+        <div class="group-label">Alignment</div>
+      </div>
+    {/if}
+
+    <!-- INSERT TAB -->
+    {#if activeTab === 'insert'}
+      <!-- Text Group -->
+      <div class="ribbon-group">
+        <div class="group-tools">
+          <button
+            onclick={() => selectTool('text')}
+            class="tool-btn large"
+            class:active={store.activeTool === 'text'}
+            title="Add Text"
+          >
+            <Type size={20} />
+            <span>Text</span>
+          </button>
+        </div>
+        <div class="group-label">Text</div>
+      </div>
+
+      <div class="ribbon-separator"></div>
+
+      <!-- Image Group -->
+      <div class="ribbon-group">
+        <div class="group-tools">
+          <button
+            onclick={() => selectTool('image')}
+            class="tool-btn large"
+            class:active={store.activeTool === 'image'}
+            title="Insert Image"
+          >
+            <Image size={20} />
+            <span>Image</span>
+          </button>
+        </div>
+        <div class="group-label">Media</div>
+      </div>
+
+      <div class="ribbon-separator"></div>
+
+      <!-- Shapes Group -->
+      <div class="ribbon-group">
+        <div class="group-tools">
+          <div class="shape-buttons">
+            {#each shapeTools as shape}
               <button
-                onclick={() => store.setStrokeColor(color)}
-                class="w-5 h-5 rounded border-2 transition-transform hover:scale-110"
-                style="
-                  background-color: {color};
-                  border-color: {store.activeStrokeColor === color ? 'var(--nord6)' : 'transparent'};
-                "
-              ></button>
+                onclick={() => selectTool(shape.tool)}
+                class="tool-btn"
+                class:active={store.activeTool === shape.tool}
+                title={shape.label}
+              >
+                <shape.icon size={18} />
+                <span>{shape.label}</span>
+              </button>
             {/each}
           </div>
         </div>
+        <div class="group-label">Shapes</div>
+      </div>
 
-        <!-- Fill toggle and color -->
-        <div class="px-3 py-2" style="border-top: 1px solid var(--nord3);">
-          <label class="flex items-center gap-2 mb-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={store.activeFillEnabled}
-              onchange={(e) => store.setFillEnabled((e.target as HTMLInputElement).checked)}
-              class="w-3 h-3 rounded"
-            />
-            <span class="text-[10px] uppercase opacity-60">Fill</span>
-          </label>
-          {#if store.activeFillEnabled}
-            <div class="grid grid-cols-5 gap-1">
-              {#each colors as color}
-                <button
-                  onclick={() => store.setFillColor(color)}
-                  class="w-5 h-5 rounded border-2 transition-transform hover:scale-110"
-                  style="
-                    background-color: {color};
-                    border-color: {store.activeFillColor === color ? 'var(--nord6)' : 'transparent'};
-                  "
-                ></button>
-              {/each}
+      <div class="ribbon-separator"></div>
+
+      <!-- Shape Style Group -->
+      {#if isShapeTool}
+        <div class="ribbon-group">
+          <div class="group-tools">
+            <div class="shape-style-controls">
+              <div class="style-row">
+                <span class="style-label">Stroke:</span>
+                <div class="mini-color-picker">
+                  {#each colors.slice(0, 5) as color}
+                    <button
+                      onclick={() => store.setStrokeColor(color)}
+                      class="mini-swatch"
+                      class:selected={store.activeStrokeColor === color}
+                      style="background-color: {color};"
+                    ></button>
+                  {/each}
+                </div>
+              </div>
+              <div class="style-row">
+                <label class="fill-toggle">
+                  <input
+                    type="checkbox"
+                    checked={store.activeFillEnabled}
+                    onchange={(e) => store.setFillEnabled((e.target as HTMLInputElement).checked)}
+                  />
+                  <span>Fill</span>
+                </label>
+                {#if store.activeFillEnabled}
+                  <div class="mini-color-picker">
+                    {#each colors.slice(0, 5) as color}
+                      <button
+                        onclick={() => store.setFillColor(color)}
+                        class="mini-swatch"
+                        class:selected={store.activeFillColor === color}
+                        style="background-color: {color};"
+                      ></button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
             </div>
-          {/if}
+          </div>
+          <div class="group-label">Shape Style</div>
         </div>
-      </div>
-    {/if}
-  </div>
-
-  <!-- Separator -->
-  <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
-
-  <!-- Edit Granularity Toggle (Block / Line) -->
-  <div class="flex items-center rounded overflow-hidden" style="background-color: var(--nord3);">
-    <button
-      onclick={() => store.setEditGranularity('block')}
-      class="px-2 py-1 text-xs font-medium transition-colors"
-      style="background-color: {store.editGranularity === 'block' ? 'var(--nord10)' : 'transparent'}; color: {store.editGranularity === 'block' ? 'var(--nord6)' : 'var(--nord4)'};"
-      title="Edit entire text blocks (paragraphs)"
-    >
-      Block
-    </button>
-    <button
-      onclick={() => store.setEditGranularity('line')}
-      class="px-2 py-1 text-xs font-medium transition-colors"
-      style="background-color: {store.editGranularity === 'line' ? 'var(--nord10)' : 'transparent'}; color: {store.editGranularity === 'line' ? 'var(--nord6)' : 'var(--nord4)'};"
-      title="Edit individual lines"
-    >
-      Line
-    </button>
-  </div>
-
-  <!-- Preview toggle - hide edit indicators -->
-  {#if onPreviewToggle}
-    <button
-      onclick={onPreviewToggle}
-      class="p-2 rounded transition-colors"
-      class:bg-[var(--nord10)]={previewMode}
-      style="color: {previewMode ? 'var(--nord6)' : 'var(--nord4)'};"
-      title={previewMode ? 'Show edit indicators' : 'Preview (hide edit indicators)'}
-    >
-      {#if previewMode}
-        <EyeOff size={16} />
-      {:else}
-        <Eye size={16} />
       {/if}
-    </button>
-  {/if}
-
-  <!-- Separator -->
-  <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
-
-  <!-- TEXT FORMATTING CONTROLS (visible, not in dropdown) -->
-  <!-- Note: Buttons use onmousedown preventDefault to keep focus on textarea -->
-  <!-- Font Family - applies to entire text block -->
-  <select
-    value={store.activeTextStyle.fontFamily}
-    onchange={(e) => setTextStyle({ fontFamily: (e.target as HTMLSelectElement).value })}
-    class="px-2 py-1.5 text-xs rounded cursor-pointer"
-    style="background-color: var(--nord3); border: none; max-width: 110px;"
-    title="Font Family (applies to entire block)"
-  >
-    {#each fontFamilies as font}
-      <option value={font.value}>{font.label}</option>
-    {/each}
-  </select>
-
-  <!-- Font Size - applies to entire text block -->
-  <select
-    value={store.activeTextStyle.fontSize}
-    onchange={(e) => setTextStyle({ fontSize: parseInt((e.target as HTMLSelectElement).value) })}
-    class="px-2 py-1.5 text-xs rounded cursor-pointer"
-    style="background-color: var(--nord3); border: none; width: 55px;"
-    title="Font Size (applies to entire block)"
-  >
-    {#each fontSizes as size}
-      <option value={size}>{size}pt</option>
-    {/each}
-  </select>
-
-  <!-- Bold -->
-  <button
-    onmousedown={(e) => { e.preventDefault(); setTextStyle({ bold: !store.activeTextStyle.bold }); }}
-    class="p-2 rounded transition-colors"
-    class:bg-[var(--nord8)]={store.activeTextStyle.bold}
-    style="color: {store.activeTextStyle.bold ? 'var(--nord0)' : 'var(--nord4)'};"
-    title="Bold"
-  >
-    <Bold size={16} />
-  </button>
-
-  <!-- Italic -->
-  <button
-    onmousedown={(e) => { e.preventDefault(); setTextStyle({ italic: !store.activeTextStyle.italic }); }}
-    class="p-2 rounded transition-colors"
-    class:bg-[var(--nord8)]={store.activeTextStyle.italic}
-    style="color: {store.activeTextStyle.italic ? 'var(--nord0)' : 'var(--nord4)'};"
-    title="Italic"
-  >
-    <Italic size={16} />
-  </button>
-
-  <!-- Text Color Picker -->
-  <div class="relative">
-    <button
-      onmousedown={(e) => { e.preventDefault(); toggleColorPicker(); }}
-      class="p-2 rounded transition-colors flex items-center"
-      class:bg-[var(--nord3)]={showColorPicker}
-      title="Text Color"
-    >
-      <div
-        class="w-4 h-4 rounded border"
-        style="background-color: {store.activeTextStyle.color}; border-color: var(--nord4);"
-      ></div>
-    </button>
-    {#if showColorPicker}
-      <div
-        class="absolute top-full left-0 mt-1 rounded-lg shadow-lg p-3 z-50"
-        style="background-color: var(--nord1); border: 1px solid var(--nord3); min-width: 160px;"
-      >
-        <div class="grid grid-cols-5 gap-2">
-          {#each colors as color}
-            <button
-              onmousedown={(e) => { e.preventDefault(); setTextStyle({ color }); showColorPicker = false; }}
-              class="w-6 h-6 rounded border-2 transition-transform hover:scale-110"
-              style="
-                background-color: {color};
-                border-color: {store.activeTextStyle.color === color ? 'var(--nord6)' : 'transparent'};
-              "
-            ></button>
-          {/each}
-        </div>
-      </div>
     {/if}
-  </div>
-
-  <!-- Separator -->
-  <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
-
-  <!-- Delete selected -->
-  <button
-    onclick={deleteSelected}
-    disabled={!store.selectedId}
-    class="p-2 rounded transition-colors"
-    class:opacity-40={!store.selectedId}
-    class:cursor-not-allowed={!store.selectedId}
-    class:hover:bg-[var(--nord11)]={store.selectedId}
-    class:hover:text-white={store.selectedId}
-    title="Delete selected"
-  >
-    <Trash2 size={16} />
-  </button>
-
-  <!-- Undo/Redo -->
-  <button
-    onclick={() => store.undo()}
-    disabled={!store.canUndo()}
-    class="p-2 rounded transition-colors hover:bg-[var(--nord3)]"
-    class:opacity-40={!store.canUndo()}
-    class:cursor-not-allowed={!store.canUndo()}
-    title="Undo (Ctrl+Z)"
-  >
-    <Undo2 size={16} />
-  </button>
-
-  <button
-    onclick={() => store.redo()}
-    disabled={!store.canRedo()}
-    class="p-2 rounded transition-colors hover:bg-[var(--nord3)]"
-    class:opacity-40={!store.canRedo()}
-    class:cursor-not-allowed={!store.canRedo()}
-    title="Redo (Ctrl+Y)"
-  >
-    <Redo2 size={16} />
-  </button>
-
-  <!-- Separator -->
-  <div class="w-px h-6 mx-1" style="background-color: var(--nord3);"></div>
-
-  <!-- Apply / Discard -->
-  <div class="flex items-center gap-1">
-    {#if store.opCount > 0}
-      <span class="text-xs px-2 py-1 rounded" style="background-color: var(--nord3);">
-        {store.opCount} edit{store.opCount !== 1 ? 's' : ''}
-      </span>
-    {/if}
-
-    <button
-      onclick={handleDiscard}
-      disabled={!store.isDirty && store.opCount === 0}
-      class="p-2 rounded transition-colors flex items-center gap-1"
-      class:opacity-40={!store.isDirty && store.opCount === 0}
-      class:hover:bg-[var(--nord11)]={store.isDirty || store.opCount > 0}
-      class:hover:text-white={store.isDirty || store.opCount > 0}
-      title="Discard changes"
-    >
-      <X size={16} />
-    </button>
-
-    <!-- Save in-place (overwrite original) -->
-    {#if onApplyInPlace}
-      <button
-        onclick={onApplyInPlace}
-        disabled={store.opCount === 0}
-        class="px-3 py-1.5 rounded transition-colors flex items-center gap-1 text-sm font-medium"
-        class:opacity-40={store.opCount === 0}
-        class:cursor-not-allowed={store.opCount === 0}
-        style="background-color: {store.opCount > 0 ? 'var(--nord10)' : 'var(--nord3)'}; color: {store.opCount > 0 ? 'var(--nord6)' : 'var(--nord4)'};"
-        title="Save changes to current file"
-      >
-        <Save size={16} />
-      </button>
-    {/if}
-
-    <button
-      onclick={handleApply}
-      disabled={store.opCount === 0}
-      class="px-3 py-1.5 rounded transition-colors flex items-center gap-1 text-sm font-medium"
-      class:opacity-40={store.opCount === 0}
-      class:cursor-not-allowed={store.opCount === 0}
-      style="background-color: {store.opCount > 0 ? 'var(--nord14)' : 'var(--nord3)'}; color: {store.opCount > 0 ? 'var(--nord0)' : 'var(--nord4)'};"
-      title="Save As... (new file)"
-    >
-      <Check size={16} />
-      <span>Apply</span>
-    </button>
   </div>
 </div>
+
+<style>
+  .ribbon-container {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Tab Bar */
+  .tab-bar {
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    gap: 2px;
+  }
+
+  .tab-button {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--nord4);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .tab-button:hover {
+    color: var(--nord6);
+    background: var(--nord3);
+  }
+
+  .tab-button.active {
+    color: var(--nord8);
+    border-bottom-color: var(--nord8);
+    background: var(--nord1);
+  }
+
+  .tab-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+  }
+
+  .edit-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--nord3);
+    color: var(--nord4);
+  }
+
+  .action-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .action-btn.discard {
+    background: transparent;
+    color: var(--nord4);
+  }
+
+  .action-btn.discard:hover:not(.disabled) {
+    background: var(--nord11);
+    color: white;
+  }
+
+  .action-btn.save {
+    background: var(--nord10);
+    color: var(--nord6);
+  }
+
+  .action-btn.save:hover:not(.disabled) {
+    background: var(--nord9);
+  }
+
+  .action-btn.apply {
+    background: var(--nord14);
+    color: var(--nord0);
+  }
+
+  .action-btn.apply:hover:not(.disabled) {
+    background: var(--nord7);
+  }
+
+  .action-btn.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Ribbon Content */
+  .ribbon-content {
+    display: flex;
+    align-items: flex-start;
+    padding: 8px 12px;
+    gap: 4px;
+    min-height: 70px;
+  }
+
+  .ribbon-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 8px;
+  }
+
+  .ribbon-group.wide {
+    min-width: 140px;
+  }
+
+  .group-tools {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+  }
+
+  .group-tools.horizontal {
+    flex-direction: row;
+  }
+
+  .group-label {
+    font-size: 10px;
+    color: var(--nord4);
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+    white-space: nowrap;
+  }
+
+  .ribbon-separator {
+    width: 1px;
+    height: 60px;
+    background: var(--nord3);
+    margin: 0 4px;
+    align-self: center;
+  }
+
+  /* Tool Buttons */
+  .tool-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 10px;
+    font-size: 10px;
+    color: var(--nord4);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .tool-btn:hover:not(.disabled) {
+    background: var(--nord3);
+    color: var(--nord6);
+  }
+
+  .tool-btn.active {
+    background: var(--nord8);
+    color: var(--nord0);
+    border-color: var(--nord8);
+  }
+
+  .tool-btn.large {
+    min-width: 50px;
+    min-height: 46px;
+  }
+
+  .tool-btn.small {
+    padding: 6px;
+    min-width: 32px;
+  }
+
+  .tool-btn.delete:hover:not(.disabled) {
+    background: var(--nord11);
+    color: white;
+  }
+
+  .tool-btn.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Granularity Toggle */
+  .granularity-toggle {
+    display: flex;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--nord3);
+  }
+
+  .granularity-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--nord4);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .granularity-btn:hover {
+    background: var(--nord2);
+  }
+
+  .granularity-btn.active {
+    background: var(--nord10);
+    color: var(--nord6);
+  }
+
+  /* Font Controls */
+  .font-controls {
+    display: flex;
+    gap: 4px;
+  }
+
+  .font-select {
+    padding: 4px 8px;
+    font-size: 11px;
+    background: var(--nord3);
+    color: var(--nord4);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    max-width: 100px;
+  }
+
+  .size-select {
+    padding: 4px 8px;
+    font-size: 11px;
+    background: var(--nord3);
+    color: var(--nord4);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 55px;
+  }
+
+  /* Color Picker */
+  .color-btn {
+    position: relative;
+  }
+
+  .color-indicator {
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 16px;
+    height: 3px;
+    border-radius: 1px;
+    border: 1px solid var(--nord4);
+  }
+
+  .color-picker {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 4px;
+    padding: 8px;
+    background: var(--nord1);
+    border: 1px solid var(--nord3);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 100;
+  }
+
+  .color-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+  }
+
+  .color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .color-swatch:hover {
+    transform: scale(1.1);
+  }
+
+  .color-swatch.selected {
+    border-color: var(--nord6);
+  }
+
+  /* Shape Buttons */
+  .shape-buttons {
+    display: flex;
+    gap: 4px;
+  }
+
+  /* Shape Style Controls */
+  .shape-style-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 10px;
+  }
+
+  .style-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .style-label {
+    color: var(--nord4);
+    min-width: 40px;
+  }
+
+  .fill-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--nord4);
+    cursor: pointer;
+    min-width: 40px;
+  }
+
+  .fill-toggle input {
+    width: 12px;
+    height: 12px;
+  }
+
+  .mini-color-picker {
+    display: flex;
+    gap: 2px;
+  }
+
+  .mini-swatch {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.1s ease;
+  }
+
+  .mini-swatch:hover {
+    transform: scale(1.15);
+  }
+
+  .mini-swatch.selected {
+    border-color: var(--nord6);
+  }
+
+  .relative {
+    position: relative;
+  }
+</style>
