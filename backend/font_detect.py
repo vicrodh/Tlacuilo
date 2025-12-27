@@ -2,6 +2,7 @@
 import argparse
 import base64
 import hashlib
+import io
 import json
 import os
 import subprocess
@@ -29,6 +30,7 @@ SAMPLES = {
 }
 DEFAULT_SIZE = (256, 64)
 DEBUG_DIR_NAME = "debug"
+CATALOG_FILENAME = "font_catalog.json"
 
 
 def json_print(payload: dict) -> None:
@@ -61,6 +63,10 @@ def exclusions_path() -> Path:
     return get_script_dir() / "font_detect_exclusions.json"
 
 
+def catalog_path() -> Path:
+    return get_script_dir() / CATALOG_FILENAME
+
+
 def load_exclusions() -> dict:
     path = exclusions_path()
     if not path.exists():
@@ -69,6 +75,16 @@ def load_exclusions() -> dict:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {"names": []}
+
+
+def load_catalog() -> dict | None:
+    path = catalog_path()
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
 
 
 def compute_font_list_hash(fonts: list[dict]) -> str:
@@ -337,6 +353,15 @@ def combined_score(a: np.ndarray, b: np.ndarray) -> tuple[float, dict]:
     templ = template_score(a, b)
     score = ssim * 0.4 + hist * 0.3 + templ * 0.3
     return score, {"ssim": ssim, "histogram": hist, "template": templ}
+
+
+def decode_template_image(data: str) -> np.ndarray | None:
+    try:
+        raw = base64.b64decode(data)
+    except Exception:
+        return None
+    img = Image.open(io.BytesIO(raw))
+    return np.array(img)
 
 
 def baseline_available() -> tuple[bool, str | None]:
@@ -609,6 +634,35 @@ def baseline_match(cache_dir: Path, input_path: str, topk: int) -> list[dict]:
             "score_breakdown": best_breakdown,
             "preview_sample": encode_template_preview(templates / templates_map.get("primary", "")),
         })
+
+    results.sort(key=lambda item: item["score"], reverse=True)
+    catalog = load_catalog()
+    if catalog:
+        for font in catalog.get("fonts", []):
+            templates_map = font.get("templates", {})
+            best = None
+            best_breakdown = None
+            for template_b64 in templates_map.values():
+                template_arr = decode_template_image(template_b64)
+                if template_arr is None:
+                    continue
+                score, breakdown = combined_score(input_arr, template_arr)
+                if best is None or score > best:
+                    best = score
+                    best_breakdown = breakdown
+            if best is None:
+                continue
+            results.append({
+                "family": font.get("family", "Unknown"),
+                "style": font.get("style", "Regular"),
+                "category": font.get("category", "sans-serif"),
+                "weight": font.get("weight", 400),
+                "italic": font.get("italic", False),
+                "path": f"catalog://{font.get('id', '')}",
+                "score": float(best),
+                "score_breakdown": best_breakdown,
+                "preview_sample": templates_map.get("primary"),
+            })
 
     results.sort(key=lambda item: item["score"], reverse=True)
     return results[:topk]
