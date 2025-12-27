@@ -19,6 +19,7 @@
     FolderOpen,
     FormInput,
     SaveAll,
+    Hand,
   } from 'lucide-svelte';
   import { save, open, ask, message } from '@tauri-apps/plugin-dialog';
   import { createAnnotationsStore } from '$lib/stores/annotations.svelte';
@@ -1606,6 +1607,7 @@
 
   // Panning support
   let isPanning = $state(false);
+  let panModeEnabled = $state(false);  // Pan mode must be explicitly enabled with Hand button
   let panStart = $state<{ x: number; y: number } | null>(null);
   let scrollStart = $state<{ x: number; y: number } | null>(null);
 
@@ -1615,9 +1617,15 @@
   // Check if edit mode is active
   const isEditMode = $derived(showEditTools);
 
+  function togglePanMode() {
+    panModeEnabled = !panModeEnabled;
+  }
+
   function handlePanStart(e: MouseEvent) {
-    // Don't start panning if annotation tool or edit mode is active
+    // Only pan when pan mode is enabled (or middle mouse button)
+    // Don't pan if annotation tool or edit mode is active
     if (isAnnotationMode || isEditMode) return;
+    if (!panModeEnabled && e.button !== 1) return;  // Only middle-click bypasses pan mode
 
     if (e.button === 1 || e.button === 0) {
       isPanning = true;
@@ -1920,6 +1928,17 @@
           </svg>
         </button>
 
+        <!-- Pan mode toggle (Hand tool) -->
+        <button
+          onclick={togglePanMode}
+          class="p-2 rounded-lg transition-colors"
+          class:bg-[var(--nord9)]={panModeEnabled}
+          style="color: {panModeEnabled ? 'var(--nord6)' : 'var(--nord4)'};"
+          title="Pan mode - Click and drag to scroll"
+        >
+          <Hand size={16} />
+        </button>
+
         <!-- Form mode toggle (only shown when PDF has forms) -->
         {#if formsStore.isFormPdf}
           {@const counts = getFilledCount()}
@@ -2133,7 +2152,7 @@
         <div
           bind:this={canvasContainer}
           class="flex-1 h-full overflow-y-auto overflow-x-hidden p-4"
-          style="background-color: var(--nord0); cursor: {isAnnotationMode || isEditMode ? 'default' : (isPanning ? 'grabbing' : 'grab')};"
+          style="background-color: var(--nord0); cursor: {isAnnotationMode || isEditMode ? 'default' : (panModeEnabled ? (isPanning ? 'grabbing' : 'grab') : 'default')};"
           onmousedown={handlePanStart}
           onmousemove={handlePanMove}
           onscroll={handleScroll}
