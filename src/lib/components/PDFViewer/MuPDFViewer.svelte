@@ -1162,8 +1162,8 @@
     wasActive = currentIsActive;
   });
 
-  // Sidebar state
-  let sidebarCollapsed = $state(false);
+  // Sidebar state (collapsed by default for cleaner initial view)
+  let sidebarCollapsed = $state(true);
   // Version counter to signal file reloads to sidebar components
   let fileReloadVersion = $state(0);
 

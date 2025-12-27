@@ -42,8 +42,8 @@
   let error = $state<string | null>(null);
   let fileName = $state('');
 
-  // Sidebar state
-  let sidebarCollapsed = $state(false);
+  // Sidebar state (collapsed by default for cleaner initial view)
+  let sidebarCollapsed = $state(true);
 
   // Selected pages for multi-select mode
   let selectedPages = $state<Set<number>>(new Set());
