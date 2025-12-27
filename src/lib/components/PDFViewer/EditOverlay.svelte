@@ -708,8 +708,32 @@
     span: SpanInfo;  // Parent span for style info
   }
 
+  // Character width weights for proportional fonts
+  // Based on typical character widths in common fonts
+  function getCharWeight(char: string): number {
+    // Narrow characters (approx 0.5x average width)
+    if ('iIlj1!|.,;:\'"'.includes(char)) return 0.5;
+    // Semi-narrow (approx 0.7x)
+    if ('ftrrJ()[]{}/-'.includes(char)) return 0.7;
+    // Wide characters (approx 1.3x)
+    if ('mwMWABCDGHKNOQRUVXYZ@#$%&'.includes(char)) return 1.3;
+    // Extra wide (approx 1.5x)
+    if ('W'.includes(char)) return 1.5;
+    // Default width
+    return 1.0;
+  }
+
+  // Calculate weighted width of a string
+  function getWeightedWidth(text: string): number {
+    let total = 0;
+    for (const char of text) {
+      total += getCharWeight(char);
+    }
+    return total;
+  }
+
   // Split a span into individual words with calculated rects
-  // Words are split by whitespace, and their rects are proportionally calculated
+  // Uses weighted character widths for better proportional font handling
   function splitSpanIntoWords(span: SpanInfo): WordInfo[] {
     const text = span.text || '';
     if (!text.trim()) return [];
@@ -717,21 +741,29 @@
     const words: WordInfo[] = [];
     const spanRect = span.rect;
 
+    // Calculate total weighted width of the span text
+    const totalWeight = getWeightedWidth(text);
+    if (totalWeight === 0) return [];
+
+    // Width per unit weight
+    const widthPerWeight = spanRect.width / totalWeight;
+
     // Match words and their positions (including leading whitespace for position calculation)
     const regex = /(\s*)(\S+)/g;
     let match;
     let currentX = spanRect.x;
-    const charWidth = spanRect.width / text.length;  // Average char width
 
     while ((match = regex.exec(text)) !== null) {
       const leadingSpace = match[1];
       const word = match[2];
 
-      // Skip past leading whitespace
-      currentX += leadingSpace.length * charWidth;
+      // Skip past leading whitespace (spaces are approx 0.5x width)
+      currentX += leadingSpace.length * 0.5 * widthPerWeight;
 
-      // Calculate word rect
-      const wordWidth = word.length * charWidth;
+      // Calculate word width using weighted characters
+      const wordWeight = getWeightedWidth(word);
+      const wordWidth = wordWeight * widthPerWeight;
+
       const wordRect: NormalizedRect = {
         x: currentX,
         y: spanRect.y,

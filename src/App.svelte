@@ -30,7 +30,7 @@
   import { getGlobalTabsStore } from './lib/stores/tabs.svelte';
   import { getSettings } from '$lib/stores/settings.svelte';
 
-  let sidebarExpanded = $state(true);
+  let sidebarExpanded = $state(false);  // Collapsed by default for cleaner UI
   let currentPage = $state('home');
 
   const status = getStatus();
