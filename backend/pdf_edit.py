@@ -447,12 +447,18 @@ def apply_edits(
                 # Split text into lines
                 new_lines = [l for l in text.split('\n') if l.strip()] if text else []
 
-                # For single-line edits (line mode), OCR bbox already includes descenders
-                # Only extend for block-level edits where we calculate the rect ourselves
+                # For single-line edits (line mode), use original line rect for redaction
+                # The editor rect is extended horizontally for editing comfort, but
+                # redaction should only cover the original text area
                 is_single_line_edit = len(original_lines) == 1
-                if is_single_line_edit:
-                    # No extension needed - line bbox from OCR is accurate
-                    redact_rect = fitz.Rect(x0, y0, x1, y1)
+                if is_single_line_edit and original_lines:
+                    # Use the original line's rect (not the extended editor rect)
+                    orig_rect = original_lines[0].get("rect", {})
+                    orig_x0 = orig_rect.get("x", 0) * page_width
+                    orig_y0 = orig_rect.get("y", 0) * page_height
+                    orig_w = orig_rect.get("width", 0) * page_width
+                    orig_h = orig_rect.get("height", 0) * page_height
+                    redact_rect = fitz.Rect(orig_x0, orig_y0, orig_x0 + orig_w, orig_y0 + orig_h)
                 else:
                     # Block-level edit: extend to cover descenders
                     descender_extension = font_size * 0.3
@@ -483,12 +489,14 @@ def apply_edits(
                             line_y0 = orig_rect.get("y", 0) * page_height
                             line_height = orig_rect.get("height", 0.02) * page_height
 
-                            # Calculate font size from original line height
-                            line_font_size = line_height * 0.85  # 85% of line height
+                            # Use OCR's original font size (from style) - don't recalculate
+                            # The style.fontSize comes from dominantSize detected by OCR
+                            line_font_size = font_size  # Use the OCR-detected size directly
                             line_font_size = max(6, min(72, line_font_size))
 
-                            # Position at baseline (80% down the line)
-                            text_y = line_y0 + (line_height * 0.80)
+                            # Position at baseline (approximately 75% down the line for typical fonts)
+                            # Baseline position = top + (ascender ratio * line height)
+                            text_y = line_y0 + (line_height * 0.75)
 
                             try:
                                 page.insert_text(
