@@ -540,6 +540,7 @@
     pushTextUndo(text);
     editingTextId = op.id;
     editingTextContent = text;
+    editingStartTime = Date.now();
     lastInputTime = Date.now();
     store.selectOp(op.id);
   }
@@ -615,6 +616,7 @@
     pushTextUndo(lineText);
     editingTextId = op.id;
     editingTextContent = lineText;
+    editingStartTime = Date.now();
     lastInputTime = Date.now();
     store.selectOp(op.id);
   }
@@ -707,6 +709,7 @@
     pushTextUndo(lineText);
     editingTextId = op.id;
     editingTextContent = lineText;
+    editingStartTime = Date.now();
     lastInputTime = Date.now();
     store.selectOp(op.id);
 
@@ -781,6 +784,7 @@
     pushTextUndo(spanText);
     editingTextId = op.id;
     editingTextContent = spanText;
+    editingStartTime = Date.now();
     lastInputTime = Date.now();
     store.selectOp(op.id);
 
@@ -947,6 +951,9 @@
     return 'crosshair';
   });
 
+  // Track when editing started to prevent accidental immediate confirmation
+  let editingStartTime = 0;
+
   function handleMouseDown(e: MouseEvent) {
     if (e.button !== 0 || !interactive) return;
 
@@ -963,6 +970,12 @@
         const isOutsideEdit = pos.x < px.x || pos.x > px.x + Math.max(px.width, 300) ||
                               pos.y < px.y || pos.y > px.y + Math.max(px.height, 100) + 40; // +40 for Done button
         if (isOutsideEdit) {
+          // Don't confirm if we just started editing (prevents race conditions)
+          const timeSinceStart = Date.now() - editingStartTime;
+          if (timeSinceStart < 150) {
+            console.log('[EditOverlay] Ignoring click outside - editing just started');
+            return;
+          }
           confirmTextEdit(editingOp);
           return;
         }
@@ -1047,6 +1060,7 @@
           // Start editing immediately
           editingTextId = op.id;
           editingTextContent = '';
+          editingStartTime = Date.now();
         } else if (store.activeTool === 'image') {
           store.addOp<InsertImageOp>({
             type: 'insert_image',
@@ -1124,7 +1138,18 @@
     if ((op.type === 'insert_text' || op.type === 'replace_text') && editingTextId === op.id) {
       const existingOp = store.getOpById(op.id);
       if (existingOp) {
-        store.updateOp(op.id, { text: editingTextContent });
+        const textOp = existingOp as InsertTextOp;
+        const originalText = textOp.text || '';
+        const newText = editingTextContent;
+
+        // Protection: Don't save empty content if original had content
+        // This prevents accidental text loss from clicking outside too quickly
+        if (!newText.trim() && originalText.trim()) {
+          console.warn('[EditOverlay] Prevented saving empty text, reverting to original');
+          // Keep the original text, don't update
+        } else {
+          store.updateOp(op.id, { text: newText });
+        }
       }
       // Clear undo/redo history when confirming
       textUndoHistory = [];
@@ -1231,6 +1256,7 @@
 
       editingTextId = op.id;
       editingTextContent = textOp.text;
+      editingStartTime = Date.now();
       lastInputTime = Date.now();
     }
   }
