@@ -524,7 +524,6 @@ def apply_edits(
         # This ensures apply_redactions() is only called once per page
         for page_num, ops_list in replace_ops_by_page.items():
             page = doc[page_num]
-            print(f"[DEBUG BATCH] Processing {len(ops_list)} replace_text ops on page {page_num}", file=sys.stderr)
 
             # Step 1: Draw all white rectangles first (for OCR'd PDFs)
             # Use cover_rect (full size) to completely cover original scanned text
@@ -533,16 +532,13 @@ def apply_edits(
                 shape.draw_rect(op_data["cover_rect"])
                 shape.finish(fill=(1, 1, 1), color=(1, 1, 1), width=0)
                 shape.commit()
-                print(f"[DEBUG BATCH] Drew white rect (cover): {op_data['cover_rect']}", file=sys.stderr)
 
             # Step 2: Add all redaction annotations
             for op_data in ops_list:
                 page.add_redact_annot(op_data["redact_rect"], fill=(1, 1, 1))
-                print(f"[DEBUG BATCH] Added redact annot: {op_data['redact_rect']}", file=sys.stderr)
 
             # Step 3: Apply all redactions ONCE
             page.apply_redactions()
-            print(f"[DEBUG BATCH] Applied all redactions for page {page_num}", file=sys.stderr)
 
             # Step 4: Insert all new text
             for op_data in ops_list:
@@ -558,12 +554,10 @@ def apply_edits(
                 x0, y0, x1, y1 = op_data["x0"], op_data["y0"], op_data["x1"], op_data["y1"]
 
                 if not text:
-                    print(f"[DEBUG BATCH] Skipping empty text", file=sys.stderr)
                     continue
 
                 # Use original line positions if available and line count matches
                 if original_lines and len(original_lines) == len(new_lines):
-                    print(f"[DEBUG BATCH] Using original line positions for {len(new_lines)} lines", file=sys.stderr)
                     for i, (new_text, orig_line) in enumerate(zip(new_lines, original_lines)):
                         orig_rect = orig_line.get("rect", {})
                         line_x0 = orig_rect.get("x", 0) * page_width
@@ -571,9 +565,9 @@ def apply_edits(
                         line_height = orig_rect.get("height", 0.02) * page_height
 
                         line_font_size = max(6, min(72, font_size))
-                        text_y = line_y0 + (line_height * 0.75)
-
-                        print(f"[DEBUG BATCH] Line {i}: x={line_x0:.2f} y={text_y:.2f} size={line_font_size:.1f}pt '{new_text[:30]}...'", file=sys.stderr)
+                        # Baseline calculation: typical fonts have ascender ~82% of line height
+                        # Text is positioned at baseline in PyMuPDF
+                        text_y = line_y0 + (line_height * 0.82)
 
                         try:
                             page.insert_text(
@@ -585,10 +579,9 @@ def apply_edits(
                                 rotate=int(rotation) if rotation else 0,
                             )
                         except Exception as e:
-                            print(f"[ERROR BATCH] Failed to insert line {i}: {e}", file=sys.stderr)
+                            print(f"[ERROR] Failed to insert line {i}: {e}", file=sys.stderr)
                 else:
                     # Fallback: calculate positions from op rect
-                    print(f"[DEBUG BATCH] Using calculated positions (line count mismatch: orig={len(original_lines)}, new={len(new_lines)})", file=sys.stderr)
                     rect_height = y1 - y0
                     num_lines = max(1, len(new_lines))
                     try:
@@ -598,7 +591,7 @@ def apply_edits(
                         font_height_factor = 1.2
                     calc_font_size = max(6, min(72, rect_height / (num_lines * font_height_factor)))
                     line_height = calc_font_size * 1.2
-                    current_y = y0 + calc_font_size
+                    current_y = y0 + (line_height * 0.82)
 
                     for line in new_lines:
                         try:
@@ -610,9 +603,8 @@ def apply_edits(
                                 color=color,
                                 rotate=int(rotation) if rotation else 0,
                             )
-                            print(f"[DEBUG BATCH] Fallback insert at y={current_y:.1f}: '{line[:30]}...'", file=sys.stderr)
                         except Exception as e:
-                            print(f"[ERROR BATCH] Failed to insert: {e}", file=sys.stderr)
+                            print(f"[ERROR] Failed to insert: {e}", file=sys.stderr)
                         current_y += line_height
 
                 applied_count += 1

@@ -619,8 +619,8 @@
     store.selectOp(op.id);
   }
 
-  // Handle click on a word with exact rect from backend (PyMuPDF)
-  // This uses the accurate word bbox from get_text("words")
+  // Handle click on a word - "smart" mode: edit the entire LINE but select just the clicked word
+  // This preserves line structure in the PDF while giving word-level editing UX
   function handleWordClick(block: TextBlockInfo, line: TextLineInfo, word: WordInfo) {
     if (!interactive) return;
     if (store.activeTool !== 'select' && store.activeTool !== 'text' && store.activeTool !== null) return;
@@ -628,18 +628,63 @@
     const wordText = word.text;
     if (!wordText.trim()) return;
 
-    // Use exact word rect from backend
+    // Get full line text from spans
+    const lineText = line.spans ? line.spans.map(s => s.text).join('') : '';
+    if (!lineText.trim()) return;
+
+    // Find the word's position within the line text
+    // Use word_no to find correct occurrence if word appears multiple times
+    const wordsInLine = line.words || [];
+    let wordStartInLine = 0;
+    let charCount = 0;
+
+    // Build position by counting characters up to this word
+    for (const w of wordsInLine) {
+      if (w.word_no === word.word_no) {
+        // Find this word in the line text starting from current position
+        const idx = lineText.indexOf(w.text, charCount);
+        if (idx >= 0) {
+          wordStartInLine = idx;
+        }
+        break;
+      }
+      // Move past this word (find it and skip)
+      const idx = lineText.indexOf(w.text, charCount);
+      if (idx >= 0) {
+        charCount = idx + w.text.length;
+      }
+    }
+
+    const wordEndInLine = wordStartInLine + wordText.length;
+
+    // Use LINE rect for the operation (preserves line structure)
     const originalLines: OriginalLineInfo[] = [{
-      text: wordText,
-      rect: word.rect,
+      text: lineText,
+      rect: line.rect,
     }];
+
+    // Extend editor width like we do for line mode
+    const blockRightEdge = block.rect.x + block.rect.width;
+    const pxBuffer = 3 / pageWidth;
+    const extendedWidth = Math.max(
+      line.rect.width * 1.1 + pxBuffer,
+      blockRightEdge - line.rect.x + pxBuffer
+    );
+
+    const editorRect: NormalizedRect = {
+      x: line.rect.x,
+      y: line.rect.y,
+      width: extendedWidth,
+      height: line.rect.height,
+    };
 
     // Get style from first span in line (fallback to block)
     const firstSpan = line.spans?.[0];
+    const lineFontSize = firstSpan?.size || block.dominantSize || store.activeTextStyle.fontSize;
 
     const style = {
       fontFamily: mapFontFamily(firstSpan?.font || block.dominantFont, block.isSerif, block.isMono),
-      fontSize: firstSpan?.size || block.dominantSize || store.activeTextStyle.fontSize,
+      fontSize: lineFontSize,
       color: firstSpan?.color || block.dominantColor || store.activeTextStyle.color,
       bold: firstSpan?.bold || hasBlockBold(block),
       italic: firstSpan?.italic || hasBlockItalic(block),
@@ -650,20 +695,29 @@
     const op = store.addOp<ReplaceTextOp>({
       type: 'replace_text',
       page,
-      rect: word.rect,
-      originalText: wordText,
+      rect: editorRect,
+      originalText: lineText,
       originalLines,
-      text: wordText,
+      text: lineText,
       style,
     });
 
     textUndoHistory = [];
     textRedoHistory = [];
-    pushTextUndo(wordText);
+    pushTextUndo(lineText);
     editingTextId = op.id;
-    editingTextContent = wordText;
+    editingTextContent = lineText;
     lastInputTime = Date.now();
     store.selectOp(op.id);
+
+    // After textarea is created, select just the clicked word
+    setTimeout(() => {
+      const textarea = document.querySelector(`textarea[data-edit-id="${op.id}"]`) as HTMLTextAreaElement;
+      if (textarea && wordStartInLine >= 0) {
+        textarea.focus();
+        textarea.setSelectionRange(wordStartInLine, wordEndInLine);
+      }
+    }, 50);
   }
 
   // Fallback: Handle click on a span in word mode when words array is not available
