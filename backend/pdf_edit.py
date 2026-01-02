@@ -956,9 +956,6 @@ def get_text_blocks_with_fonts(
                 "word_no": word_no,
             })
 
-        # Debug: show available word keys
-        print(f"[DEBUG] words_by_block_line has {len(words_by_block_line)} keys: {list(words_by_block_line.keys())[:10]}", file=sys.stderr)
-
         blocks = []
         for block_no, block in enumerate(text_dict.get("blocks", [])):
             if block.get("type") != 0:  # Skip image blocks
@@ -998,10 +995,6 @@ def get_text_blocks_with_fonts(
                 line_words = words_by_block_line.get((block_no, line_no), [])
                 # Sort words by word_no to ensure correct order
                 line_words = sorted(line_words, key=lambda w: w["word_no"])
-
-                # Debug: log word extraction (only for first few lines)
-                if block_no < 2 and line_no < 3:
-                    print(f"[DEBUG] block={block_no} line={line_no} -> {len(line_words)} words", file=sys.stderr)
 
                 line_data = {
                     "rect": {
@@ -1098,15 +1091,6 @@ def get_text_blocks_with_fonts(
         result["blocks"] = blocks
         result["pageWidth"] = page_width
         result["pageHeight"] = page_height
-
-        # Debug: verify words are in the response
-        total_words = sum(len(line.get("words", [])) for block in blocks for line in block.get("lines", []))
-        print(f"[DEBUG] Response contains {len(blocks)} blocks, {total_words} total words", file=sys.stderr)
-        if blocks and blocks[0].get("lines"):
-            first_line = blocks[0]["lines"][0]
-            print(f"[DEBUG] First line has keys: {list(first_line.keys())}", file=sys.stderr)
-            print(f"[DEBUG] First line words: {len(first_line.get('words', []))}", file=sys.stderr)
-
         doc.close()
 
     except Exception as e:

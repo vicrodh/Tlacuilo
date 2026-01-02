@@ -200,14 +200,6 @@
       });
       if (result.success) {
         textBlocks = result.blocks;
-        // Debug: Check if words are being extracted
-        const totalWords = result.blocks.reduce((acc, b) =>
-          acc + b.lines.reduce((lacc, l) => lacc + (l.words?.length || 0), 0), 0);
-        console.log('[EditOverlay] Text blocks loaded:', {
-          blocks: result.blocks.length,
-          totalWords,
-          sampleLine: result.blocks[0]?.lines[0],
-        });
       } else {
         console.error('[EditOverlay] Failed to fetch text blocks:', result.error);
         textBlocks = [];
@@ -630,7 +622,6 @@
   // Handle click on a word with exact rect from backend (PyMuPDF)
   // This uses the accurate word bbox from get_text("words")
   function handleWordClick(block: TextBlockInfo, line: TextLineInfo, word: WordInfo) {
-    console.log('[EditOverlay] handleWordClick called:', { word: word.text, rect: word.rect });
     if (!interactive) return;
     if (store.activeTool !== 'select' && store.activeTool !== 'text' && store.activeTool !== null) return;
 
@@ -656,12 +647,6 @@
       rotation: line.rotation || block.rotation || 0,
     };
 
-    console.log('[EditOverlay] Word click (exact bbox):', {
-      wordText,
-      wordRect: word.rect,
-      wordNo: word.word_no,
-    });
-
     const op = store.addOp<ReplaceTextOp>({
       type: 'replace_text',
       page,
@@ -684,7 +669,6 @@
   // Fallback: Handle click on a span in word mode when words array is not available
   // Strategy: Replace ENTIRE SPAN content but only let user edit the clicked word
   function handleSpanClickForWord(e: MouseEvent, block: TextBlockInfo, line: TextLineInfo, span: SpanInfo) {
-    console.log('[EditOverlay] handleSpanClickForWord FALLBACK called - line.words missing');
     if (!interactive) return;
     if (store.activeTool !== 'select' && store.activeTool !== 'text' && store.activeTool !== null) return;
 
@@ -727,12 +711,6 @@
 
     const wordStartInSpan = spanText.indexOf(wordText);
     const wordEndInSpan = wordStartInSpan + wordText.length;
-
-    console.log('[EditOverlay] Word click (span fallback):', {
-      spanText: spanText.substring(0, 40),
-      clickedWord: wordText,
-      wordIndex,
-    });
 
     const op = store.addOp<ReplaceTextOp>({
       type: 'replace_text',
