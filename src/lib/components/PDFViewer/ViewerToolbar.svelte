@@ -104,7 +104,7 @@
         onclick={() => onToolChange(tool.id)}
         class="p-2 rounded-lg transition-colors"
         style="background-color: {activeTool === tool.id ? 'var(--nord8)' : 'transparent'};
-               color: {activeTool === tool.id ? 'var(--nord0)' : 'var(--nord4)'};"
+               color: {activeTool === tool.id ? 'var(--on-primary)' : 'var(--nord4)'};"
         title={tool.label}
       >
         <tool.icon size={16} />

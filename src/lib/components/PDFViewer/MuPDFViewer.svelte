@@ -1924,7 +1924,7 @@
           onclick={toggleAnnotationMode}
           class="p-2 rounded-lg transition-colors"
           class:bg-[var(--nord8)]={showAnnotationTools}
-          style="color: {showAnnotationTools ? 'var(--nord0)' : 'var(--nord4)'};"
+          style="color: {showAnnotationTools ? 'var(--on-primary)' : 'var(--nord4)'};"
           title="Annotation tools"
         >
           <PenTool size={16} />

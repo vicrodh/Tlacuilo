@@ -262,7 +262,7 @@
             onclick={() => orientation = 'auto'}
             class="px-3 py-1.5 rounded text-xs transition-colors"
             style="background-color: {orientation === 'auto' ? 'var(--nord8)' : 'var(--nord2)'};
-                   color: {orientation === 'auto' ? 'var(--nord0)' : 'var(--nord4)'};
+                   color: {orientation === 'auto' ? 'var(--on-primary)' : 'var(--nord4)'};
                    border: 1px solid var(--nord3);"
           >
             Auto
@@ -271,7 +271,7 @@
             onclick={() => orientation = 'portrait'}
             class="px-3 py-1.5 rounded text-xs transition-colors"
             style="background-color: {orientation === 'portrait' ? 'var(--nord8)' : 'var(--nord2)'};
-                   color: {orientation === 'portrait' ? 'var(--nord0)' : 'var(--nord4)'};
+                   color: {orientation === 'portrait' ? 'var(--on-primary)' : 'var(--nord4)'};
                    border: 1px solid var(--nord3);"
           >
             Portrait
@@ -280,7 +280,7 @@
             onclick={() => orientation = 'landscape'}
             class="px-3 py-1.5 rounded text-xs transition-colors"
             style="background-color: {orientation === 'landscape' ? 'var(--nord8)' : 'var(--nord2)'};
-                   color: {orientation === 'landscape' ? 'var(--nord0)' : 'var(--nord4)'};
+                   color: {orientation === 'landscape' ? 'var(--on-primary)' : 'var(--nord4)'};
                    border: 1px solid var(--nord3);"
           >
             Landscape
@@ -354,7 +354,7 @@
                 <!-- Order Badge -->
                 <div
                   class="absolute -top-2 -left-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold z-10"
-                  style="background-color: var(--nord8); color: var(--nord0);"
+                  style="background-color: var(--nord8); color: var(--on-primary);"
                 >
                   {index + 1}
                 </div>

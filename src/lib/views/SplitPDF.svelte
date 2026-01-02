@@ -259,7 +259,7 @@
               onclick={() => splitMode = 'all'}
               class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
               style="background-color: {splitMode === 'all' ? 'var(--nord8)' : 'var(--nord2)'};
-                     color: {splitMode === 'all' ? 'var(--nord0)' : 'var(--nord4)'};"
+                     color: {splitMode === 'all' ? 'var(--on-primary)' : 'var(--nord4)'};"
             >
               <Grid3x3 size={14} />
               <span>All Pages</span>
@@ -277,7 +277,7 @@
               onclick={() => splitMode = 'pages'}
               class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
               style="background-color: {splitMode === 'pages' ? 'var(--nord8)' : 'var(--nord2)'};
-                     color: {splitMode === 'pages' ? 'var(--nord0)' : 'var(--nord4)'};"
+                     color: {splitMode === 'pages' ? 'var(--on-primary)' : 'var(--nord4)'};"
             >
               <Scissors size={14} />
               <span>Split Pages</span>
@@ -295,7 +295,7 @@
               onclick={() => splitMode = 'groups'}
               class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
               style="background-color: {splitMode === 'groups' ? 'var(--nord8)' : 'var(--nord2)'};
-                     color: {splitMode === 'groups' ? 'var(--nord0)' : 'var(--nord4)'};"
+                     color: {splitMode === 'groups' ? 'var(--on-primary)' : 'var(--nord4)'};"
             >
               <Layers size={14} />
               <span>Groups</span>
@@ -462,7 +462,7 @@
     {#if true}
       {@const actionLabel = splitMode === 'extract' ? 'Extract' : splitMode === 'remove' ? 'Remove' : 'Split'}
       {@const actionColor = splitMode === 'extract' ? 'var(--nord14)' : splitMode === 'remove' ? 'var(--nord11)' : 'var(--nord8)'}
-      {@const textColor = splitMode === 'remove' ? 'var(--nord6)' : 'var(--nord0)'}
+      {@const textColor = splitMode === 'remove' ? 'var(--nord6)' : splitMode === 'extract' ? 'var(--nord0)' : 'var(--on-primary)'}
       <button
         onclick={handleSplit}
         disabled={!canSplit() || isSplitting}

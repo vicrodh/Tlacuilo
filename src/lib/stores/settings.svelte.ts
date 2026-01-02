@@ -45,7 +45,13 @@ export type PaletteId =
   | 'catppuccin-latte'
   | 'rose-pine-dawn'
   | 'solarized-dark'
-  | 'gruvbox-dark';
+  | 'gruvbox-dark'
+  | 'breeze-dark'
+  | 'breeze-light'
+  | 'fluent-dark'
+  | 'fluent-light'
+  | 'adwaita-dark'
+  | 'adwaita-light';
 
 // Palette definitions with preview colors
 export const PALETTES: {
@@ -102,6 +108,36 @@ export const PALETTES: {
     id: 'gruvbox-dark',
     label: 'Gruvbox Dark',
     colors: { bg: '#282828', panel: '#3c3836', accent: '#83a598', text: '#fbf1c7', red: '#fb4934', green: '#b8bb26' },
+  },
+  {
+    id: 'breeze-dark',
+    label: 'Breeze Dark',
+    colors: { bg: '#141618', panel: '#202326', accent: '#3daee9', text: '#ffffff', red: '#da4453', green: '#27ae60' },
+  },
+  {
+    id: 'breeze-light',
+    label: 'Breeze Light',
+    colors: { bg: '#ffffff', panel: '#eff0f1', accent: '#3daee9', text: '#232629', red: '#da4453', green: '#27ae60' },
+  },
+  {
+    id: 'fluent-dark',
+    label: 'Fluent Dark',
+    colors: { bg: '#282828', panel: '#303030', accent: '#0078d7', text: '#dfdfdf', red: '#da4453', green: '#01a299' },
+  },
+  {
+    id: 'fluent-light',
+    label: 'Fluent Light',
+    colors: { bg: '#ffffff', panel: '#f2f2f2', accent: '#0078d4', text: '#333333', red: '#bf0303', green: '#006e28' },
+  },
+  {
+    id: 'adwaita-dark',
+    label: 'Adwaita Dark',
+    colors: { bg: '#1d1d20', panel: '#222226', accent: '#3584e4', text: '#ffffff', red: '#c01c28', green: '#26a269' },
+  },
+  {
+    id: 'adwaita-light',
+    label: 'Adwaita Light',
+    colors: { bg: '#fafafb', panel: '#ffffff', accent: '#3584e4', text: '#333338', red: '#e01b24', green: '#2ec27e' },
   },
 ];
 

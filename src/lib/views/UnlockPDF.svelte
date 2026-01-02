@@ -319,10 +319,10 @@
             onclick={unlockPdf}
             disabled={isUnlocking || (securityInfo?.needs_password && !password)}
             class="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            style="background-color: var(--nord8); color: var(--nord0);"
+            style="background-color: var(--nord8); color: var(--on-primary);"
           >
             {#if isUnlocking}
-              <div class="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style="border-color: var(--nord0);"></div>
+              <div class="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style="border-color: var(--on-primary);"></div>
               Unlocking...
             {:else}
               <Unlock size={18} />

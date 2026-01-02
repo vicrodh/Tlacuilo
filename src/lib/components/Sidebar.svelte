@@ -145,7 +145,7 @@
         class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
         style="background-color: var(--nord8);"
       >
-        <span class="text-xl font-bold" style="color: var(--nord0);">T</span>
+        <span class="text-xl font-bold" style="color: var(--on-primary);">T</span>
       </div>
       {#if isExpanded}
         <div class="text-left overflow-hidden">

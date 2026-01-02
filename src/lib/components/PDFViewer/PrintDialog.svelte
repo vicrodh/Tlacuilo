@@ -95,7 +95,7 @@
         <button
           onclick={() => onPrint(includeAnnotations)}
           class="px-4 py-2 rounded transition-colors flex items-center gap-2"
-          style="background-color: var(--nord8); color: var(--nord0);"
+          style="background-color: var(--nord8); color: var(--on-primary);"
         >
           <Printer size={16} />
           Print

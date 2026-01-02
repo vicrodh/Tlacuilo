@@ -175,7 +175,7 @@
               onclick={() => outputFormat = fmt as typeof outputFormat}
               class="px-3 py-1.5 rounded text-xs transition-colors uppercase"
               style="background-color: {outputFormat === fmt ? 'var(--nord8)' : 'var(--nord2)'};
-                     color: {outputFormat === fmt ? 'var(--nord0)' : 'var(--nord4)'};
+                     color: {outputFormat === fmt ? 'var(--on-primary)' : 'var(--nord4)'};
                      border: 1px solid var(--nord3);"
             >
               {fmt}
@@ -217,7 +217,7 @@
             onclick={() => pageRange = 'all'}
             class="px-3 py-1.5 rounded text-xs transition-colors"
             style="background-color: {pageRange === 'all' ? 'var(--nord8)' : 'var(--nord2)'};
-                   color: {pageRange === 'all' ? 'var(--nord0)' : 'var(--nord4)'};
+                   color: {pageRange === 'all' ? 'var(--on-primary)' : 'var(--nord4)'};
                    border: 1px solid var(--nord3);"
           >
             All
@@ -226,7 +226,7 @@
             onclick={() => pageRange = 'custom'}
             class="px-3 py-1.5 rounded text-xs transition-colors"
             style="background-color: {pageRange === 'custom' ? 'var(--nord8)' : 'var(--nord2)'};
-                   color: {pageRange === 'custom' ? 'var(--nord0)' : 'var(--nord4)'};
+                   color: {pageRange === 'custom' ? 'var(--on-primary)' : 'var(--nord4)'};
                    border: 1px solid var(--nord3);"
           >
             Custom

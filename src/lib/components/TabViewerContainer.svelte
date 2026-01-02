@@ -381,7 +381,7 @@
     padding: 0.75rem 1.5rem;
     border-radius: 0.75rem;
     background-color: var(--nord8);
-    color: var(--nord0);
+    color: var(--on-primary);
     border: none;
     cursor: pointer;
     font-weight: 500;

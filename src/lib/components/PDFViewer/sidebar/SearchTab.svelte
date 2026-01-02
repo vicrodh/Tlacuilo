@@ -637,7 +637,7 @@
     font-size: 0.75rem;
     font-weight: 500;
     background-color: var(--nord8);
-    color: var(--nord0);
+    color: var(--on-primary);
     border: none;
     cursor: pointer;
     transition: opacity 0.15s;
@@ -769,7 +769,7 @@
     font-size: 0.75rem;
     font-weight: 500;
     background-color: var(--nord8);
-    color: var(--nord0);
+    color: var(--on-primary);
     border: none;
     cursor: pointer;
     transition: opacity 0.15s;

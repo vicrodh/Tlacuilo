@@ -412,7 +412,7 @@
         </p>
         <button
           class="flex items-center gap-2 px-6 py-3 rounded-lg transition-colors hover:opacity-90"
-          style="background-color: var(--nord8); color: var(--nord0);"
+          style="background-color: var(--nord8); color: var(--on-primary);"
         >
           <FolderOpen size={20} />
           <span>Select File</span>
@@ -503,7 +503,7 @@
               <button
                 onclick={() => ocrMode = 'searchable'}
                 class="flex-1 px-3 py-2 rounded-lg text-sm transition-colors"
-                style="background-color: {ocrMode === 'searchable' ? 'var(--nord8)' : 'var(--nord2)'}; color: {ocrMode === 'searchable' ? 'var(--nord0)' : 'inherit'};"
+                style="background-color: {ocrMode === 'searchable' ? 'var(--nord8)' : 'var(--nord2)'}; color: {ocrMode === 'searchable' ? 'var(--on-primary)' : 'inherit'};"
               >
                 Searchable
               </button>
@@ -707,7 +707,7 @@
           onclick={handleOCR}
           disabled={!canProcess()}
           class="flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-colors disabled:opacity-50 hover:opacity-90"
-          style="background-color: {ocrMode === 'editable' ? 'var(--nord10)' : 'var(--nord8)'}; color: {ocrMode === 'editable' ? 'var(--nord6)' : 'var(--nord0)'};"
+          style="background-color: {ocrMode === 'editable' ? 'var(--nord10)' : 'var(--nord8)'}; color: {ocrMode === 'editable' ? 'var(--nord6)' : 'var(--on-primary)'};"
         >
           {#if isProcessing}
             <div class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>

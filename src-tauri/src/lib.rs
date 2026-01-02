@@ -1684,12 +1684,22 @@ struct FontSpanInfo {
     rect: NormalizedRectF64,
 }
 
+// Word-level info from PyMuPDF's get_text("words")
+#[derive(Debug, Serialize, Deserialize)]
+struct FontWordInfo {
+    text: String,
+    rect: NormalizedRectF64,
+    word_no: i32,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct FontLineInfo {
     rect: NormalizedRectF64,
     #[serde(default)]
     rotation: Option<f64>,
     spans: Vec<FontSpanInfo>,
+    #[serde(default)]
+    words: Vec<FontWordInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

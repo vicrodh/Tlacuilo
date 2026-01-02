@@ -403,7 +403,7 @@
                         <button
                           onclick={() => addPageToDestination(page)}
                           class="absolute top-1 right-1 w-6 h-6 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-sm font-bold"
-                          style="background-color: var(--nord8); color: var(--nord0);"
+                          style="background-color: var(--nord8); color: var(--on-primary);"
                           title="Add to merged document"
                         >
                           +
@@ -558,14 +558,14 @@
         <button
           onclick={() => (viewMode = 'file')}
           class="flex-1 px-3 py-2 rounded text-sm transition-colors"
-          style="background-color: {viewMode === 'file' ? 'var(--nord8)' : 'transparent'}; color: {viewMode === 'file' ? 'var(--nord0)' : 'var(--nord4)'};"
+          style="background-color: {viewMode === 'file' ? 'var(--nord8)' : 'transparent'}; color: {viewMode === 'file' ? 'var(--on-primary)' : 'var(--nord4)'};"
         >
           File view
         </button>
         <button
           onclick={() => (viewMode = 'page')}
           class="flex-1 px-3 py-2 rounded text-sm transition-colors"
-          style="background-color: {viewMode === 'page' ? 'var(--nord8)' : 'transparent'}; color: {viewMode === 'page' ? 'var(--nord0)' : 'var(--nord4)'};"
+          style="background-color: {viewMode === 'page' ? 'var(--nord8)' : 'transparent'}; color: {viewMode === 'page' ? 'var(--on-primary)' : 'var(--nord4)'};"
         >
           Page view
         </button>
@@ -577,7 +577,7 @@
       onclick={handleMerge}
       disabled={!canMerge}
       class="px-4 py-3 rounded transition-colors disabled:opacity-50 hover:opacity-90"
-      style="background-color: var(--nord8); color: var(--nord0);"
+      style="background-color: var(--nord8); color: var(--on-primary);"
     >
       Merge
     </button>

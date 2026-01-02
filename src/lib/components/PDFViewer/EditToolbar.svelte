@@ -131,7 +131,7 @@
     onclick={() => selectTool('select')}
     class="p-2 rounded transition-colors"
     class:bg-[var(--nord8)]={store.activeTool === 'select'}
-    style="color: {store.activeTool === 'select' ? 'var(--nord0)' : 'var(--nord4)'};"
+    style="color: {store.activeTool === 'select' ? 'var(--on-primary)' : 'var(--nord4)'};"
     title="Select / Move"
   >
     <MousePointer size={16} />
@@ -145,7 +145,7 @@
     onclick={() => selectTool('text')}
     class="p-2 rounded transition-colors"
     class:bg-[var(--nord8)]={store.activeTool === 'text'}
-    style="color: {store.activeTool === 'text' ? 'var(--nord0)' : 'var(--nord4)'};"
+    style="color: {store.activeTool === 'text' ? 'var(--on-primary)' : 'var(--nord4)'};"
     title="Text"
   >
     <Type size={16} />
@@ -156,7 +156,7 @@
     onclick={() => selectTool('image')}
     class="p-2 rounded transition-colors"
     class:bg-[var(--nord8)]={store.activeTool === 'image'}
-    style="color: {store.activeTool === 'image' ? 'var(--nord0)' : 'var(--nord4)'};"
+    style="color: {store.activeTool === 'image' ? 'var(--on-primary)' : 'var(--nord4)'};"
     title="Insert Image"
   >
     <Image size={16} />
@@ -168,7 +168,7 @@
       onclick={toggleShapesMenu}
       class="p-2 rounded transition-colors flex items-center gap-0.5"
       class:bg-[var(--nord8)]={isShapeTool}
-      style="color: {isShapeTool ? 'var(--nord0)' : 'var(--nord4)'};"
+      style="color: {isShapeTool ? 'var(--on-primary)' : 'var(--nord4)'};"
       title="Shapes"
     >
       {#if store.activeTool === 'shape-ellipse'}
@@ -328,7 +328,7 @@
     onmousedown={(e) => { e.preventDefault(); setTextStyle({ bold: !store.activeTextStyle.bold }); }}
     class="p-2 rounded transition-colors"
     class:bg-[var(--nord8)]={store.activeTextStyle.bold}
-    style="color: {store.activeTextStyle.bold ? 'var(--nord0)' : 'var(--nord4)'};"
+    style="color: {store.activeTextStyle.bold ? 'var(--on-primary)' : 'var(--nord4)'};"
     title="Bold"
   >
     <Bold size={16} />
@@ -339,7 +339,7 @@
     onmousedown={(e) => { e.preventDefault(); setTextStyle({ italic: !store.activeTextStyle.italic }); }}
     class="p-2 rounded transition-colors"
     class:bg-[var(--nord8)]={store.activeTextStyle.italic}
-    style="color: {store.activeTextStyle.italic ? 'var(--nord0)' : 'var(--nord4)'};"
+    style="color: {store.activeTextStyle.italic ? 'var(--on-primary)' : 'var(--nord4)'};"
     title="Italic"
   >
     <Italic size={16} />

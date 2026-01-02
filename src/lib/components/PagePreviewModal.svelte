@@ -170,7 +170,7 @@
             <button
               onclick={() => setFitMode('page')}
               class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
-              style={fitMode === 'page' ? 'background-color: var(--nord8); color: var(--nord0);' : ''}
+              style={fitMode === 'page' ? 'background-color: var(--nord8); color: var(--on-primary);' : ''}
               title="Fit Page"
             >
               <Maximize size={18} />
@@ -178,7 +178,7 @@
             <button
               onclick={() => setFitMode('width')}
               class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
-              style={fitMode === 'width' ? 'background-color: var(--nord8); color: var(--nord0);' : ''}
+              style={fitMode === 'width' ? 'background-color: var(--nord8); color: var(--on-primary);' : ''}
               title="Fit Width"
             >
               <ArrowLeftRight size={18} />
@@ -186,7 +186,7 @@
             <button
               onclick={() => setFitMode('height')}
               class="p-1.5 rounded hover:bg-[var(--nord2)] transition-colors"
-              style={fitMode === 'height' ? 'background-color: var(--nord8); color: var(--nord0);' : ''}
+              style={fitMode === 'height' ? 'background-color: var(--nord8); color: var(--on-primary);' : ''}
               title="Fit Height"
             >
               <ArrowUpDown size={18} />

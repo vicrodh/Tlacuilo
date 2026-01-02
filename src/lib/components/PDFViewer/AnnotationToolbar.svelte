@@ -301,7 +301,7 @@
     onclick={() => selectTool(null)}
     class="p-2 rounded transition-colors"
     class:bg-[var(--nord8)]={store.activeTool === null}
-    style="color: {store.activeTool === null ? 'var(--nord0)' : 'var(--nord4)'};"
+    style="color: {store.activeTool === null ? 'var(--on-primary)' : 'var(--nord4)'};"
     title="Select"
   >
     <MousePointer size={16} />
@@ -312,7 +312,7 @@
     onclick={() => selectTool('move')}
     class="p-2 rounded transition-colors"
     class:bg-[var(--nord8)]={store.activeTool === 'move'}
-    style="color: {store.activeTool === 'move' ? 'var(--nord0)' : 'var(--nord4)'};"
+    style="color: {store.activeTool === 'move' ? 'var(--on-primary)' : 'var(--nord4)'};"
     title="Move annotations"
   >
     <Move size={16} />
@@ -327,7 +327,7 @@
       onclick={() => selectTool('text-select')}
       class="p-2 rounded-l transition-colors"
       class:bg-[var(--nord8)]={store.activeTool === 'text-select'}
-      style="color: {store.activeTool === 'text-select' ? 'var(--nord0)' : 'var(--nord4)'};"
+      style="color: {store.activeTool === 'text-select' ? 'var(--on-primary)' : 'var(--nord4)'};"
       title="Text Selection"
     >
       <TextSelect size={16} />
@@ -336,7 +336,7 @@
       onclick={() => selectTool('area-select')}
       class="p-2 rounded-r transition-colors"
       class:bg-[var(--nord8)]={store.activeTool === 'area-select'}
-      style="color: {store.activeTool === 'area-select' ? 'var(--nord0)' : 'var(--nord4)'};"
+      style="color: {store.activeTool === 'area-select' ? 'var(--on-primary)' : 'var(--nord4)'};"
       title="Area Selection"
     >
       <!-- Dashed rectangle icon -->
@@ -354,7 +354,7 @@
           onclick={() => selectMarkupType(markup.type)}
           class="p-1.5 rounded transition-colors"
           class:bg-[var(--nord8)]={store.pendingMarkupType === markup.type}
-          style="color: {store.pendingMarkupType === markup.type ? 'var(--nord0)' : 'var(--nord4)'};"
+          style="color: {store.pendingMarkupType === markup.type ? 'var(--on-primary)' : 'var(--nord4)'};"
           title={markup.label}
         >
           <markup.icon size={14} />
@@ -371,7 +371,7 @@
     onclick={() => selectTool('comment')}
     class="p-2 rounded transition-colors"
     class:bg-[var(--nord8)]={store.activeTool === 'comment'}
-    style="color: {store.activeTool === 'comment' ? 'var(--nord0)' : 'var(--nord4)'};"
+    style="color: {store.activeTool === 'comment' ? 'var(--on-primary)' : 'var(--nord4)'};"
     title="Comment"
   >
     <MessageSquare size={16} />
@@ -382,7 +382,7 @@
     onclick={() => selectTool('freetext')}
     class="p-2 rounded transition-colors"
     class:bg-[var(--nord8)]={store.activeTool === 'freetext'}
-    style="color: {store.activeTool === 'freetext' ? 'var(--nord0)' : 'var(--nord4)'};"
+    style="color: {store.activeTool === 'freetext' ? 'var(--on-primary)' : 'var(--nord4)'};"
     title="Typewriter"
   >
     <Type size={16} />
@@ -394,7 +394,7 @@
       onclick={toggleStampsMenu}
       class="p-2 rounded transition-colors flex items-center gap-0.5"
       class:bg-[var(--nord8)]={store.activeTool === 'stamp'}
-      style="color: {store.activeTool === 'stamp' ? 'var(--nord0)' : 'var(--nord4)'};"
+      style="color: {store.activeTool === 'stamp' ? 'var(--on-primary)' : 'var(--nord4)'};"
       title="Stamp"
     >
       <Stamp size={16} />
@@ -551,7 +551,7 @@
                 onclick={() => store.setStampRotation(opt.value)}
                 class="flex-1 p-1 rounded text-[10px] transition-colors"
                 class:bg-[var(--nord8)]={store.stampRotation === opt.value}
-                class:text-[var(--nord0)]={store.stampRotation === opt.value}
+                class:text-[var(--on-primary)]={store.stampRotation === opt.value}
                 style="background-color: {store.stampRotation === opt.value ? '' : 'var(--nord2)'};"
               >
                 {opt.label}
@@ -573,7 +573,7 @@
       onclick={() => selectTool('ink')}
       class="p-2 rounded transition-colors"
       class:bg-[var(--nord8)]={store.activeTool === 'ink'}
-      style="color: {store.activeTool === 'ink' ? 'var(--nord0)' : 'var(--nord4)'};"
+      style="color: {store.activeTool === 'ink' ? 'var(--on-primary)' : 'var(--nord4)'};"
       title="Freehand Draw"
     >
       <Pencil size={16} />
@@ -585,7 +585,7 @@
         onclick={toggleShapesMenu}
         class="p-2 rounded transition-colors flex items-center gap-0.5"
         class:bg-[var(--nord8)]={isShapeTool}
-        style="color: {isShapeTool ? 'var(--nord0)' : 'var(--nord4)'};"
+        style="color: {isShapeTool ? 'var(--on-primary)' : 'var(--nord4)'};"
         title="Shapes"
       >
         {#if store.activeTool === 'ellipse'}
@@ -638,7 +638,7 @@
                           onclick={() => selectLineStyle(lineStyle.style)}
                           class="flex-1 p-1.5 rounded text-[10px] transition-colors flex flex-col items-center gap-1"
                           class:bg-[var(--nord8)]={store.activeLineStyle === lineStyle.style}
-                          class:text-[var(--nord0)]={store.activeLineStyle === lineStyle.style}
+                          class:text-[var(--on-primary)]={store.activeLineStyle === lineStyle.style}
                           style="background-color: {store.activeLineStyle === lineStyle.style ? '' : 'var(--nord2)'};"
                           title={lineStyle.label}
                         >
@@ -696,7 +696,7 @@
                             onclick={() => selectStartArrow(arrowStyle.style)}
                             class="flex-1 p-1 rounded text-[9px] transition-colors"
                             class:bg-[var(--nord8)]={store.activeStartArrow === arrowStyle.style}
-                            class:text-[var(--nord0)]={store.activeStartArrow === arrowStyle.style}
+                            class:text-[var(--on-primary)]={store.activeStartArrow === arrowStyle.style}
                             style="background-color: {store.activeStartArrow === arrowStyle.style ? '' : 'var(--nord2)'};"
                           >
                             {arrowStyle.label}
@@ -710,7 +710,7 @@
                             onclick={() => selectEndArrow(arrowStyle.style)}
                             class="flex-1 p-1 rounded text-[9px] transition-colors"
                             class:bg-[var(--nord8)]={store.activeEndArrow === arrowStyle.style}
-                            class:text-[var(--nord0)]={store.activeEndArrow === arrowStyle.style}
+                            class:text-[var(--on-primary)]={store.activeEndArrow === arrowStyle.style}
                             style="background-color: {store.activeEndArrow === arrowStyle.style ? '' : 'var(--nord2)'};"
                           >
                             {arrowStyle.label}
@@ -778,7 +778,7 @@
         onclick={toggleSequenceMenu}
         class="p-2 rounded transition-colors flex items-center gap-0.5"
         class:bg-[var(--nord8)]={store.activeTool === 'sequenceNumber'}
-        style="color: {store.activeTool === 'sequenceNumber' ? 'var(--nord0)' : 'var(--nord4)'};"
+        style="color: {store.activeTool === 'sequenceNumber' ? 'var(--on-primary)' : 'var(--nord4)'};"
         title="Sequence Number"
       >
         <Hash size={16} />

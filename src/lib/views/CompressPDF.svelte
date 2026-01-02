@@ -183,7 +183,7 @@
         <p class="text-sm opacity-40 mb-6">Drop a PDF file here or click to browse</p>
         <button
           class="flex items-center gap-2 px-6 py-3 rounded-lg transition-colors hover:opacity-90"
-          style="background-color: var(--nord8); color: var(--nord0);"
+          style="background-color: var(--nord8); color: var(--on-primary);"
         >
           <FolderOpen size={20} />
           <span>Select File</span>
@@ -341,10 +341,10 @@
           onclick={handleCompress}
           disabled={!canCompress()}
           class="flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-colors disabled:opacity-50 hover:opacity-90"
-          style="background-color: var(--nord8); color: var(--nord0);"
+          style="background-color: var(--nord8); color: var(--on-primary);"
         >
           {#if isCompressing}
-            <div class="w-4 h-4 border-2 border-[var(--nord0)] border-t-transparent rounded-full animate-spin"></div>
+            <div class="w-4 h-4 border-2 border-[var(--on-primary)] border-t-transparent rounded-full animate-spin"></div>
             <span>Compressing...</span>
           {:else}
             <FileArchive size={18} />

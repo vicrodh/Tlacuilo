@@ -200,6 +200,14 @@
       });
       if (result.success) {
         textBlocks = result.blocks;
+        // Debug: Check if words are being extracted
+        const totalWords = result.blocks.reduce((acc, b) =>
+          acc + b.lines.reduce((lacc, l) => lacc + (l.words?.length || 0), 0), 0);
+        console.log('[EditOverlay] Text blocks loaded:', {
+          blocks: result.blocks.length,
+          totalWords,
+          sampleLine: result.blocks[0]?.lines[0],
+        });
       } else {
         console.error('[EditOverlay] Failed to fetch text blocks:', result.error);
         textBlocks = [];
@@ -622,6 +630,7 @@
   // Handle click on a word with exact rect from backend (PyMuPDF)
   // This uses the accurate word bbox from get_text("words")
   function handleWordClick(block: TextBlockInfo, line: TextLineInfo, word: WordInfo) {
+    console.log('[EditOverlay] handleWordClick called:', { word: word.text, rect: word.rect });
     if (!interactive) return;
     if (store.activeTool !== 'select' && store.activeTool !== 'text' && store.activeTool !== null) return;
 
@@ -675,6 +684,7 @@
   // Fallback: Handle click on a span in word mode when words array is not available
   // Strategy: Replace ENTIRE SPAN content but only let user edit the clicked word
   function handleSpanClickForWord(e: MouseEvent, block: TextBlockInfo, line: TextLineInfo, span: SpanInfo) {
+    console.log('[EditOverlay] handleSpanClickForWord FALLBACK called - line.words missing');
     if (!interactive) return;
     if (store.activeTool !== 'select' && store.activeTool !== 'text' && store.activeTool !== null) return;
 
@@ -1228,8 +1238,9 @@
       <!-- WORD MODE: Use exact word bboxes from PyMuPDF when available -->
       {#each textBlocks as block}
         {#each block.lines as line}
-          {#if line.words && line.words.length > 0}
-            <!-- Use accurate word rects from backend -->
+          {@const hasWords = line.words && line.words.length > 0}
+          {#if hasWords}
+            <!-- Use accurate word rects from backend ({line.words.length} words) -->
             {#each line.words as word}
               {@const px = toPixels(word.rect)}
               {#if word.text.trim() && !isBlockBeingEdited(block)}

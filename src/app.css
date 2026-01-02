@@ -24,6 +24,7 @@
   --nord13: #ebcb8b;
   --nord14: #a3be8c;
   --nord15: #b48ead;
+  --on-primary: #000000;
 }
 
 /* Dracula palette - official spec from draculatheme.com */
@@ -184,6 +185,7 @@
   --nord13: #df8e1d; /* yellow */
   --nord14: #40a02b; /* green */
   --nord15: #8839ef; /* mauve */
+  --on-primary: #ffffff;
 }
 
 /* Rosé Pine Dawn palette - rosepinetheme.com */
@@ -204,6 +206,126 @@
   --nord13: #ea9d34; /* gold (yellow) */
   --nord14: #286983; /* pine (green substitute) */
   --nord15: #907aa9; /* iris */
+}
+
+/* Breeze Dark palette - KDE Plasma */
+:root[data-palette="breeze-dark"] {
+  --nord0: #141618; /* view background */
+  --nord1: #202326; /* window background */
+  --nord2: #292c30; /* header/button background */
+  --nord3: #31363b; /* borders */
+  --nord4: #a1a9b1; /* inactive text */
+  --nord5: #fcfcfc; /* text */
+  --nord6: #ffffff; /* bright text */
+  --nord7: #1d99f3; /* link */
+  --nord8: #3daee9; /* accent */
+  --nord9: #9b59b6; /* visited */
+  --nord10: #1d99f3; /* link alt */
+  --nord11: #da4453; /* red */
+  --nord12: #f67400; /* orange */
+  --nord13: #fdbc4b; /* yellow */
+  --nord14: #27ae60; /* green */
+  --nord15: #9b59b6; /* purple */
+}
+
+/* Breeze Light palette - KDE Plasma */
+:root[data-palette="breeze-light"] {
+  --nord0: #ffffff; /* view background */
+  --nord1: #eff0f1; /* window background */
+  --nord2: #dee0e2; /* header background */
+  --nord3: #c8cdd3; /* borders */
+  --nord4: #5f6a75; /* inactive text */
+  --nord5: #232629; /* text */
+  --nord6: #1b1f23; /* bright text */
+  --nord7: #2980b9; /* link */
+  --nord8: #3daee9; /* accent */
+  --nord9: #9b59b6; /* visited */
+  --nord10: #2980b9; /* link alt */
+  --nord11: #da4453; /* red */
+  --nord12: #f67400; /* orange */
+  --nord13: #fdbc4b; /* yellow */
+  --nord14: #27ae60; /* green */
+  --nord15: #9b59b6; /* purple */
+}
+
+/* Fluent Dark palette - KDE Plasma */
+:root[data-palette="fluent-dark"] {
+  --nord0: #282828; /* window background */
+  --nord1: #303030; /* view background */
+  --nord2: #383838; /* panels */
+  --nord3: #4d4d4d; /* borders/buttons */
+  --nord4: #9e9e9e; /* inactive text */
+  --nord5: #dfdfdf; /* text */
+  --nord6: #ffffff; /* bright text */
+  --nord7: #00bcd4; /* cyan */
+  --nord8: #0078d7; /* accent */
+  --nord9: #4285f4; /* link */
+  --nord10: #429ce3; /* hover */
+  --nord11: #da4453; /* red */
+  --nord12: #ff6d00; /* orange */
+  --nord13: #ff6d00; /* yellow */
+  --nord14: #01a299; /* green */
+  --nord15: #00bcd4; /* purple */
+}
+
+/* Fluent Light palette - KDE Plasma */
+:root[data-palette="fluent-light"] {
+  --nord0: #ffffff; /* view background */
+  --nord1: #f2f2f2; /* window background */
+  --nord2: #eeeeee; /* panels */
+  --nord3: #e0e0e0; /* borders */
+  --nord4: #6b6b6b; /* inactive text */
+  --nord5: #333333; /* text */
+  --nord6: #1a1a1a; /* bright text */
+  --nord7: #4285f4; /* link */
+  --nord8: #0078d4; /* accent */
+  --nord9: #e040fb; /* purple */
+  --nord10: #0091ff; /* hover */
+  --nord11: #bf0303; /* red */
+  --nord12: #b08000; /* orange */
+  --nord13: #b08000; /* yellow */
+  --nord14: #006e28; /* green */
+  --nord15: #e040fb; /* purple */
+}
+
+/* Adwaita Dark palette - GNOME */
+:root[data-palette="adwaita-dark"] {
+  --nord0: #1d1d20; /* view background */
+  --nord1: #222226; /* window background */
+  --nord2: #28282c; /* panels */
+  --nord3: #2e2e32; /* borders */
+  --nord4: #b3b3b8; /* inactive text */
+  --nord5: #ffffff; /* text */
+  --nord6: #ffffff; /* bright text */
+  --nord7: #62a0ea; /* blue 2 */
+  --nord8: #3584e4; /* blue 3 accent */
+  --nord9: #1c71d8; /* blue 4 */
+  --nord10: #1a5fb4; /* blue 5 */
+  --nord11: #c01c28; /* red 4 */
+  --nord12: #e66100; /* orange 4 */
+  --nord13: #cd9309; /* yellow 5 (dark) */
+  --nord14: #26a269; /* green 5 */
+  --nord15: #813d9c; /* purple 4 */
+}
+
+/* Adwaita Light palette - GNOME */
+:root[data-palette="adwaita-light"] {
+  --nord0: #fafafb; /* window background */
+  --nord1: #ffffff; /* view background */
+  --nord2: #f3f3f5; /* panels */
+  --nord3: #deddda; /* borders */
+  --nord4: #5e5c64; /* inactive text */
+  --nord5: #333338; /* text */
+  --nord6: #241f31; /* bright text */
+  --nord7: #62a0ea; /* blue 2 */
+  --nord8: #3584e4; /* blue 3 accent */
+  --nord9: #1c71d8; /* blue 4 */
+  --nord10: #1a5fb4; /* blue 5 */
+  --nord11: #e01b24; /* red 3 */
+  --nord12: #ff7800; /* orange 3 */
+  --nord13: #e5a50a; /* yellow 5 */
+  --nord14: #2ec27e; /* green 4 */
+  --nord15: #9141ac; /* purple 3 */
 }
 
 * {

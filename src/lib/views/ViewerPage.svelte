@@ -121,7 +121,7 @@
         <button
           onclick={handleOpenFile}
           class="flex items-center gap-3 px-6 py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
-          style="background-color: var(--nord8); color: var(--nord0);"
+          style="background-color: var(--nord8); color: var(--on-primary);"
         >
           <FolderOpen size={20} />
           <span class="font-medium">{t.viewer.openPdf}</span>

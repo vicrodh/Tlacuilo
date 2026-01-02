@@ -276,7 +276,7 @@
                   class="w-5 h-5 rounded-full flex items-center justify-center"
                   style="background-color: var(--nord8);"
                 >
-                  <div class="w-2 h-2 rounded-full" style="background-color: var(--nord0);"></div>
+                  <div class="w-2 h-2 rounded-full" style="background-color: var(--on-primary);"></div>
                 </div>
               {:else}
                 <div
@@ -319,7 +319,7 @@
                   class="w-5 h-5 rounded-full flex items-center justify-center"
                   style="background-color: var(--nord8);"
                 >
-                  <div class="w-2 h-2 rounded-full" style="background-color: var(--nord0);"></div>
+                  <div class="w-2 h-2 rounded-full" style="background-color: var(--on-primary);"></div>
                 </div>
               {:else}
                 <div

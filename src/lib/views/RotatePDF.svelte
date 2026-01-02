@@ -292,7 +292,7 @@
               onclick={() => rotationMode = 'all'}
               class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
               style="background-color: {rotationMode === 'all' ? 'var(--nord8)' : 'var(--nord2)'};
-                     color: {rotationMode === 'all' ? 'var(--nord0)' : 'var(--nord4)'};"
+                     color: {rotationMode === 'all' ? 'var(--on-primary)' : 'var(--nord4)'};"
               title="Rotate all pages"
             >
               <Grid3x3 size={14} />
@@ -303,7 +303,7 @@
               onclick={() => rotationMode = 'pages'}
               class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
               style="background-color: {rotationMode === 'pages' ? 'var(--nord8)' : 'var(--nord2)'};
-                     color: {rotationMode === 'pages' ? 'var(--nord0)' : 'var(--nord4)'};"
+                     color: {rotationMode === 'pages' ? 'var(--on-primary)' : 'var(--nord4)'};"
               title="Rotate selected pages"
             >
               <RotateCw size={14} />
@@ -314,7 +314,7 @@
               onclick={() => rotationMode = 'groups'}
               class="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-colors"
               style="background-color: {rotationMode === 'groups' ? 'var(--nord8)' : 'var(--nord2)'};
-                     color: {rotationMode === 'groups' ? 'var(--nord0)' : 'var(--nord4)'};"
+                     color: {rotationMode === 'groups' ? 'var(--on-primary)' : 'var(--nord4)'};"
               title="Rotate by groups"
             >
               <Layers size={14} />
@@ -486,10 +486,10 @@
       onclick={handleRotate}
       disabled={!canRotate() || isRotating}
       class="px-4 py-3 rounded transition-colors disabled:opacity-50 hover:opacity-90 flex items-center justify-center gap-2"
-      style="background-color: var(--nord8); color: var(--nord0);"
+      style="background-color: var(--nord8); color: var(--on-primary);"
     >
       {#if isRotating}
-        <div class="w-4 h-4 border-2 border-[var(--nord0)] border-t-transparent rounded-full animate-spin"></div>
+        <div class="w-4 h-4 border-2 border-[var(--on-primary)] border-t-transparent rounded-full animate-spin"></div>
         <span>Rotating...</span>
       {:else}
         <RotateCw size={18} />

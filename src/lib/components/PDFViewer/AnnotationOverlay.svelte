@@ -1279,7 +1279,7 @@
         <button
           onclick={() => handleCommentSave(editingComment!)}
           class="px-3 py-1 rounded text-xs"
-          style="background-color: var(--nord8); color: var(--nord0);"
+          style="background-color: var(--nord8); color: var(--on-primary);"
         >
           Save
         </button>

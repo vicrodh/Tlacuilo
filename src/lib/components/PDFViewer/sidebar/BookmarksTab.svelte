@@ -605,7 +605,7 @@
   .add-btn:hover {
     opacity: 1;
     background-color: var(--nord8);
-    color: var(--nord0);
+    color: var(--on-primary);
   }
 
   .section-content {
@@ -656,7 +656,7 @@
 
   .add-bookmark-btn:hover {
     background-color: var(--nord8);
-    color: var(--nord0);
+    color: var(--on-primary);
   }
 
   /* Bookmark list */
