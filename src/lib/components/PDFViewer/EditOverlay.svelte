@@ -1268,14 +1268,16 @@
   {#if showTextBlocks && !hideBlockHighlights && interactive && (store.activeTool === 'select' || store.activeTool === 'text' || store.activeTool === null)}
     {#if store.editGranularity === 'word'}
       <!-- WORD MODE: Use exact word bboxes from PyMuPDF when available -->
+      <!-- Check at LINE level, not block level, so editing one line doesn't block others -->
       {#each textBlocks as block}
-        {#each block.lines as line}
+        {#each block.lines as line, lineIndex}
           {@const hasWords = line.words && line.words.length > 0}
+          {@const lineEdited = isLineBeingEdited(block, lineIndex)}
           {#if hasWords}
             <!-- Use accurate word rects from backend ({line.words.length} words) -->
             {#each line.words as word}
               {@const px = toPixels(word.rect)}
-              {#if word.text.trim() && !isBlockBeingEdited(block)}
+              {#if word.text.trim() && !lineEdited}
                 <button
                   type="button"
                   class="absolute cursor-text transition-all duration-100 group"
@@ -1304,7 +1306,7 @@
             {#each line.spans || [] as span}
               {@const px = toPixels(span.rect)}
               {@const spanText = span.text || ''}
-              {#if spanText.trim() && !isBlockBeingEdited(block)}
+              {#if spanText.trim() && !lineEdited}
                 <button
                   type="button"
                   class="absolute cursor-text"
