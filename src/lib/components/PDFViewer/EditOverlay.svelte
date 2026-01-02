@@ -1496,7 +1496,7 @@
           {@const replaceOp = op.type === 'replace_text' ? (op as ReplaceTextOp) : null}
           {@const isLineEdit = replaceOp?.originalLines?.length === 1}
           <div
-            class="cursor-text"
+            class="cursor-text hover:ring-2 hover:ring-[var(--nord10)] transition-all"
             style="
               box-sizing: border-box;
               width: {px.width}px;
@@ -1518,9 +1518,10 @@
               white-space: {isLineEdit ? 'nowrap' : 'pre-wrap'};
               overflow: hidden;
             "
-            ondblclick={() => startEditingText(op)}
+            onclick={() => startEditingText(op)}
+            onmousedown={(e) => e.stopPropagation()}
           >
-            {textOp.text || 'Double-click to edit...'}
+            {textOp.text || 'Click to edit...'}
           </div>
         {/if}
       {:else if op.type === 'insert_image' && showVisuals}
