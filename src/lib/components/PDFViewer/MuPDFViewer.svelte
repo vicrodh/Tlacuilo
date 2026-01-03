@@ -29,7 +29,7 @@
   import RedactionOverlay from './RedactionOverlay.svelte';
   import EditToolbar from './EditToolbar.svelte';
   import EditOverlay from './EditOverlay.svelte';
-  import OcrDialog from './OcrDialog.svelte';
+  import OcrDialog, { type OcrDialogOptions, type OcrMode } from './OcrDialog.svelte';
   import FormFieldsOverlay from './FormFieldsOverlay.svelte';
   import { createRedactionsStore, setRedactionsStore } from '$lib/stores/redactions.svelte';
   import { createEditsStore, setEditsStore } from '$lib/stores/edits.svelte';
@@ -349,10 +349,10 @@
   }
 
   // Handle OCR dialog confirmation
-  async function handleOcrDialogConfirm(options: { analyzeFonts: boolean }) {
+  async function handleOcrDialogConfirm(options: OcrDialogOptions) {
     showOcrDialog = false;
     pendingFontAnalysis = options.analyzeFonts;
-    await runOcrOnDocument();
+    await runOcrOnDocument(options.mode);
   }
 
   // Handle OCR dialog cancel
@@ -362,15 +362,15 @@
   }
 
   // Run OCR on the current document (in-place, then reload)
-  async function runOcrOnDocument() {
-    console.log('[OCR] Starting runOcrOnDocument...');
+  async function runOcrOnDocument(mode: OcrMode = 'searchable') {
+    console.log('[OCR] Starting runOcrOnDocument...', { mode });
 
     // Store the original file path before OCR for Save As default
     originalFilePath = filePath;
 
     // Set state first
     isRunningOcr = true;
-    ocrMessage = 'Processing OCR...';
+    ocrMessage = mode === 'editable' ? 'Processing OCR (editable mode)...' : 'Processing OCR...';
 
     // Force UI update and ensure browser paints before heavy work
     await tick();
@@ -380,23 +380,35 @@
     console.log('[OCR] Splash should be visible now, starting invoke...');
 
     try {
-      console.log('[OCR] Invoking ocr_run...', { filePath });
+      let result: { success: boolean; output_path?: string; error?: string };
 
-      const result = await invoke<{ success: boolean; output_path?: string; error?: string }>('ocr_run', {
-        input: filePath,
-        output: null, // Overwrite original (writes to temp first, then replaces)
-        options: {
-          language: 'eng+spa',
-          deskew: true,
-          rotate_pages: true,
-          remove_background: false,
-          clean: false,
-          skip_text: false,
-          force_ocr: true,
-          redo_ocr: false,
-          optimize: 1,
-        },
-      });
+      if (mode === 'editable') {
+        console.log('[OCR] Invoking ocr_run_editable...', { filePath });
+        result = await invoke<{ success: boolean; output_path?: string; error?: string }>('ocr_run_editable', {
+          input: filePath,
+          output: null,
+          options: {
+            language: 'eng+spa',
+          },
+        });
+      } else {
+        console.log('[OCR] Invoking ocr_run...', { filePath });
+        result = await invoke<{ success: boolean; output_path?: string; error?: string }>('ocr_run', {
+          input: filePath,
+          output: null, // Overwrite original (writes to temp first, then replaces)
+          options: {
+            language: 'eng+spa',
+            deskew: true,
+            rotate_pages: true,
+            remove_background: false,
+            clean: false,
+            skip_text: false,
+            force_ocr: true,
+            redo_ocr: false,
+            optimize: 1,
+          },
+        });
+      }
 
       console.log('[OCR] invoke completed, result:', result);
 
@@ -2328,7 +2340,7 @@
         onLoadThumbnail={loadThumbnail}
         onThumbnailScroll={handleThumbnailScroll}
         onFileReload={loadPDF}
-        onRunOcr={runOcrOnDocument}
+        onRunOcr={() => { showOcrDialog = true; }}
         {searchTrigger}
         onSearchStateChange={handleSearchStateChange}
         {autoAnalyzeFonts}

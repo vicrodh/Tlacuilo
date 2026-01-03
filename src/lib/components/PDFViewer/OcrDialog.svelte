@@ -1,23 +1,34 @@
 <script lang="ts">
-  import { FileSearch, Type, AlertCircle } from 'lucide-svelte';
+  import { FileSearch, Type, AlertCircle, Search, Edit3 } from 'lucide-svelte';
+
+  export type OcrMode = 'searchable' | 'editable';
+
+  export interface OcrDialogOptions {
+    mode: OcrMode;
+    analyzeFonts: boolean;
+  }
 
   interface Props {
     open: boolean;
-    onConfirm: (options: { analyzeFonts: boolean }) => void;
+    onConfirm: (options: OcrDialogOptions) => void;
     onCancel: () => void;
   }
 
   let { open, onConfirm, onCancel }: Props = $props();
 
+  let ocrMode = $state<OcrMode>('searchable');
   let analyzeFonts = $state(false);
 
   function handleConfirm() {
-    onConfirm({ analyzeFonts });
-    analyzeFonts = false; // Reset for next time
+    onConfirm({ mode: ocrMode, analyzeFonts });
+    // Reset for next time
+    ocrMode = 'searchable';
+    analyzeFonts = false;
   }
 
   function handleCancel() {
     onCancel();
+    ocrMode = 'searchable';
     analyzeFonts = false;
   }
 
@@ -64,27 +75,80 @@
           <AlertCircle size={20} class="mt-0.5 flex-shrink-0" style="color: var(--nord13);" />
           <div class="text-sm">
             <p>This document appears to be scanned and has no searchable text.</p>
-            <p class="mt-2 opacity-70">Some features (search, text selection, text editing) may not work properly without OCR.</p>
+            <p class="mt-2 opacity-70">Choose how you want to process this document.</p>
           </div>
         </div>
 
-        <!-- Font analysis checkbox -->
-        <label class="flex items-start gap-3 p-3 rounded-lg cursor-pointer hover:bg-[var(--nord1)] transition-colors">
-          <input
-            type="checkbox"
-            bind:checked={analyzeFonts}
-            class="mt-1 w-4 h-4 rounded"
-          />
-          <div class="flex-1">
-            <div class="flex items-center gap-2 text-sm font-medium">
-              <Type size={16} style="color: var(--nord8);" />
-              Analyze embedded fonts
+        <!-- OCR Mode Selection -->
+        <div class="space-y-2">
+          <p class="text-xs font-medium opacity-70 uppercase tracking-wide">OCR Mode</p>
+
+          <!-- Searchable option -->
+          <label
+            class="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors"
+            style="background-color: {ocrMode === 'searchable' ? 'var(--nord2)' : 'var(--nord1)'}; border: 1px solid {ocrMode === 'searchable' ? 'var(--nord10)' : 'transparent'};"
+          >
+            <input
+              type="radio"
+              name="ocrMode"
+              value="searchable"
+              bind:group={ocrMode}
+              class="mt-1"
+            />
+            <div class="flex-1">
+              <div class="flex items-center gap-2 text-sm font-medium">
+                <Search size={16} style="color: var(--nord8);" />
+                For text search
+              </div>
+              <p class="text-xs opacity-60 mt-1">
+                Creates an invisible text layer. Enables search and text selection while preserving the original appearance. Faster processing.
+              </p>
             </div>
-            <p class="text-xs opacity-60 mt-1">
-              If you plan to edit this document, analyzing fonts will improve text matching. This will take longer but provide better editing results.
-            </p>
-          </div>
-        </label>
+          </label>
+
+          <!-- Editable option -->
+          <label
+            class="flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors"
+            style="background-color: {ocrMode === 'editable' ? 'var(--nord2)' : 'var(--nord1)'}; border: 1px solid {ocrMode === 'editable' ? 'var(--nord10)' : 'transparent'};"
+          >
+            <input
+              type="radio"
+              name="ocrMode"
+              value="editable"
+              bind:group={ocrMode}
+              class="mt-1"
+            />
+            <div class="flex-1">
+              <div class="flex items-center gap-2 text-sm font-medium">
+                <Edit3 size={16} style="color: var(--nord14);" />
+                For editing
+              </div>
+              <p class="text-xs opacity-60 mt-1">
+                Creates real text objects with accurate positioning. Required if you plan to edit text in this document. Takes longer to process.
+              </p>
+            </div>
+          </label>
+        </div>
+
+        <!-- Font analysis checkbox (only show for editable mode) -->
+        {#if ocrMode === 'editable'}
+          <label class="flex items-start gap-3 p-3 rounded-lg cursor-pointer hover:bg-[var(--nord1)] transition-colors">
+            <input
+              type="checkbox"
+              bind:checked={analyzeFonts}
+              class="mt-1 w-4 h-4 rounded"
+            />
+            <div class="flex-1">
+              <div class="flex items-center gap-2 text-sm font-medium">
+                <Type size={16} style="color: var(--nord8);" />
+                Analyze embedded fonts
+              </div>
+              <p class="text-xs opacity-60 mt-1">
+                Improves font matching for better editing results. Opens the Fonts panel after OCR completes.
+              </p>
+            </div>
+          </label>
+        {/if}
       </div>
 
       <!-- Actions -->
