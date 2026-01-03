@@ -40,13 +40,27 @@
   let showTextOptions = $state(false);
   let showColorPicker = $state(false);
 
-  // Font options - Include serif and sans-serif
+  // Font options - Organized by category, with system fonts that fontconfig can match
   const fontFamilies = [
-    { value: '"Times New Roman", Times, Georgia, serif', label: 'Times (Serif)' },
-    { value: 'Arial, Helvetica, sans-serif', label: 'Arial (Sans)' },
-    { value: '"Courier New", Courier, monospace', label: 'Courier (Mono)' },
+    // Serif fonts
+    { value: '"Times New Roman", Times, serif', label: 'Times New Roman' },
     { value: 'Georgia, serif', label: 'Georgia' },
+    { value: '"Palatino Linotype", Palatino, serif', label: 'Palatino' },
+    { value: '"Liberation Serif", serif', label: 'Liberation Serif' },
+    { value: '"DejaVu Serif", serif', label: 'DejaVu Serif' },
+    { value: '"Noto Serif", serif', label: 'Noto Serif' },
+    // Sans-serif fonts
+    { value: 'Arial, Helvetica, sans-serif', label: 'Arial' },
     { value: 'Verdana, sans-serif', label: 'Verdana' },
+    { value: '"Trebuchet MS", sans-serif', label: 'Trebuchet MS' },
+    { value: '"Liberation Sans", sans-serif', label: 'Liberation Sans' },
+    { value: '"DejaVu Sans", sans-serif', label: 'DejaVu Sans' },
+    { value: '"Noto Sans", sans-serif', label: 'Noto Sans' },
+    // Monospace fonts
+    { value: '"Courier New", Courier, monospace', label: 'Courier New' },
+    { value: '"Liberation Mono", monospace', label: 'Liberation Mono' },
+    { value: '"DejaVu Sans Mono", monospace', label: 'DejaVu Sans Mono' },
+    { value: '"Noto Mono", monospace', label: 'Noto Mono' },
   ];
 
   const fontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72];
@@ -294,7 +308,7 @@
     value={store.activeTextStyle.fontFamily}
     onchange={(e) => setTextStyle({ fontFamily: (e.target as HTMLSelectElement).value })}
     class="px-2 py-1.5 text-xs rounded cursor-pointer"
-    style="background-color: var(--nord3); border: none; max-width: 110px;"
+    style="background-color: var(--nord3); border: none; max-width: 145px;"
     title="Font Family (applies to entire block)"
   >
     {#each fontFamilies as font}
