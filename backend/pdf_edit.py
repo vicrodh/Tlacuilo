@@ -18,10 +18,75 @@ import json
 import base64
 import io
 import math
+import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import fitz  # PyMuPDF
+
+
+# Cache for system font lookups (font_name -> font_file_path or None)
+_font_cache: dict[str, Optional[str]] = {}
+
+
+def find_system_font(font_name: str) -> Optional[str]:
+    """
+    Find a system font file using fontconfig (fc-match).
+
+    Returns the path to the font file if found, None otherwise.
+    Caches results to avoid repeated fc-match calls.
+    """
+    if font_name in _font_cache:
+        return _font_cache[font_name]
+
+    try:
+        # Use fc-match to find the font file
+        result = subprocess.run(
+            ["fc-match", "-f", "%{file}", font_name],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            font_path = result.stdout.strip()
+            # Verify the file exists
+            if Path(font_path).exists():
+                _font_cache[font_name] = font_path
+                return font_path
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+
+    _font_cache[font_name] = None
+    return None
+
+
+def get_font_for_insert(css_font: str) -> Tuple[str, Optional[str]]:
+    """
+    Get font name and optional font file for text insertion.
+
+    Returns:
+        Tuple of (fontname, fontfile) where fontfile may be None for built-in fonts.
+    """
+    if not css_font:
+        return ("tiro", None)  # Default to built-in serif
+
+    # Parse CSS font-family string
+    fonts = [f.strip().strip('"').strip("'") for f in css_font.split(",")]
+    category = fonts[-1].lower() if fonts else ""
+
+    # Try each font name in order
+    for font in fonts:
+        if not font or font.lower() in ("serif", "sans-serif", "monospace"):
+            continue
+
+        # Try to find the actual system font
+        font_file = find_system_font(font)
+        if font_file:
+            # Use the font name as-is for system fonts
+            return (font, font_file)
+
+    # Fall back to built-in fonts based on category or specific name matching
+    return (parse_css_font_family(css_font), None)
 
 
 def get_text_blocks(
@@ -420,13 +485,14 @@ def apply_edits(
                 rotation = style.get("rotation", 0)
 
                 color = parse_hex_color(color_str)
-                font_name = parse_css_font_family(css_font)
+                font_name, font_file = get_font_for_insert(css_font)
 
                 point = fitz.Point(x0, y0 + font_size)
                 page.insert_text(
                     point,
                     text,
                     fontname=font_name,
+                    fontfile=font_file,
                     fontsize=font_size,
                     color=color,
                     rotate=int(rotation) if rotation else 0,
@@ -443,7 +509,7 @@ def apply_edits(
                 color_str = style.get("color", "#000000")
                 rotation = style.get("rotation", 0)
                 color = parse_hex_color(color_str)
-                font_name = parse_css_font_family(css_font)
+                font_name, font_file = get_font_for_insert(css_font)
                 new_lines = [l for l in text.split('\n') if l.strip()] if text else []
 
                 # Calculate rects - SHRINK from both TOP and BOTTOM to avoid adjacent lines
@@ -485,6 +551,7 @@ def apply_edits(
                     "new_lines": new_lines,
                     "original_lines": original_lines,
                     "font_name": font_name,
+                    "font_file": font_file,
                     "font_size": font_size,
                     "color": color,
                     "rotation": rotation,
@@ -546,6 +613,7 @@ def apply_edits(
                 new_lines = op_data["new_lines"]
                 original_lines = op_data["original_lines"]
                 font_name = op_data["font_name"]
+                font_file = op_data.get("font_file")
                 font_size = op_data["font_size"]
                 color = op_data["color"]
                 rotation = op_data["rotation"]
@@ -574,6 +642,7 @@ def apply_edits(
                                 fitz.Point(line_x0, text_y),
                                 new_text,
                                 fontname=font_name,
+                                fontfile=font_file,
                                 fontsize=line_font_size,
                                 color=color,
                                 rotate=int(rotation) if rotation else 0,
@@ -585,7 +654,7 @@ def apply_edits(
                     rect_height = y1 - y0
                     num_lines = max(1, len(new_lines))
                     try:
-                        font = fitz.Font(font_name)
+                        font = fitz.Font(font_name, fontfile=font_file) if font_file else fitz.Font(font_name)
                         font_height_factor = float(font.ascender - font.descender) or 1.2
                     except Exception:
                         font_height_factor = 1.2
@@ -599,6 +668,7 @@ def apply_edits(
                                 fitz.Point(x0, current_y),
                                 line,
                                 fontname=font_name,
+                                fontfile=font_file,
                                 fontsize=calc_font_size,
                                 color=color,
                                 rotate=int(rotation) if rotation else 0,
@@ -783,14 +853,15 @@ def render_page_preview(
                 rotation = style.get("rotation", 0)
                 color = parse_hex_color(color_str)
 
-                # Parse CSS font-family to PyMuPDF font name
-                font_name = parse_css_font_family(css_font)
+                # Get font name and optional font file for system fonts
+                font_name, font_file = get_font_for_insert(css_font)
 
                 point = fitz.Point(x0, y0 + font_size)
                 page.insert_text(
                     point,
                     text,
                     fontname=font_name,
+                    fontfile=font_file,
                     fontsize=font_size,
                     color=color,
                     rotate=int(rotation) if rotation else 0,
@@ -805,8 +876,8 @@ def render_page_preview(
                 rotation = style.get("rotation", 0)
                 color = parse_hex_color(color_str)
 
-                # Parse CSS font-family to PyMuPDF font name
-                font_name = parse_css_font_family(css_font)
+                # Get font name and optional font file for system fonts
+                font_name, font_file = get_font_for_insert(css_font)
 
                 # Calculate font size from bounding box (same logic as apply_edits)
                 original_font_size = font_size
@@ -840,6 +911,7 @@ def render_page_preview(
                             point,
                             line,
                             fontname=font_name,
+                            fontfile=font_file,
                             fontsize=font_size,
                             color=color,
                             rotate=int(rotation) if rotation else 0,
